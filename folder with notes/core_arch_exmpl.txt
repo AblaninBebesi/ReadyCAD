@@ -1,0 +1,188 @@
+1. Базовые структуры и перечисления.
+
+#include <string>
+#include <vector>
+#include <memory>
+#include <glm/glm.hpp>
+
+enum class MaterialType { LDSP, MDF, DVP, Edge };
+enum class FastenerType { Confirmat, Dowel, Eccentric, ShelfSupport, Hinge };
+enum class GrainDirection { None, Horizontal, Vertical };
+
+struct Size3D {
+    float width;   // X
+    float height;  // Y
+    float depth;   // Z
+};
+
+struct EdgeBanding {
+    bool top = false, bottom = false, left = false, right = false;
+    float thickness = 0.4f;
+};
+
+2. Структура крепежа и присадки.
+
+struct DrillingOperation {
+    FastenerType type;
+    glm::vec3 position; // Локальные координаты на детали
+    glm::vec3 direction; // Вектор сверления
+    float diameter;
+    float depth;
+};
+
+struct Panel {
+    std::string name;
+    MaterialType material;
+    Size3D dimensions;       // Чистовые размеры (с учетом кромок)
+    Size3D rawDimensions;    // Пильные размеры (без учета кромок или с припуском)
+    glm::vec3 localPosition; // Позиция относительно родителя
+    EdgeBanding edges;       // Кромки
+    GrainDirection grain;
+    
+    std::vector<DrillingOperation> drillings;
+    
+    // Метод пересчета размеров детали при изменении параметров
+    virtual void scale(const Size3D& parentSizeDelta);
+};
+
+3. "Компоновщик" для иерархии элементов мебели.
+
+class FurnitureComponent {
+protected:
+    std::string name;
+    glm::vec3 localPosition;
+    Size3D size;
+    std::vector<std::shared_ptr<FurnitureComponent>> children;
+
+public:
+    FurnitureComponent(const std::string& name, const Size3D& size)
+        : name(name), size(size), localPosition(0.0f, 0.0f, 0.0f) {}
+    
+    virtual ~FurnitureComponent() = default;
+
+    // Управление иерархией (добавление/удаление корпусных единиц или деталей)
+    virtual void add(std::shared_ptr<FurnitureComponent> component) {
+        children.push_back(component);
+    }
+
+    virtual void remove(const std::string& componentName) {
+        children.erase(
+            std::remove_if(children.begin(), children.end(),
+                [&componentName](const std::shared_ptr<FurnitureComponent>& c) {
+                    return c->getName() == componentName;
+                }),
+            children.end()
+        );
+    }
+
+    // Ключевой метод параметрического масштабирования
+    virtual void updateDimensions(const Size3D& newSize) {
+        Size3D delta = {
+            newSize.width - size.width,
+            newSize.height - size.height,
+            newSize.depth - size.depth
+        };
+        size = newSize;
+        
+        // Рекурсивный вызов для всех дочерних элементов (отсеки, полки, ящики)
+        for (auto& child : children) {
+            child->propagateResize(delta);
+        }
+    }
+
+    virtual void propagateResize(const Size3D& parentDelta) = 0;
+    virtual void generateDrillingAndFasteners() = 0; // Логика System 32
+    virtual void collectParts(std::vector<Part>& outParts) = 0; // Для раскроя
+
+    std::string getName() const { return name; }
+    Size3D getSize() const { return size; }
+};
+
+4. Организация отсеков и полок.
+
+// Пример: Простой отсек или полка
+class ShelfComponent : public FurnitureComponent {
+private:
+    Panel panel;
+    bool autoSpacing; // На равном расстоянии или фиксировано
+    int indexFromBottom;
+
+public:
+    ShelfComponent(const std::string& name, Size3D size, int index) 
+        : FurnitureComponent(name, size), indexFromBottom(index), autoSpacing(true) {}
+
+    void propagateResize(const Size3D& parentDelta) override {
+        // Полка растягивается по ширине и глубине шкафа, смещается по высоте
+        size.width += parentDelta.width;
+        size.depth += parentDelta.depth;
+        // Позиция по Y может пересчитываться автоматически в зависимости от соседей
+    }
+
+    void generateDrillingAndFasteners() override {
+        // Добавление отверстий под полкодержатели (System 32: диаметр 5мм)
+        DrillingOperation op{FastenerType::ShelfSupport, {0, 0, 0}, {1,0,0}, 5.0f, 10.0f};
+        panel.drillings.push_back(op);
+    }
+
+    void collectParts(std::vector<Part>& outParts) override {
+        outParts.push_back(panel);
+    }
+};
+
+// Сложный узел: Блок выдвижных ящиков или секция с распашными дверями
+class CompartmentSection : public FurnitureComponent {
+public:
+    CompartmentSection(const std::string& name, Size3D size) 
+        : FurnitureComponent(name, size) {}
+
+    void propagateResize(const Size3D& parentDelta) override {
+        size.width += parentDelta.width;
+        size.height += parentDelta.height;
+        size.depth += parentDelta.depth;
+        
+        // Перераспределение внутренних элементов (например, пропорционально ящикам)
+        for (auto& child : children) {
+            child->propagateResize(parentDelta);
+        }
+    }
+
+    void generateDrillingAndFasteners() override {
+        for (auto& child : children) {
+            child->generateDrillingAndFasteners();
+        }
+    }
+
+    void collectParts(std::vector<Part>& outParts) override {
+        for (auto& child : children) {
+            child->collectParts(outParts);
+        }
+    }
+};
+
+5. Менеджер остатков.
+struct Sheet {
+    std::string id;
+    MaterialType material;
+    float width;
+    float height;
+    bool isRemainder; // true, если это остаток от предыдущего раскроя
+    std::vector<glm::vec2> customPolygonContour; // Для непрямоугольных остатков
+};
+
+class StockManager {
+private:
+    std::vector<Sheet> availableSheets;
+
+public:
+    void addSheet(const Sheet& sheet) {
+        availableSheets.push_back(sheet);
+    }
+
+    // Регистрация остатка после раскроя
+    void registerRemainder(MaterialType mat, float w, float h, const std::vector<glm::vec2>& contour) {
+        Sheet rem{ "Rem_" + std::to_string(availableSheets.size()), mat, w, h, true, contour };
+        availableSheets.push_back(rem);
+    }
+
+    const std::vector<Sheet>& getStock() const { return availableSheets; }
+};
