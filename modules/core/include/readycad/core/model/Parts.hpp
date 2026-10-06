@@ -4,6 +4,8 @@
 #include "readycad/core/model/PanelComponent.hpp"
 
 #include <optional>
+#include <string>
+#include <vector>
 
 namespace rc::core {
 
@@ -151,30 +153,75 @@ protected:
 // Fronts: cover slot.frontRect() (opening + overlays) and stand in front of slot.frontZ.
 // =============================================================================================
 
+enum class HandleOrientation { Vertical, Horizontal };
+enum class HandleAnchor { Top, Center, Bottom };
+
+/// Where a handle sits on a front. Offsets are measured from the front's edge to the NEAREST
+/// screw hole centre.
+struct HandlePlacement {
+    std::string modelId; // empty = the workshop's default handle for this kind of front
+    HandleOrientation orientation = HandleOrientation::Vertical;
+    HandleAnchor anchor = HandleAnchor::Center; // along the front's height
+    Real edgeOffset = 40.0;   // doors: from the opening edge (opposite the hinges)
+    Real anchorOffset = 60.0; // from the top / bottom edge for the Top / Bottom anchors
+};
+
+/// A handle resolved against the catalogue and placed on its front.
+struct HandleGeometry {
+    const HandleModel* model = nullptr;
+    Vec3 center{0.0};        // on the outer face, product coordinates
+    Axis along = Axis::Y;    // direction from one screw hole to the other
+    std::vector<Vec3> holes; // screw hole centres on the outer face
+    bool fits = true;        // body and holes are inside the front, holes keep minEdgeDistance
+};
+
 class FrontPanel : public PanelComponent {
+public:
+    /// nullopt = this front has no handle.
+    [[nodiscard]] const std::optional<HandlePlacement>& handle() const noexcept { return handle_; }
+    void setHandle(std::optional<HandlePlacement> placement);
+
+    /// Catalogue model of the handle; nullptr if there is no handle or its id is unknown.
+    [[nodiscard]] const HandleModel* handleModel(const ConstructionRules& rules) const;
+    /// Position of the handle and its holes; nullopt if handleModel() is nullptr.
+    [[nodiscard]] std::optional<HandleGeometry> handleGeometry(const ConstructionRules& rules) const;
+
 protected:
-    explicit FrontPanel(Axis lengthAxis);
+    FrontPanel(Axis lengthAxis, HandlePlacement defaultPlacement);
     Vec3 updateSize(const LayoutSlot& slot) override;
     Vec3 updatePosition(const LayoutSlot& slot, const Vec3& size) override;
     const Material& defaultMaterial(const ConstructionRules& r) const override;
     EdgeBand defaultEdge(EdgeSide side, const LayoutSlot& slot) const override;
+
+    [[nodiscard]] virtual const std::string& defaultHandleId(const ConstructionRules& r) const = 0;
+    /// X of the handle centre. Default: the middle of the front.
+    [[nodiscard]] virtual Real handleCenterX(const HandlePlacement& placement,
+                                             const HandleModel& model) const;
+
+private:
+    std::optional<HandlePlacement> handle_;
 };
 
 enum class HingeSide { Left, Right };
 
-/// Накладной распашной фасад (дверь).
+/// Накладной распашной фасад (дверь). Default handle: vertical, mid-height, 40 mm from the
+/// opening edge (the edge opposite the hinges).
 class Door final : public FrontPanel {
 public:
     explicit Door(HingeSide hinge = HingeSide::Left);
     [[nodiscard]] ComponentKind kind() const noexcept override { return ComponentKind::Door; }
     [[nodiscard]] HingeSide hinge() const noexcept { return hinge_; }
-    void setHinge(HingeSide hinge) noexcept { hinge_ = hinge; }
+    void setHinge(HingeSide hinge);
+
+protected:
+    const std::string& defaultHandleId(const ConstructionRules& r) const override;
+    Real handleCenterX(const HandlePlacement& placement, const HandleModel& model) const override;
 
 private:
     HingeSide hinge_;
 };
 
-/// Фасад ящика.
+/// Фасад ящика. Default handle: horizontal, in the middle of the front.
 class DrawerFront final : public FrontPanel {
 public:
     DrawerFront();
@@ -182,6 +229,9 @@ public:
     {
         return ComponentKind::DrawerFront;
     }
+
+protected:
+    const std::string& defaultHandleId(const ConstructionRules& r) const override;
 };
 
 // =============================================================================================

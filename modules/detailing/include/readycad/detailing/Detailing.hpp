@@ -19,7 +19,8 @@ struct DetailingReport {
 ///  * joints     — confirmats / eccentrics / dowels for every edge-to-face joint;
 ///  * shelves    — shelf-support holes under every shelf on supports (System 32 rows);
 ///  * doors      — 35 mm hinge cups in the doors, mounting-plate holes in the walls, on the grid;
-///  * back panel — grooves in sides, top and bottom when the back is mounted in a groove.
+///  * back panel — grooves in sides, top and bottom when the back is mounted in a groove;
+///  * handles    — screw holes of bars and knobs (unless the workshop drills them on site).
 ///
 /// Holes and grooves are derived data: every relayout clears them, so call this after changes
 /// (the editor does it automatically). Calling it twice gives the same result.

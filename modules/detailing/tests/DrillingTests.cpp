@@ -60,8 +60,9 @@ TEST_CASE("Report of the reference wardrobe", "[detailing][drilling]")
 
     CHECK(report.joints == 4);
     CHECK(report.grooves == 4);
-    // top 6 + bottom 6 + each side (3 + 3 confirmat, 8 shelf supports, 8 hinge plate) + 8 cups
-    CHECK(report.drillings == 6 + 6 + 2 * 22 + 8);
+    // top 6 + bottom 6 + each side (3 + 3 confirmat, 8 shelf supports, 8 hinge plate)
+    // + each door (4 hinge cups, 2 handle holes)
+    CHECK(report.drillings == 6 + 6 + 2 * 22 + 2 * (4 + 2));
     CHECK(report.warnings.empty());
 }
 
@@ -330,4 +331,46 @@ TEST_CASE("Detailing is repeatable and invalidated by relayout", "[detailing][dr
     CHECK(applyDetailing(*wardrobe).drillings == first); // same structure, new coordinates
     CHECK_THAT(holes(wardrobe->carcass()->top(), FastenerType::Confirmat).back().position,
                IsNear({891, 510, 18}));
+}
+
+TEST_CASE("Handle holes", "[detailing][drilling][handle]")
+{
+    SECTION("drilled through from the visible face")
+    {
+        const auto wardrobe = referenceWardrobe();
+        applyDetailing(*wardrobe);
+        const Door& door = *wardrobe->carcass()->interior().doors()[0];
+
+        // Door frame: x = height (y - 1.5), y = width (x - 1.5); handle at x = 358.5.
+        const auto handle = holes(door, FastenerType::Handle);
+        REQUIRE(handle.size() == 2);
+        CHECK(handle[0].face == PanelFace::Top); // the outer face
+        CHECK_THAT(handle[0].position, IsNear({936.0 - 1.5, 357.0, 18.0}));
+        CHECK_THAT(handle[1].position, IsNear({1064.0 - 1.5, 357.0, 18.0}));
+        CHECK(handle[0].diameter == 5.0);
+        CHECK(handle[0].depth == 18.0);
+    }
+
+    SECTION("drilled by the installer: no holes, but no warning either")
+    {
+        ConstructionRules rules;
+        rules.handles.drillOnMachine = false;
+        const auto wardrobe = referenceWardrobe(rules);
+        const DetailingReport report = applyDetailing(*wardrobe);
+        CHECK(report.warnings.empty());
+        CHECK(holes(*wardrobe->carcass()->interior().doors()[0], FastenerType::Handle).empty());
+    }
+
+    SECTION("problems are reported instead of producing wrong holes")
+    {
+        const auto wardrobe = referenceWardrobe();
+        auto doors = wardrobe->carcass()->interior().doors();
+        doors[0]->setHandle(HandlePlacement{"discontinued-handle"});
+        doors[1]->setHandle(HandlePlacement{"bar-320", HandleOrientation::Horizontal,
+                                            HandleAnchor::Center, 300.0});
+        const DetailingReport report = applyDetailing(*wardrobe);
+        CHECK(report.warnings.size() == 2);
+        CHECK(holes(*doors[0], FastenerType::Handle).empty());
+        CHECK(holes(*doors[1], FastenerType::Handle).empty());
+    }
 }

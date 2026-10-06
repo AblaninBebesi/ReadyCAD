@@ -20,7 +20,7 @@ namespace rc::core {
 /// Edges on L1/L2 make the part WIDER, edges on W1/W2 make it LONGER (see cut sizes).
 enum class EdgeSide { L1 = 0, L2 = 1, W1 = 2, W2 = 3 };
 
-enum class FastenerType { Confirmat, Dowel, Eccentric, ShelfSupport, Hinge, Groove };
+enum class FastenerType { Confirmat, Dowel, Eccentric, ShelfSupport, Hinge, Groove, Handle };
 
 /// Which surface of the panel a hole is drilled into.
 enum class PanelFace { Top, Bottom, EdgeL1, EdgeL2, EdgeW1, EdgeW2 };

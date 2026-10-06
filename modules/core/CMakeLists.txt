@@ -7,6 +7,7 @@ rc_add_module(core
     SOURCES
         src/Aabb.cpp
         src/ConstructionRules.cpp
+        src/Hardware.cpp
         src/Panel.cpp
         src/Version.cpp
         src/model/BackMount.cpp
@@ -32,6 +33,7 @@ rc_add_module(core
         tests/ComponentTreeTests.cpp
         tests/CarcassTests.cpp
         tests/SectionTests.cpp
-        tests/ParametricTests.cpp)
+        tests/ParametricTests.cpp
+        tests/HandleTests.cpp)
 
 target_include_directories(readycad_core PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)

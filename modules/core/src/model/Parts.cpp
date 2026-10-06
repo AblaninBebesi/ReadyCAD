@@ -2,6 +2,7 @@
 
 #include <stdexcept>
 #include <string>
+#include <utility>
 
 namespace rc::core {
 
@@ -294,7 +295,83 @@ EdgeBand Partition::defaultEdge(EdgeSide side, const LayoutSlot& slot) const
 // Fronts
 // ---------------------------------------------------------------------------------------------
 
-FrontPanel::FrontPanel(Axis lengthAxis) : PanelComponent(Axis::Z, lengthAxis) {}
+FrontPanel::FrontPanel(Axis lengthAxis, HandlePlacement defaultPlacement)
+    : PanelComponent(Axis::Z, lengthAxis), handle_(std::move(defaultPlacement))
+{
+}
+
+void FrontPanel::setHandle(std::optional<HandlePlacement> placement)
+{
+    handle_ = std::move(placement);
+    requestLayout(); // drilling of this front is now stale
+}
+
+const HandleModel* FrontPanel::handleModel(const ConstructionRules& rules) const
+{
+    if (!handle_) {
+        return nullptr;
+    }
+    const std::string& id = handle_->modelId.empty() ? defaultHandleId(rules) : handle_->modelId;
+    return rules.handles.find(id);
+}
+
+Real FrontPanel::handleCenterX(const HandlePlacement&, const HandleModel&) const
+{
+    return box().center().x;
+}
+
+std::optional<HandleGeometry> FrontPanel::handleGeometry(const ConstructionRules& rules) const
+{
+    const HandleModel* model = handleModel(rules);
+    if (model == nullptr) {
+        return std::nullopt;
+    }
+    const HandlePlacement& p = *handle_;
+    const Aabb& front = box();
+    const bool vertical = p.orientation == HandleOrientation::Vertical;
+    const Real half = model->type == HandleType::Bar ? model->holeSpacing / 2.0 : 0.0;
+
+    Real y = front.center().y;
+    if (p.anchor == HandleAnchor::Top) {
+        y = front.max().y - p.anchorOffset - (vertical ? half : 0.0);
+    } else if (p.anchor == HandleAnchor::Bottom) {
+        y = front.min().y + p.anchorOffset + (vertical ? half : 0.0);
+    }
+
+    HandleGeometry g;
+    g.model = model;
+    g.center = Vec3(handleCenterX(p, *model), y, front.max().z); // the outer face looks to +Z
+    g.along = vertical ? Axis::Y : Axis::X;
+    if (model->type == HandleType::Bar) {
+        for (const Real offset : {-half, half}) {
+            Vec3 hole = g.center;
+            hole[index(g.along)] += offset;
+            g.holes.push_back(hole);
+        }
+    } else {
+        g.holes.push_back(g.center);
+    }
+
+    // Fit check: holes keep their distance from the edges, the body stays on the front.
+    const Real margin = model->holeDiameter / 2.0 + rules.handles.minEdgeDistance;
+    for (const Vec3& hole : g.holes) {
+        for (const int axis : {0, 1}) {
+            if (hole[axis] - margin < front.min()[axis] - kEpsilon
+                || hole[axis] + margin > front.max()[axis] + kEpsilon) {
+                g.fits = false;
+            }
+        }
+    }
+    const int a = index(g.along);
+    const int c = 1 - a; // the other in-plane axis (X <-> Y)
+    if (g.center[a] - model->length / 2.0 < front.min()[a] - kEpsilon
+        || g.center[a] + model->length / 2.0 > front.max()[a] + kEpsilon
+        || g.center[c] - model->width / 2.0 < front.min()[c] - kEpsilon
+        || g.center[c] + model->width / 2.0 > front.max()[c] + kEpsilon) {
+        g.fits = false;
+    }
+    return g;
+}
 
 Vec3 FrontPanel::updateSize(const LayoutSlot& slot)
 {
@@ -318,9 +395,45 @@ EdgeBand FrontPanel::defaultEdge(EdgeSide, const LayoutSlot& slot) const
     return slot.r().visibleEdge; // every edge of a front is visible
 }
 
-Door::Door(HingeSide hinge) : FrontPanel(Axis::Y), hinge_(hinge) {}
+Door::Door(HingeSide hinge)
+    : FrontPanel(Axis::Y, HandlePlacement{{}, HandleOrientation::Vertical, HandleAnchor::Center})
+    , hinge_(hinge)
+{
+}
 
-DrawerFront::DrawerFront() : FrontPanel(Axis::X) {}
+void Door::setHinge(HingeSide hinge)
+{
+    hinge_ = hinge;
+    requestLayout(); // hinge cups and the handle move to the other side
+}
+
+const std::string& Door::defaultHandleId(const ConstructionRules& r) const
+{
+    return r.handles.defaultDoorHandle;
+}
+
+Real Door::handleCenterX(const HandlePlacement& placement, const HandleModel& model) const
+{
+    // The handle goes to the opening edge: opposite the hinges.
+    const bool hingeLeft = hinge_ == HingeSide::Left;
+    const Real openingEdge = hingeLeft ? box().max().x : box().min().x;
+    const Real inwards = hingeLeft ? -1.0 : 1.0;
+    Real distance = placement.edgeOffset;
+    if (placement.orientation == HandleOrientation::Horizontal && model.type == HandleType::Bar) {
+        distance += model.holeSpacing / 2.0; // edgeOffset is to the nearest hole
+    }
+    return openingEdge + inwards * distance;
+}
+
+DrawerFront::DrawerFront()
+    : FrontPanel(Axis::X, HandlePlacement{{}, HandleOrientation::Horizontal, HandleAnchor::Center})
+{
+}
+
+const std::string& DrawerFront::defaultHandleId(const ConstructionRules& r) const
+{
+    return r.handles.defaultDrawerHandle;
+}
 
 // ---------------------------------------------------------------------------------------------
 // Drawer box

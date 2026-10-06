@@ -309,6 +309,41 @@ void addHinges(core::Carcass& carcass, const std::vector<PanelComponent*>& walls
 }
 
 // ---------------------------------------------------------------------------------------------
+// Handles
+// ---------------------------------------------------------------------------------------------
+
+void addHandles(core::Product& product, const ConstructionRules& r, DetailingReport& report)
+{
+    for (core::FrontPanel* front : core::findAll<core::FrontPanel>(product)) {
+        if (!front->handle()) {
+            continue;
+        }
+        const auto handle = front->handleGeometry(r);
+        if (!handle) {
+            const std::string& id = front->handle()->modelId;
+            report.warnings.push_back("Unknown handle model '" + (id.empty() ? "<default>" : id)
+                                      + "' on a " + std::string(toString(front->kind())));
+            continue;
+        }
+        if (!handle->fits) {
+            report.warnings.push_back("Handle '" + handle->model->name + "' does not fit on a "
+                                      + std::string(toString(front->kind())));
+            continue;
+        }
+        if (!r.handles.drillOnMachine) {
+            continue; // drilled by the installer on site
+        }
+        // Through holes drilled from the visible face: the drill exits (and may chip) on the
+        // hidden inner face.
+        const PanelFace outer = PanelFrame(*front).faceAt(Axis::Z, true);
+        for (const Vec3& hole : handle->holes) {
+            addHole(*front, outer, hole, FastenerType::Handle, handle->model->holeDiameter,
+                    front->panel()->thickness());
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
 // Back panel grooves
 // ---------------------------------------------------------------------------------------------
 
@@ -426,6 +461,7 @@ DetailingReport applyDetailing(core::Product& product)
     addShelfSupports(*carcass, walls, r, report);
     addHinges(*carcass, walls, carcass->system32OriginY(), r, report);
     addBackGrooves(*carcass, r);
+    addHandles(product, r, report);
 
     for (PanelComponent* part : parts) {
         resolveHoleConflicts(*part->panel(), r);

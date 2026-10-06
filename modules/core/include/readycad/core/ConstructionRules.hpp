@@ -1,15 +1,19 @@
 #pragma once
 
+#include "readycad/core/Hardware.hpp"
 #include "readycad/core/Material.hpp"
 
+#include <string>
 #include <vector>
 
 namespace rc::core {
 
-/// All technological parameters ("заводские нормы") that the layout formulas use.
+/// The workshop profile: all technological parameters ("заводские нормы") plus the workshop's
+/// own hardware catalogue (handles of its supplier).
 ///
-/// The formulas live in the component classes (each part knows HOW it is sized), the numbers live
-/// here (a workshop can tune them without touching code). One instance belongs to a Product.
+/// The formulas live in the component classes (each part knows HOW it is sized), the numbers and
+/// catalogues live here (a workshop can tune them without touching code). One instance belongs
+/// to a Product; stage 5 saves/loads it as a file per workshop.
 struct ConstructionRules {
     // --- Materials --------------------------------------------------------------------------
     Material carcassMaterial{"Suntalam 18", MaterialType::Chipboard, 18.0, true};
@@ -112,6 +116,27 @@ struct ConstructionRules {
     /// Two blind holes from opposite faces (e.g. shelf supports on both sides of a partition)
     /// must leave at least this much material between them.
     Real minWallBetweenHoles = 1.0;
+
+    // --- Handles ----------------------------------------------------------------------------
+    struct Handles {
+        std::vector<HandleModel> catalog = defaultHandleCatalog();
+        std::string defaultDoorHandle = "bar-128";
+        std::string defaultDrawerHandle = "bar-128";
+        /// true: the CNC drills the screw holes; false: the installer drills them on site
+        /// (the handles still appear in the hardware list and in 3D).
+        bool drillOnMachine = true;
+        Real minEdgeDistance = 10.0; // from a hole to the front's edge
+
+        [[nodiscard]] const HandleModel* find(const std::string& id) const noexcept
+        {
+            for (const HandleModel& model : catalog) {
+                if (model.id == id) {
+                    return &model;
+                }
+            }
+            return nullptr;
+        }
+    } handles;
 
     // --- Cutting ----------------------------------------------------------------------------
     struct Cutting {
