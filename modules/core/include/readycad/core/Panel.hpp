@@ -1,0 +1,89 @@
+#pragma once
+
+#include "readycad/core/Aabb.hpp"
+#include "readycad/core/Material.hpp"
+
+#include <array>
+#include <utility>
+#include <vector>
+
+namespace rc::core {
+
+/// Edges of a rectangular panel in its own 2D system (length along local X, width along local Y):
+///
+///            L2 (long edge at width = max)
+///        +---------------------------+
+///    W1  |                           |  W2    (short edges at length = 0 / length = max)
+///        +---------------------------+
+///            L1 (long edge at width = 0)
+///
+/// Edges on L1/L2 make the part WIDER, edges on W1/W2 make it LONGER (see cut sizes).
+enum class EdgeSide { L1 = 0, L2 = 1, W1 = 2, W2 = 3 };
+
+enum class FastenerType { Confirmat, Dowel, Eccentric, ShelfSupport, Hinge, Groove };
+
+/// Which surface of the panel a hole is drilled into.
+enum class PanelFace { Top, Bottom, EdgeL1, EdgeL2, EdgeW1, EdgeW2 };
+
+/// One hole. Position is in panel coordinates: x along length, y along width, z = 0 on the Bottom
+/// face and z = thickness on the Top face. Generated in stage 4 (System 32).
+struct Drilling {
+    FastenerType fastener = FastenerType::Dowel;
+    PanelFace face = PanelFace::Top;
+    Vec3 position{0.0};
+    Real diameter = 0.0;
+    Real depth = 0.0;
+};
+
+/// A physical part cut from sheet material (ЛДСП/МДФ/ХДФ) — pure data.
+///
+/// It does not know where it stands in the furniture: its owning FurnitureComponent computes the
+/// geometry and calls fitTo(). Detailing, nesting, export and CAM read panels and never need
+/// the component tree.
+///
+/// Sizes:
+///  * finish (чистовой) — the final part with edge banding glued on (what the designer draws);
+///  * cut (пильный)     — what the saw cuts: finish minus the edge band thickness.
+///    Stage 4 adds pre-milling allowances on top of that.
+class Panel {
+public:
+    /// thicknessAxis — world axis across the panel; lengthAxis — world axis along its length
+    /// (and along the grain when the material has one). The two must differ.
+    Panel(Material material, Axis thicknessAxis, Axis lengthAxis);
+
+    /// Takes finish length/width from a box in product coordinates.
+    void fitTo(const Aabb& box);
+
+    [[nodiscard]] const Material& material() const noexcept { return material_; }
+    void setMaterial(Material material) { material_ = std::move(material); }
+
+    [[nodiscard]] Axis thicknessAxis() const noexcept { return thicknessAxis_; }
+    [[nodiscard]] Axis lengthAxis() const noexcept { return lengthAxis_; }
+    [[nodiscard]] Axis widthAxis() const noexcept;
+
+    [[nodiscard]] Real finishLength() const noexcept { return finishLength_; }
+    [[nodiscard]] Real finishWidth() const noexcept { return finishWidth_; }
+    [[nodiscard]] Real thickness() const noexcept { return material_.thickness; }
+
+    [[nodiscard]] Real cutLength() const noexcept;
+    [[nodiscard]] Real cutWidth() const noexcept;
+
+    [[nodiscard]] const EdgeBand& edge(EdgeSide side) const noexcept;
+    void setEdge(EdgeSide side, EdgeBand band);
+    [[nodiscard]] const std::array<EdgeBand, 4>& edges() const noexcept { return edges_; }
+
+    [[nodiscard]] const std::vector<Drilling>& drillings() const noexcept { return drillings_; }
+    void addDrilling(const Drilling& drilling) { drillings_.push_back(drilling); }
+    void clearDrillings() noexcept { drillings_.clear(); }
+
+private:
+    Material material_;
+    Axis thicknessAxis_;
+    Axis lengthAxis_;
+    Real finishLength_ = 0.0;
+    Real finishWidth_ = 0.0;
+    std::array<EdgeBand, 4> edges_{};
+    std::vector<Drilling> drillings_;
+};
+
+} // namespace rc::core

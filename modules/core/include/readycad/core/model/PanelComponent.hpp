@@ -1,0 +1,48 @@
+#pragma once
+
+#include "readycad/core/model/FurnitureComponent.hpp"
+
+#include <array>
+#include <optional>
+
+namespace rc::core {
+
+/// Base for leaf components that are exactly one physical panel (side wall, shelf, door, ...).
+///
+/// Subclasses supply:
+///  * updateSize / updatePosition — the part's own geometric formula;
+///  * defaultMaterial             — which material of the ConstructionRules it is made of;
+///  * defaultEdge                 — which edges get banding by default.
+/// The user can override material and individual edges per part; overrides survive relayout.
+class PanelComponent : public FurnitureComponent {
+public:
+    /// Material actually used (override or the rules' default).
+    [[nodiscard]] const Material& material() const noexcept { return panel_->material(); }
+    void setMaterialOverride(std::optional<Material> material);
+    [[nodiscard]] const std::optional<Material>& materialOverride() const noexcept
+    {
+        return materialOverride_;
+    }
+
+    void setEdgeOverride(EdgeSide side, std::optional<EdgeBand> band);
+
+    /// Thickness used in the formulas: that of the effective material under the slot's rules.
+    /// Public because parents need it BEFORE laying the part out (to reserve its band).
+    [[nodiscard]] Real thickness(const LayoutSlot& slot) const;
+
+    [[nodiscard]] bool canAccept(const FurnitureComponent&) const override { return false; }
+
+protected:
+    PanelComponent(Axis thicknessAxis, Axis lengthAxis);
+
+    [[nodiscard]] virtual const Material& defaultMaterial(const ConstructionRules& rules) const = 0;
+    [[nodiscard]] virtual EdgeBand defaultEdge(EdgeSide side, const LayoutSlot& slot) const;
+
+    void updatePanel(const LayoutSlot& slot) override;
+
+private:
+    std::optional<Material> materialOverride_;
+    std::array<std::optional<EdgeBand>, 4> edgeOverrides_{};
+};
+
+} // namespace rc::core

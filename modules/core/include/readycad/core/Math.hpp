@@ -38,4 +38,23 @@ inline constexpr Real kEpsilon = 1e-6;
     return std::round(value / step) * step;
 }
 
+enum class Axis { X = 0, Y = 1, Z = 2 };
+
+[[nodiscard]] constexpr int index(Axis axis) noexcept
+{
+    return static_cast<int>(axis);
+}
+
+/// Overall dimensions of a product, compartment or part, mm.
+struct Size3D {
+    Real width = 0.0;  // X
+    Real height = 0.0; // Y
+    Real depth = 0.0;  // Z
+
+    [[nodiscard]] Vec3 toVec3() const noexcept { return {width, height, depth}; }
+    [[nodiscard]] static Size3D fromVec3(const Vec3& v) noexcept { return {v.x, v.y, v.z}; }
+
+    friend bool operator==(const Size3D&, const Size3D&) = default;
+};
+
 } // namespace rc::core

@@ -6,12 +6,32 @@ configure_file(
 rc_add_module(core
     SOURCES
         src/Aabb.cpp
+        src/ConstructionRules.cpp
+        src/Panel.cpp
         src/Version.cpp
+        src/model/BackMount.cpp
+        src/model/Carcass.cpp
+        src/model/ComponentKind.cpp
+        src/model/Drawer.cpp
+        src/model/FurnitureComponent.cpp
+        src/model/LayoutSlot.cpp
+        src/model/PanelComponent.cpp
+        src/model/Parts.cpp
+        src/model/Product.cpp
+        src/model/Queries.cpp
+        src/model/Section.cpp
+        src/builders/Catalog.cpp
+        src/builders/WardrobeBuilder.cpp
     DEPENDS
         glm::glm
     TESTS
         tests/AabbTests.cpp
         tests/MathTests.cpp
-        tests/VersionTests.cpp)
+        tests/VersionTests.cpp
+        tests/PanelTests.cpp
+        tests/ComponentTreeTests.cpp
+        tests/CarcassTests.cpp
+        tests/SectionTests.cpp
+        tests/ParametricTests.cpp)
 
 target_include_directories(readycad_core PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
