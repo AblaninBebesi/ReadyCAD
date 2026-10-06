@@ -2,7 +2,7 @@
 //
 // Reference interior of an 800 x 2000 x 560 carcass: x 18..782, y 18..1982, z 19..560.
 
-#include "TestHelpers.hpp"
+#include "readycad/test/TestHelpers.hpp"
 
 #include "readycad/core/builders/WardrobeBuilder.hpp"
 #include "readycad/core/model/Drawer.hpp"
@@ -11,15 +11,22 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <cmath>
 #include <stdexcept>
+#include <vector>
 
 using namespace rc::core;
 using Catch::Approx;
 using rc::test::IsBox;
+using rc::test::rulesWithoutSnapping;
 
 TEST_CASE("Automatic shelves split the height into equal clear gaps", "[core][section][shelf]")
 {
-    const auto wardrobe = WardrobeBuilder().shelvesPerSection(4).doorsPerSection(0).build();
+    const auto wardrobe = WardrobeBuilder()
+                              .rules(rulesWithoutSnapping())
+                              .shelvesPerSection(4)
+                              .doorsPerSection(0)
+                              .build();
     const auto shelves = wardrobe->carcass()->interior().shelves();
     REQUIRE(shelves.size() == 4);
 
@@ -33,7 +40,11 @@ TEST_CASE("Automatic shelves split the height into equal clear gaps", "[core][se
 
 TEST_CASE("An adjustable shelf applies its own clearances", "[core][section][shelf]")
 {
-    const auto wardrobe = WardrobeBuilder().shelvesPerSection(1).doorsPerSection(0).build();
+    const auto wardrobe = WardrobeBuilder()
+                              .rules(rulesWithoutSnapping())
+                              .shelvesPerSection(1)
+                              .doorsPerSection(0)
+                              .build();
     const Shelf& shelf = *wardrobe->carcass()->interior().shelves().front();
 
     // 1 mm per side, 20 mm behind the front edge, 2 mm off the back panel.
@@ -45,7 +56,11 @@ TEST_CASE("An adjustable shelf applies its own clearances", "[core][section][she
 
 TEST_CASE("Shelves with a fixed elevation anchor the automatic ones", "[core][section][shelf]")
 {
-    const auto wardrobe = WardrobeBuilder().shelvesPerSection(0).doorsPerSection(0).build();
+    const auto wardrobe = WardrobeBuilder()
+                              .rules(rulesWithoutSnapping())
+                              .shelvesPerSection(0)
+                              .doorsPerSection(0)
+                              .build();
     Section& interior = wardrobe->carcass()->interior();
     interior.addShelf();
     interior.addShelf(1000.0); // underside 1000 mm above the section bottom
@@ -62,7 +77,11 @@ TEST_CASE("Shelves with a fixed elevation anchor the automatic ones", "[core][se
 
 TEST_CASE("Overlapping shelves are reported by the validator", "[core][section][overlap]")
 {
-    const auto wardrobe = WardrobeBuilder().shelvesPerSection(0).doorsPerSection(0).build();
+    const auto wardrobe = WardrobeBuilder()
+                              .rules(rulesWithoutSnapping())
+                              .shelvesPerSection(0)
+                              .doorsPerSection(0)
+                              .build();
     Section& interior = wardrobe->carcass()->interior();
     interior.addShelf(500.0);
     interior.addShelf(505.0);
@@ -243,5 +262,48 @@ TEST_CASE("Shelf mount: on supports or fixed with confirmats", "[core][section][
         fixed->setMount(ShelfMount::Supports);
         CHECK(shelves[1]->size().width == Approx(762.0));
         CHECK(shelves[1]->size().depth == Approx(519.0));
+    }
+}
+
+TEST_CASE("Shelves on supports stand on the System 32 grid", "[core][section][shelf][system32]")
+{
+    SECTION("each shelf moves to the hole nearest to its even position")
+    {
+        const auto wardrobe = WardrobeBuilder().shelvesPerSection(4).doorsPerSection(0).build();
+        const Carcass& c = *wardrobe->carcass();
+        CHECK(c.system32OriginY() == Approx(9.0)); // centre plane of the 18 mm bottom
+
+        // Even positions 396.4 / 792.8 / 1189.2 / 1585.6; the shelf rests 2.5 mm above a hole
+        // centre at 9 + 32k.
+        const std::vector<Real> expected{395.5, 779.5, 1195.5, 1579.5};
+        const auto shelves = c.interior().shelves();
+        REQUIRE(shelves.size() == expected.size());
+        for (std::size_t i = 0; i < shelves.size(); ++i) {
+            const Real underside = shelves[i]->box().min().y;
+            CHECK(underside == Approx(expected[i]));
+            const Real holeCentre = underside - 2.5;
+            CHECK(std::remainder(holeCentre - 9.0, 32.0) == Approx(0.0).margin(1e-9));
+        }
+        CHECK(findOverlaps(*wardrobe).empty());
+    }
+
+    SECTION("shelves on confirmats keep their exact position")
+    {
+        const auto wardrobe = WardrobeBuilder()
+                                  .shelvesPerSection(4)
+                                  .shelfMount(ShelfMount::Confirmat)
+                                  .doorsPerSection(0)
+                                  .build();
+        CHECK(wardrobe->carcass()->interior().shelves().front()->box().min().y
+              == Approx(396.4));
+    }
+
+    SECTION("a fixed elevation snaps too")
+    {
+        const auto wardrobe = WardrobeBuilder().shelvesPerSection(0).doorsPerSection(0).build();
+        const auto shelf = wardrobe->carcass()->interior().addShelf(1000.0);
+        // Wanted underside 1018 -> hole 1015.5 -> grid holes 1001 / 1033 -> 1001 is nearer
+        // -> underside 1003.5.
+        CHECK(shelf->box().min().y == Approx(1003.5));
     }
 }

@@ -3,6 +3,7 @@
 #include "readycad/core/model/Drawer.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <stdexcept>
 
 namespace rc::core {
@@ -306,10 +307,39 @@ void Section::layoutShelves(const LayoutSlot& slot)
 {
     // Shelves are ordered bottom -> top as they appear among the children. Shelves with a fixed
     // elevation are anchors; automatic shelves between two anchors (or the section's bottom/top)
-    // are spread so that all clear gaps between them are equal.
+    // are spread so that all clear gaps between them are equal. Then every shelf on supports is
+    // moved to the nearest System 32 hole (it physically cannot stand anywhere else).
     const std::vector<Shelf*> shelves = this->shelves();
+    const ConstructionRules& r = slot.r();
     const Real bottom = box().min().y;
     const Real top = box().max().y;
+    const Real pitch = r.system32.pitch;
+    const bool snapping = r.system32.snapShelves && slot.holeGridOriginY && pitch > 0.0;
+
+    // Underside of the shelf resting on the nearest hole of the grid.
+    auto snapped = [&](const Shelf* shelf, Real y) {
+        if (!snapping || shelf->mount() != ShelfMount::Supports) {
+            return y;
+        }
+        const Real origin = *slot.holeGridOriginY;
+        const Real offset = r.shelfSupport.holeBelowShelf;
+        return origin + std::round((y - offset - origin) / pitch) * pitch + offset;
+    };
+
+    // Keeps a snapped shelf between `floor` (top of the shelf below) and `ceiling`.
+    auto fit = [&](const Shelf* shelf, Real y, Real floor, Real ceiling) {
+        if (!snapping || shelf->mount() != ShelfMount::Supports) {
+            return y;
+        }
+        const Real t = shelf->thickness(slot);
+        while (y < floor - kEpsilon) {
+            y += pitch;
+        }
+        while (y + t > ceiling + kEpsilon && y - pitch >= floor - kEpsilon) {
+            y -= pitch;
+        }
+        return y;
+    };
 
     auto layoutAt = [&](Shelf* shelf, Real y) {
         const Real t = shelf->thickness(slot);
@@ -327,8 +357,9 @@ void Section::layoutShelves(const LayoutSlot& slot)
         Real limit = top;
         if (anchor < shelves.size()) {
             const Real t = shelves[anchor]->thickness(slot);
-            limit = std::clamp(bottom + *shelves[anchor]->elevation(), bottom,
-                               std::max(bottom, top - t));
+            const Real highest = std::max(bottom, top - t);
+            limit = std::clamp(bottom + *shelves[anchor]->elevation(), bottom, highest);
+            limit = fit(shelves[anchor], snapped(shelves[anchor], limit), cursor, top);
         }
 
         Real thicknessSum = 0.0;
@@ -338,11 +369,15 @@ void Section::layoutShelves(const LayoutSlot& slot)
         const auto gaps = static_cast<Real>(anchor - i + 1);
         const Real clearGap = (limit - cursor - thicknessSum) / gaps;
 
-        Real y = cursor;
+        Real ideal = cursor;    // evenly distributed position
+        Real previous = cursor; // top of the shelf actually placed below
         for (std::size_t k = i; k < anchor; ++k) {
-            y += clearGap;
+            const Real t = shelves[k]->thickness(slot);
+            ideal += clearGap;
+            const Real y = fit(shelves[k], snapped(shelves[k], ideal), previous, limit);
             layoutAt(shelves[k], y);
-            y += shelves[k]->thickness(slot);
+            ideal += t;
+            previous = y + t;
         }
         if (anchor < shelves.size()) {
             layoutAt(shelves[anchor], limit);

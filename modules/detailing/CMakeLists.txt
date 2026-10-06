@@ -1,5 +1,13 @@
-# Detailing — implemented in stage 4 (see docs/ARCHITECTURE.md).
-# Until then the module is a placeholder that only fixes its place in the dependency graph.
 rc_add_module(detailing
+    SOURCES
+        src/CutList.cpp
+        src/Detailing.cpp
+        src/Joints.cpp
+        src/PanelFrame.cpp
     DEPENDS
-        readycad::core)
+        readycad::core
+    TESTS
+        tests/CutListTests.cpp
+        tests/JointTests.cpp
+        tests/DrillingTests.cpp
+        tests/DetailingSanityTests.cpp)

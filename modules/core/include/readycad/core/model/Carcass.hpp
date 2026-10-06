@@ -41,6 +41,10 @@ public:
     [[nodiscard]] const Aabb& interiorBox() const noexcept { return interior_->box(); }
     [[nodiscard]] const CarcassFrame& frame() const noexcept { return frame_; }
 
+    /// Origin of the System 32 hole grid: the centre plane of the bottom panel. Holes of this
+    /// carcass are at system32OriginY() + k * pitch.
+    [[nodiscard]] Real system32OriginY() const noexcept { return bottom_->box().center().y; }
+
 protected:
     void layoutChildren(const LayoutSlot& slot) override;
 

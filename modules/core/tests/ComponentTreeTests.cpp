@@ -1,6 +1,6 @@
 // Stage 2: the Composite tree itself — structure, adding/removing children, recursive layout.
 
-#include "TestHelpers.hpp"
+#include "readycad/test/TestHelpers.hpp"
 
 #include "readycad/core/builders/WardrobeBuilder.hpp"
 #include "readycad/core/model/Product.hpp"

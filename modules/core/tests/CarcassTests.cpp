@@ -3,7 +3,7 @@
 // Reference carcass: 800 x 2000 x 560, 18 mm chipboard, 3 mm HDF back, default rules
 // (groove 8 deep, 16 from the rear, 1.5 expansion gap per side).
 
-#include "TestHelpers.hpp"
+#include "readycad/test/TestHelpers.hpp"
 
 #include "readycad/core/model/Product.hpp"
 #include "readycad/core/model/Queries.hpp"

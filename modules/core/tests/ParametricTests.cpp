@@ -1,7 +1,7 @@
 // Stage 3: parametric recalculation. Change the overall size (or one compartment) and check that
 // every dependent part followed — and that nothing ended up overlapping.
 
-#include "TestHelpers.hpp"
+#include "readycad/test/TestHelpers.hpp"
 
 #include "readycad/core/builders/Catalog.hpp"
 #include "readycad/core/builders/WardrobeBuilder.hpp"
@@ -18,6 +18,7 @@
 using namespace rc::core;
 using Catch::Approx;
 using rc::test::IsBox;
+using rc::test::rulesWithoutSnapping;
 
 namespace {
 
@@ -87,7 +88,8 @@ TEST_CASE("Wardrobe width 800 -> 900: everything follows", "[core][parametric]")
 
 TEST_CASE("Height change redistributes automatic shelves evenly", "[core][parametric]")
 {
-    const auto wardrobe = WardrobeBuilder().shelvesPerSection(4).build();
+    const auto wardrobe =
+        WardrobeBuilder().rules(rulesWithoutSnapping()).shelvesPerSection(4).build();
     wardrobe->setDimensions({800, 2400, 560});
 
     const Section& interior = wardrobe->carcass()->interior();
@@ -156,7 +158,8 @@ TEST_CASE("A fixed-width compartment keeps its width when the product grows",
 
 TEST_CASE("Editing after build: shelf count and back mount", "[core][parametric]")
 {
-    const auto wardrobe = WardrobeBuilder().shelvesPerSection(2).build();
+    const auto wardrobe =
+        WardrobeBuilder().rules(rulesWithoutSnapping()).shelvesPerSection(2).build();
     Carcass& c = *wardrobe->carcass();
 
     c.interior().setAutoShelfCount(6);

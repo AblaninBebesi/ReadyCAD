@@ -1,6 +1,7 @@
 #pragma once
 
 #include "readycad/core/Aabb.hpp"
+#include "readycad/core/ConstructionRules.hpp"
 
 #include <catch2/catch_tostring.hpp>
 #include <catch2/matchers/catch_matchers_templated.hpp>
@@ -36,6 +37,15 @@ using core::Aabb;
 using core::Vec3;
 
 constexpr core::Real kTol = 1e-6;
+
+/// Default rules with System 32 snapping switched off: for tests of the pure distribution
+/// formulas (equal gaps), independent of the hole grid.
+inline core::ConstructionRules rulesWithoutSnapping()
+{
+    core::ConstructionRules rules;
+    rules.system32.snapShelves = false;
+    return rules;
+}
 
 /// CHECK_THAT(vec, IsNear(Vec3(1, 2, 3)))
 struct IsNear : Catch::Matchers::MatcherGenericBase {

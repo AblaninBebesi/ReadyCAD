@@ -1,5 +1,7 @@
 # Module `detailing`
 
-Technological rules turning the model into manufacturable parts: saw (cut) vs. finish sizes, edge banding, System 32 drilling, fasteners (confirmat, dowel, eccentric/minifix, shelf supports, hinges).
+Turns the geometric model into manufacturable parts: cut sizes (finish - edge + pre-milling), cut list and edge banding usage, joints found from geometry, System 32 drilling (confirmat / eccentric / dowel connectors, shelf supports, hinge cups and plates), back panel grooves.
+
+See docs/ARCHITECTURE.md, section "Деталировка и присадка".
 
 **Stage:** 4

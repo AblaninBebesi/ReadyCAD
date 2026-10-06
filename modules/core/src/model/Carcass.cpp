@@ -69,6 +69,7 @@ void Carcass::layoutChildren(const LayoutSlot& slot)
     LayoutSlot interiorSlot = slot.withBox(opening);
     interiorSlot.frontZ = outer.max().z;
     interiorSlot.frame = nullptr; // interior parts must not depend on carcass internals
+    interiorSlot.holeGridOriginY = system32OriginY();
     interiorSlot.overlays.left = opening.min().x - (outer.min().x + edgeGap);
     interiorSlot.overlays.right = (outer.max().x - edgeGap) - opening.max().x;
     interiorSlot.overlays.bottom = opening.min().y - (outer.min().y + edgeGap);

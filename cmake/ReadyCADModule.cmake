@@ -46,6 +46,8 @@ endfunction()
 function(rc_add_test_executable name)
     cmake_parse_arguments(ARG "" "" "SOURCES;DEPENDS" ${ARGN})
     add_executable(${name} ${ARG_SOURCES})
+    # Shared test helpers (matchers etc.): #include "readycad/test/TestHelpers.hpp"
+    target_include_directories(${name} PRIVATE ${PROJECT_SOURCE_DIR}/tests/support)
     target_link_libraries(${name} PRIVATE ${ARG_DEPENDS} Catch2::Catch2WithMain)
     rc_set_warnings(${name})
     catch_discover_tests(${name} DISCOVERY_MODE PRE_TEST)

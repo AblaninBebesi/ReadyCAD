@@ -3,6 +3,8 @@
 #include "readycad/core/Aabb.hpp"
 #include "readycad/core/ConstructionRules.hpp"
 
+#include <optional>
+
 namespace rc::core {
 
 class BackMount;
@@ -56,6 +58,9 @@ struct LayoutSlot {
     Real frontZ = 0.0;            // Z of the carcass front plane: fronts start here
     const ConstructionRules* rules = &ConstructionRules::defaults();
     const CarcassFrame* frame = nullptr; // set by a Carcass for its own structural parts
+    /// Y of a hole of the enclosing carcass's System 32 grid (set by the Carcass for its
+    /// interior); shelves on supports snap to it.
+    std::optional<Real> holeGridOriginY;
 
     [[nodiscard]] const ConstructionRules& r() const noexcept { return *rules; }
 

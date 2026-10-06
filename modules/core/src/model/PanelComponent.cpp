@@ -37,6 +37,9 @@ void PanelComponent::updatePanel(const LayoutSlot& slot)
 {
     panel_->setMaterial(materialOverride_ ? *materialOverride_ : defaultMaterial(slot.r()));
     panel_->fitTo(box());
+    // Holes and grooves depend on the geometry: stale after any relayout, the detailing
+    // module regenerates them.
+    panel_->clearMachining();
     for (const EdgeSide side : {EdgeSide::L1, EdgeSide::L2, EdgeSide::W1, EdgeSide::W2}) {
         const auto& custom = edgeOverrides_[static_cast<std::size_t>(side)];
         panel_->setEdge(side, custom ? *custom : defaultEdge(side, slot));
