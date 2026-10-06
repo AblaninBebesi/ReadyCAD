@@ -83,17 +83,31 @@ private:
 // Interior parts. The slot is the band a Section reserved for the part.
 // =============================================================================================
 
-/// Полка на полкодержателях: narrower than the opening (side gaps), set back from the front
-/// and kept off the back panel.
+/// How a shelf is held in place. Changes its size formula now and its drilling in stage 4.
+enum class ShelfMount {
+    Supports,  // на полкодержателях: removable, narrower than the opening
+    Confirmat, // на евровинтах: fixed to the walls, fills the opening width
+};
+
+/// Полка внутри отсека.
+///  * Supports  — 1 mm side gaps (drops in between the walls), set back from the front edge,
+///                kept off the back panel;
+///  * Confirmat — tight between the walls, with its own front/back offsets.
+/// Unlike FixedShelf, a shelf never divides its section: shelves of both mounts can be mixed
+/// in one compartment behind one door.
 class Shelf final : public PanelComponent {
 public:
     /// elevation: fixed distance from the section bottom to the shelf's underside;
     /// nullopt = distributed evenly with the other automatic shelves.
-    explicit Shelf(std::optional<Real> elevation = std::nullopt);
+    explicit Shelf(std::optional<Real> elevation = std::nullopt,
+                   ShelfMount mount = ShelfMount::Supports);
     [[nodiscard]] ComponentKind kind() const noexcept override { return ComponentKind::Shelf; }
 
     [[nodiscard]] const std::optional<Real>& elevation() const noexcept { return elevation_; }
     void setElevation(std::optional<Real> elevation);
+
+    [[nodiscard]] ShelfMount mount() const noexcept { return mount_; }
+    void setMount(ShelfMount mount);
 
 protected:
     Vec3 updateSize(const LayoutSlot& slot) override;
@@ -103,6 +117,7 @@ protected:
 
 private:
     std::optional<Real> elevation_;
+    ShelfMount mount_;
 };
 
 /// Стационарная полка: structural, fills the opening completely (fixed with confirmats).

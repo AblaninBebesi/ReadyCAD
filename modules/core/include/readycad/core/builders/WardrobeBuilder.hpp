@@ -35,6 +35,8 @@ public:
     /// Fixed clear width of one column (0-based index); the others share the rest.
     WardrobeBuilder& sectionWidth(int index, Real width);
     WardrobeBuilder& shelvesPerSection(int count);
+    /// How the generated shelves are mounted (individual shelves can be changed later).
+    WardrobeBuilder& shelfMount(ShelfMount mount);
     WardrobeBuilder& doorsPerSection(int count);
     /// `count` drawers in every column. With `compartmentHeight` they go into a bottom
     /// compartment of that clear height (fixed shelf above, shelves and doors above that);
@@ -54,6 +56,7 @@ private:
     int sections_ = 1;
     std::map<int, Real> sectionWidths_;
     int shelves_ = 4;
+    ShelfMount shelfMount_ = ShelfMount::Supports;
     int doors_ = 2;
     int drawers_ = 0;
     std::optional<Real> drawerCompartmentHeight_;

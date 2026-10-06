@@ -207,3 +207,41 @@ TEST_CASE("Sections reject inconsistent content", "[core][section]")
     CHECK_THROWS_AS(interior.add(std::make_shared<Partition>()), std::invalid_argument);
     CHECK_THROWS_AS(interior.setSplitAxis(Axis::X), std::logic_error);
 }
+
+TEST_CASE("Shelf mount: on supports or fixed with confirmats", "[core][section][shelf]")
+{
+    SECTION("a confirmat shelf fills the opening and touches the walls and the back")
+    {
+        const auto wardrobe = WardrobeBuilder()
+                                  .shelvesPerSection(1)
+                                  .shelfMount(ShelfMount::Confirmat)
+                                  .doorsPerSection(0)
+                                  .build();
+        const Shelf& shelf = *wardrobe->carcass()->interior().shelves().front();
+        CHECK(shelf.mount() == ShelfMount::Confirmat);
+        CHECK_THAT(shelf.box(), IsBox({18, 991, 19}, {782, 1009, 560}));
+        CHECK(shelf.panel()->finishLength() == 764.0);
+        CHECK(findOverlaps(*wardrobe).empty()); // touching is not overlapping
+    }
+
+    SECTION("both mounts can be mixed in one compartment and switched later")
+    {
+        const auto wardrobe = WardrobeBuilder().shelvesPerSection(0).doorsPerSection(1).build();
+        Section& interior = wardrobe->carcass()->interior();
+        interior.addShelf();
+        const auto fixed = interior.addShelf(std::nullopt, ShelfMount::Confirmat);
+        interior.addShelf();
+
+        const auto shelves = interior.shelves();
+        CHECK(shelves[0]->size().width == Approx(762.0));
+        CHECK(shelves[1]->size().width == Approx(764.0));
+        CHECK(shelves[2]->size().width == Approx(762.0));
+        // The mount does not change the even vertical distribution: (1964 - 54) / 4.
+        CHECK(shelves[1]->box().min().y == Approx(18.0 + 2.0 * 477.5 + 18.0));
+        CHECK(findOverlaps(*wardrobe).empty());
+
+        fixed->setMount(ShelfMount::Supports);
+        CHECK(shelves[1]->size().width == Approx(762.0));
+        CHECK(shelves[1]->size().depth == Approx(519.0));
+    }
+}

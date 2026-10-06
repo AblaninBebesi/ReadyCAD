@@ -30,10 +30,12 @@ struct ConstructionRules {
     Real backOverlayInset = 2.0;   // nailed-on back: distance from the carcass outer edges
 
     // --- Shelves and partitions -------------------------------------------------------------
-    Real shelfSideGap = 1.0;       // adjustable shelf: per side, so it drops in between the walls
-    Real shelfFrontSetback = 20.0; // adjustable shelf: behind the carcass front edge
-    Real shelfBackGap = 2.0;       // adjustable shelf: in front of the back panel
-    Real partitionFrontSetback = 0.0;
+    Real shelfSideGap = 1.0;       // shelf on supports: per side, so it drops in between the walls
+    Real shelfFrontSetback = 20.0; // shelf on supports: behind the carcass front edge
+    Real shelfBackGap = 2.0;       // shelf on supports: in front of the back panel
+    Real confirmatShelfFrontSetback = 0.0; // shelf on confirmats: behind the carcass front edge
+    Real confirmatShelfBackGap = 0.0;      // shelf on confirmats: in front of the back panel
+    Real partitionFrontSetback = 0.0;      // partitions and fixed (dividing) shelves
 
     // --- Fronts (doors, drawer fronts) ------------------------------------------------------
     Real frontEdgeGap = 1.5; // from a front edge to the outer carcass edge

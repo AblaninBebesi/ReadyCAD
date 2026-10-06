@@ -178,8 +178,8 @@ bool BackPanel::allowsOverlapWith(const FurnitureComponent& other) const
 // Shelf (adjustable)
 // ---------------------------------------------------------------------------------------------
 
-Shelf::Shelf(std::optional<Real> elevation)
-    : PanelComponent(Axis::Y, Axis::X), elevation_(elevation)
+Shelf::Shelf(std::optional<Real> elevation, ShelfMount mount)
+    : PanelComponent(Axis::Y, Axis::X), elevation_(elevation), mount_(mount)
 {
 }
 
@@ -189,18 +189,45 @@ void Shelf::setElevation(std::optional<Real> elevation)
     requestLayout();
 }
 
+void Shelf::setMount(ShelfMount mount)
+{
+    mount_ = mount;
+    requestLayout();
+}
+
+namespace {
+
+struct ShelfOffsets {
+    Real side;  // per side
+    Real front; // from the front edge of the band
+    Real back;  // from the rear of the band (the back panel)
+};
+
+ShelfOffsets shelfOffsets(ShelfMount mount, const ConstructionRules& r) noexcept
+{
+    switch (mount) {
+    case ShelfMount::Confirmat:
+        return {0.0, r.confirmatShelfFrontSetback, r.confirmatShelfBackGap};
+    case ShelfMount::Supports:
+        break;
+    }
+    return {r.shelfSideGap, r.shelfFrontSetback, r.shelfBackGap};
+}
+
+} // namespace
+
 Vec3 Shelf::updateSize(const LayoutSlot& slot)
 {
-    const ConstructionRules& r = slot.r();
+    const ShelfOffsets o = shelfOffsets(mount_, slot.r());
     const Vec3 band = slot.box.size();
-    return {band.x - 2.0 * r.shelfSideGap, thickness(slot),
-            band.z - r.shelfFrontSetback - r.shelfBackGap};
+    return {band.x - 2.0 * o.side, thickness(slot), band.z - o.front - o.back};
 }
 
 Vec3 Shelf::updatePosition(const LayoutSlot& slot, const Vec3&)
 {
+    const ShelfOffsets o = shelfOffsets(mount_, slot.r());
     const Vec3& lo = slot.box.min();
-    return {lo.x + slot.r().shelfSideGap, lo.y, lo.z + slot.r().shelfBackGap};
+    return {lo.x + o.side, lo.y, lo.z + o.back};
 }
 
 const Material& Shelf::defaultMaterial(const ConstructionRules& r) const

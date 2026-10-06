@@ -57,6 +57,12 @@ WardrobeBuilder& WardrobeBuilder::shelvesPerSection(int count)
     return *this;
 }
 
+WardrobeBuilder& WardrobeBuilder::shelfMount(ShelfMount mount)
+{
+    shelfMount_ = mount;
+    return *this;
+}
+
 WardrobeBuilder& WardrobeBuilder::doorsPerSection(int count)
 {
     doors_ = count;
@@ -121,7 +127,7 @@ std::shared_ptr<Product> WardrobeBuilder::build() const
             rows[0]->setDrawers(drawers_);
             upper = rows[1].get();
         }
-        upper->setAutoShelfCount(shelves_);
+        upper->setAutoShelfCount(shelves_, shelfMount_);
         upper->setDoors(doors_);
     }
 

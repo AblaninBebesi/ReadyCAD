@@ -104,14 +104,14 @@ std::vector<std::shared_ptr<Section>> Section::splitVertically(int rows)
     return split(Axis::Y, rows);
 }
 
-std::shared_ptr<Shelf> Section::addShelf(std::optional<Real> elevation)
+std::shared_ptr<Shelf> Section::addShelf(std::optional<Real> elevation, ShelfMount mount)
 {
-    auto shelf = std::make_shared<Shelf>(elevation);
+    auto shelf = std::make_shared<Shelf>(elevation, mount);
     add(shelf);
     return shelf;
 }
 
-void Section::setAutoShelfCount(int count)
+void Section::setAutoShelfCount(int count, ShelfMount mount)
 {
     if (count < 0) {
         throw std::invalid_argument("Section: shelf count must be >= 0");
@@ -124,7 +124,7 @@ void Section::setAutoShelfCount(int count)
             && !static_cast<const Shelf&>(c).elevation().has_value();
     });
     for (int i = 0; i < count; ++i) {
-        adopt(std::make_shared<Shelf>());
+        adopt(std::make_shared<Shelf>(std::nullopt, mount));
     }
     requestLayout();
 }

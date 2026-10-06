@@ -44,9 +44,11 @@ public:
     std::vector<std::shared_ptr<Section>> splitVertically(int rows);
 
     // --- Content ------------------------------------------------------------------------------
-    std::shared_ptr<Shelf> addShelf(std::optional<Real> elevation = std::nullopt);
-    /// Replaces all automatic shelves with `count` new ones (fixed shelves are kept).
-    void setAutoShelfCount(int count);
+    std::shared_ptr<Shelf> addShelf(std::optional<Real> elevation = std::nullopt,
+                                    ShelfMount mount = ShelfMount::Supports);
+    /// Replaces all automatic shelves with `count` new ones (shelves at a fixed elevation are
+    /// kept).
+    void setAutoShelfCount(int count, ShelfMount mount = ShelfMount::Supports);
     /// Replaces doors: 0 = none, 1 = single (hinge left), 2 = pair (hinges outside).
     std::vector<std::shared_ptr<Door>> setDoors(int count);
     /// Replaces the drawer stack: 0 = none.
