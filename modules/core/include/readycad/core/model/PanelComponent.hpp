@@ -25,6 +25,10 @@ public:
     }
 
     void setEdgeOverride(EdgeSide side, std::optional<EdgeBand> band);
+    [[nodiscard]] const std::optional<EdgeBand>& edgeOverride(EdgeSide side) const noexcept
+    {
+        return edgeOverrides_[static_cast<std::size_t>(side)];
+    }
 
     /// Thickness used in the formulas: that of the effective material under the slot's rules.
     /// Public because parents need it BEFORE laying the part out (to reserve its band).

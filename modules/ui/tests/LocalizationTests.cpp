@@ -12,7 +12,7 @@ TEST_CASE("Every text id has a non-empty Turkish translation", "[ui][i18n]")
     setLanguage(Language::Turkish);
     for (std::size_t i = 0; i < static_cast<std::size_t>(TextId::Count); ++i) {
         INFO("TextId index " << i);
-        CHECK_FALSE(text(static_cast<TextId>(i)).empty());
+        CHECK(text(static_cast<TextId>(i)) != "???"); // "???" marks a missing translation
     }
 }
 

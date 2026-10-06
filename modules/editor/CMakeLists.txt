@@ -1,9 +1,15 @@
-# Editor — implemented in stage 5, 9 (see docs/ARCHITECTURE.md).
-# Until then the module is a placeholder that only fixes its place in the dependency graph.
 rc_add_module(editor
+    SOURCES
+        src/Document.cpp
+        src/Operations.cpp
+        src/PartInfo.cpp
     DEPENDS
         readycad::core
+        readycad::storage
         readycad::detailing
         readycad::nesting
         readycad::export
-        readycad::cam)
+        readycad::cam
+    TESTS
+        tests/DocumentTests.cpp
+        tests/OperationsTests.cpp)

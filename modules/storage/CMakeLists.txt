@@ -1,0 +1,9 @@
+rc_add_module(storage
+    SOURCES
+        src/Storage.cpp
+    DEPENDS
+        readycad::core
+    PRIVATE_DEPENDS
+        nlohmann_json::nlohmann_json
+    TESTS
+        tests/StorageTests.cpp)

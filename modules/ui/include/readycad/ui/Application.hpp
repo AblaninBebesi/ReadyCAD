@@ -1,6 +1,9 @@
 #pragma once
 
+#include <filesystem>
 #include <memory>
+#include <optional>
+#include <string>
 
 namespace rc::ui {
 
@@ -8,6 +11,16 @@ struct ApplicationConfig {
     int windowWidth = 1600;
     int windowHeight = 900;
     bool vsync = true;
+
+    std::optional<std::filesystem::path> openFile; // project to open at start
+    int catalogItem = 0;                           // otherwise: this catalogue model
+    bool showHoles = false;
+    bool showFronts = true;
+    std::optional<std::string> selectKind; // select the first component of this kind, e.g. "Shelf"
+
+    /// Renders a few frames, saves the window as a .bmp file and exits — for documentation and
+    /// automated smoke tests of the GUI.
+    std::optional<std::filesystem::path> screenshot;
 };
 
 /// Owns the main window, the OpenGL context and the ImGui context, and runs the frame loop.

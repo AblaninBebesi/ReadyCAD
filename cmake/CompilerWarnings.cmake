@@ -16,7 +16,8 @@ function(rc_set_warnings target)
             -Woverloaded-virtual
             -Wold-style-cast
             -Wcast-align
-            -Wnull-dereference
+            # -Wnull-dereference is NOT used: with -O2 GCC reports false positives inside
+            # libstdc++ (stl_vector.h, basic_string.h) after inlining.
             -Wdouble-promotion
             -Wimplicit-fallthrough)
         if(READYCAD_WARNINGS_AS_ERRORS)

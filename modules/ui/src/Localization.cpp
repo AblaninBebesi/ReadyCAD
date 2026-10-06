@@ -1,6 +1,7 @@
 #include "readycad/ui/Localization.hpp"
 
 #include <array>
+#include <utility>
 
 namespace rc::ui {
 
@@ -8,40 +9,197 @@ namespace {
 
 constexpr std::size_t kTextCount = static_cast<std::size_t>(TextId::Count);
 using Table = std::array<std::string_view, kTextCount>;
+using T = TextId;
 
-// Turkish (tr-TR). Strings are UTF-8; keep the order identical to the TextId enum.
-// "###id" suffixes keep ImGui window ids stable if the visible title ever changes.
-constexpr Table kTurkish = {
-    "ReadyCAD — Parametrik Mobilya Tasarımı",          // AppTitle
-    "Dosya",                                           // MenuFile
-    "Yeni",                                            // MenuNew
-    "Aç...",                                           // MenuOpen
-    "Kaydet",                                          // MenuSave
-    "Çıkış",                                           // MenuExit
-    "Görünüm",                                         // MenuView
-    "ImGui demo penceresi",                            // MenuShowImGuiDemo
-    "Yardım",                                          // MenuHelp
-    "Hakkında",                                        // MenuAbout
-    "Hoş geldiniz###welcome",                          // WelcomeWindow
-    "ReadyCAD'e hoş geldiniz!",                        // WelcomeHeadline
-    "Gövde mobilyası için parametrik tasarım, detaylandırma, "
-    "kesim optimizasyonu ve CNC programı üretimi.",    // WelcomeBody
-    "Çekirdek sürümü",                                 // CoreVersion
-    "Grafik sürücüsü",                                 // RendererInfo
-    "Hakkında###about",                                // AboutWindow
-    "ReadyCAD — diploma projesi.\nC++20, OpenGL 3.3, Dear ImGui.", // AboutBody
-    "Kapat",                                           // Close
+// Turkish (tr-TR), UTF-8. "###id" suffixes keep ImGui window ids (and the saved window layout)
+// stable whatever the visible title is.
+constexpr std::pair<TextId, std::string_view> kTurkish[] = {
+    {T::AppTitle, "ReadyCAD — Parametrik Mobilya Tasarımı"},
+    {T::Untitled, "Adsız"},
+    {T::MenuFile, "Dosya"},
+    {T::MenuNew, "Yeni"},
+    {T::MenuOpen, "Aç..."},
+    {T::MenuSave, "Kaydet"},
+    {T::MenuSaveAs, "Farklı kaydet..."},
+    {T::MenuProfile, "Atölye profili"},
+    {T::MenuLoadProfile, "Profil yükle..."},
+    {T::MenuSaveProfile, "Profili kaydet..."},
+    {T::MenuExit, "Çıkış"},
+    {T::MenuEdit, "Düzen"},
+    {T::MenuUndo, "Geri al"},
+    {T::MenuRedo, "Yinele"},
+    {T::MenuView, "Görünüm"},
+    {T::MenuShowFronts, "Kapakları göster"},
+    {T::MenuShowHoles, "Delikleri göster"},
+    {T::MenuFitView, "Görünümü sığdır"},
+    {T::MenuResetLayout, "Pencere yerleşimini sıfırla"},
+    {T::MenuShowImGuiDemo, "ImGui demo penceresi"},
+    {T::MenuHelp, "Yardım"},
+    {T::MenuAbout, "Hakkında"},
+
+    {T::WindowCatalog, "Katalog###catalog"},
+    {T::WindowParameters, "Parametreler###parameters"},
+    {T::WindowProduct, "Ürün yapısı###product"},
+    {T::WindowViewport, "3B Görünüm###viewport"},
+    {T::WindowCutList, "Kesim listesi###cutlist"},
+    {T::WindowWarnings, "Uyarılar###warnings"},
+    {T::AboutWindow, "Hakkında###about"},
+    {T::AboutBody, "ReadyCAD — diploma projesi.\n"
+                   "Gövde mobilyası için parametrik tasarım, detaylandırma,\n"
+                   "kesim optimizasyonu ve CNC programı üretimi.\n"
+                   "C++20, OpenGL 3.3, Dear ImGui."},
+    {T::CoreVersion, "Çekirdek sürümü"},
+    {T::RendererInfo, "Grafik sürücüsü"},
+
+    {T::CatalogWardrobe, "Gardırop"},
+    {T::CatalogWardrobeWithDrawers, "Çekmeceli gardırop"},
+    {T::CatalogChestOfDrawers, "Şifonyer"},
+    {T::CatalogBookcase, "Kitaplık"},
+    {T::CatalogHint, "Yeni bir ürün başlatmak için bir modele tıklayın."},
+
+    {T::KindProduct, "Ürün"},
+    {T::KindCarcass, "Gövde"},
+    {T::KindSection, "Bölme"},
+    {T::KindDrawerStack, "Çekmece grubu"},
+    {T::KindDrawer, "Çekmece"},
+    {T::KindSideWall, "Yan panel"},
+    {T::KindTopPanel, "Üst tabla"},
+    {T::KindBottomPanel, "Alt tabla"},
+    {T::KindBackPanel, "Arkalık"},
+    {T::KindShelf, "Raf"},
+    {T::KindFixedShelf, "Sabit raf"},
+    {T::KindPartition, "Ara dikme"},
+    {T::KindDoor, "Kapak"},
+    {T::KindDrawerFront, "Çekmece kapağı"},
+    {T::KindDrawerBoxSide, "Çekmece yanı"},
+    {T::KindDrawerBoxEnd, "Çekmece ön/arka"},
+    {T::KindDrawerBottom, "Çekmece tabanı"},
+
+    {T::ProductHeader, "Ürün"},
+    {T::ProfileHeader, "Atölye profili"},
+    {T::Construction, "Konstrüksiyon"},
+    {T::Fasteners, "Bağlantılar"},
+    {T::Name, "Ad"},
+    {T::Width, "Genişlik"},
+    {T::Height, "Yükseklik"},
+    {T::Depth, "Derinlik"},
+    {T::TopJoint, "Üst tabla"},
+    {T::BottomJoint, "Alt tabla"},
+    {T::JointOverlay, "Yanların üstünde"},
+    {T::JointInset, "Yanların arasında"},
+    {T::BackMount, "Arkalık"},
+    {T::BackGroove, "Kanala geçme"},
+    {T::BackOverlay, "Arkadan çivili"},
+    {T::BackInset, "Gömme"},
+    {T::Fastener, "Bağlantı elemanı"},
+    {T::FastenerConfirmat, "Konfirmat"},
+    {T::FastenerEccentric, "Eksantrik (minifiks)"},
+    {T::FastenerDowel, "Kavela"},
+    {T::AlignmentDowels, "Hizalama kavelası"},
+    {T::DrillHandlesOnMachine, "Kulpları makinede del"},
+
+    {T::SplitColumns, "Sütunlara böl"},
+    {T::SplitRows, "Katlara böl"},
+    {T::ClearSection, "Bölmeyi boşalt"},
+    {T::FixedWidth, "Sabit genişlik"},
+    {T::FixedHeight, "Sabit yükseklik"},
+    {T::ShelfCount, "Raf sayısı"},
+    {T::ShelfMountLabel, "Raf montajı"},
+    {T::MountSupports, "Raf pimi üzerinde"},
+    {T::MountConfirmat, "Konfirmat ile sabit"},
+    {T::DoorCount, "Kapak sayısı"},
+    {T::DrawerCount, "Çekmece sayısı"},
+    {T::Content, "İçerik"},
+    {T::Splitting, "Bölme düzeni"},
+
+    {T::FixedElevation, "Sabit yükseklik"},
+    {T::HingeSideLabel, "Menteşe tarafı"},
+    {T::Left, "Sol"},
+    {T::Right, "Sağ"},
+    {T::Handle, "Kulp"},
+    {T::HandleDefault, "Varsayılan"},
+    {T::HandleNone, "Kulpsuz"},
+    {T::Orientation, "Yön"},
+    {T::Vertical, "Dikey"},
+    {T::Horizontal, "Yatay"},
+    {T::Anchor, "Konum"},
+    {T::AnchorTop, "Üstte"},
+    {T::AnchorCenter, "Ortada"},
+    {T::AnchorBottom, "Altta"},
+    {T::EdgeOffset, "Kenar mesafesi"},
+    {T::AnchorOffset, "Üst/alt mesafe"},
+    {T::Delete, "Sil"},
+
+    {T::Info, "Teknik bilgiler"},
+    {T::Size, "Boyut"},
+    {T::Material, "Malzeme"},
+    {T::Thickness, "Kalınlık"},
+    {T::FinishSize, "Net ölçü"},
+    {T::CutSize, "Kesim ölçüsü"},
+    {T::EdgeBanding, "Kenar bantları"},
+    {T::Grain, "Desen yönü"},
+    {T::GrainKept, "Korunmalı"},
+    {T::GrainFree, "Serbest"},
+    {T::Holes, "Delikler"},
+    {T::Grooves, "Kanallar"},
+    {T::NoEdge, "—"},
+    {T::HoleConfirmat, "Konfirmat"},
+    {T::HoleDowel, "Kavela"},
+    {T::HoleEccentric, "Eksantrik"},
+    {T::HoleShelfSupport, "Raf pimi"},
+    {T::HoleHinge, "Menteşe"},
+    {T::HoleGroove, "Kanal"},
+    {T::HoleHandle, "Kulp"},
+
+    {T::ColPart, "Parça"},
+    {T::ColMaterial, "Malzeme"},
+    {T::ColQuantity, "Adet"},
+    {T::ColFinish, "Net ölçü"},
+    {T::ColCut, "Kesim ölçüsü"},
+    {T::ColEdges, "Bant U1 U2 G1 G2"},
+    {T::ColGrain, "Desen"},
+    {T::EdgeUsage, "Kenar bandı tüketimi"},
+    {T::ColEdgeBand, "Bant"},
+    {T::ColLength, "Toplam (m)"},
+    {T::ColPieces, "Parça"},
+    {T::TotalParts, "Toplam parça"},
+
+    {T::NoWarnings, "Uyarı yok — ürün üretime hazır."},
+    {T::SelectAPart, "Düzenlemek için ağaçtan veya 3B görünümden bir parça seçin."},
+    {T::ErrorTitle, "Hata###error"},
+    {T::ErrorOperationFailed, "İşlem yapılamadı:"},
+    {T::UnsavedTitle, "Kaydedilmemiş değişiklikler###unsaved"},
+    {T::UnsavedBody, "Bu projede kaydedilmemiş değişiklikler var.\nKaydetmek ister misiniz?"},
+    {T::Save, "Kaydet"},
+    {T::DontSave, "Kaydetme"},
+    {T::Cancel, "İptal"},
+    {T::Close, "Kapat"},
+
+    {T::ViewFit, "Sığdır"},
+    {T::ViewFronts, "Kapaklar"},
+    {T::ViewHoles, "Delikler"},
+    {T::ViewHint, "Sol tuş: döndür · Sağ/orta tuş: kaydır · Tekerlek: yakınlaştır · Tık: seç"},
 };
+
+Table buildTable(const auto& entries) noexcept
+{
+    Table table{};
+    for (const auto& [id, value] : entries) {
+        table[static_cast<std::size_t>(id)] = value;
+    }
+    return table;
+}
 
 Language gLanguage = Language::Turkish;
 
 const Table& tableFor(Language language) noexcept
 {
+    static const Table turkish = buildTable(kTurkish);
     switch (language) {
     case Language::Turkish:
-        return kTurkish;
+        return turkish;
     }
-    return kTurkish;
+    return turkish;
 }
 
 } // namespace
@@ -62,7 +220,8 @@ std::string_view text(TextId id) noexcept
     if (index >= kTextCount) {
         return "???";
     }
-    return tableFor(gLanguage)[index];
+    const std::string_view value = tableFor(gLanguage)[index];
+    return value.empty() ? std::string_view("???") : value;
 }
 
 } // namespace rc::ui

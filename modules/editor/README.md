@@ -1,5 +1,5 @@
 # Module `editor`
 
-GL-free application layer: the open document, selection, undo/redo commands, catalogue, view models for the panels. Everything the UI does goes through here, so it is unit-testable without a window.
+GL-free application layer: `Document` (product, selection, undo/redo via JSON snapshots with merging of slider drags, strong exception guarantee, automatic detailing), named UI operations, `PartInfo` for the properties panel. Fully unit-tested.
 
-**Stage:** 5, 9
+**Stages:** 5, 9

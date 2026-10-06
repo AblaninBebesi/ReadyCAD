@@ -1,7 +1,14 @@
-# Render — implemented in stage 5 (see docs/ARCHITECTURE.md).
-# Until then the module is a placeholder that only fixes its place in the dependency graph.
 rc_add_module(render
+    SOURCES
+        src/Camera.cpp
+        src/GlObjects.cpp
+        src/Renderer.cpp
+        src/Scene.cpp
     DEPENDS
         readycad::core
+        readycad::detailing
         glad::glad
-        OpenGL::GL)
+        OpenGL::GL
+    TESTS
+        tests/CameraTests.cpp
+        tests/SceneTests.cpp)

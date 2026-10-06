@@ -6,11 +6,14 @@ DXF/PDF → управляющие программы для ЧПУ. Дипло�
 
 Архитектура описана в [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
+![ReadyCAD](docs/images/stage5-door-selected.png)
+
 ## Что нужно
 
 * CMake ≥ 3.25 и Ninja
 * Компилятор с поддержкой C++20: GCC ≥ 11 (MinGW-w64), Clang ≥ 14 или MSVC 2022
-* Интернет при первой конфигурации: glm, Catch2, GLFW и ImGui скачиваются через FetchContent
+* Интернет при первой конфигурации: glm, Catch2, GLFW, ImGui, nlohmann/json и
+  nativefiledialog-extended скачиваются через FetchContent
   в `build/_deps` и потом берутся оттуда
 
 ## Сборка и тесты
@@ -34,3 +37,21 @@ ctest --preset debug
 
 На Windows с MinGW `C:\mingw64\bin` должен быть в `PATH` (там лежат gcc и ninja).
 Исполняемые файлы линкуются статически, поэтому DLL MinGW рядом с ними не нужны.
+
+## Запуск
+
+```
+ReadyCAD.exe [параметры]
+  --open <file.rcproj>      открыть проект
+  --catalog <0..3>          начать с модели каталога
+  --holes                   показать отверстия в 3D
+  --no-fronts               скрыть фасады
+  --select <Kind>           выделить первую деталь вида (Shelf, Door, ...)
+  --screenshot <file.bmp>   сохранить окно в картинку и выйти
+```
+
+Горячие клавиши: Ctrl+Z / Ctrl+Y — отмена и повтор, Ctrl+S — сохранить, Ctrl+O — открыть,
+Delete — удалить выбранную полку, дверь или блок ящиков.
+
+Тест `gui_smoke_screenshot` (метка `gui`) запускает настоящее окно. На машине без OpenGL 3.3
+его можно пропустить: `ctest --preset debug -LE gui`.

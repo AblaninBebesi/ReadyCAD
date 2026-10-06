@@ -17,6 +17,12 @@ FetchContent_Declare(glm
     SYSTEM)
 FetchContent_MakeAvailable(glm)
 
+# --- nlohmann/json: project and workshop-profile files ---------------------
+FetchContent_Declare(nlohmann_json
+    URL https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz
+    SYSTEM)
+FetchContent_MakeAvailable(nlohmann_json)
+
 # --- Catch2: unit testing ---------------------------------------------------
 if(READYCAD_BUILD_TESTS)
     FetchContent_Declare(Catch2
@@ -60,6 +66,14 @@ if(READYCAD_BUILD_APP)
     target_link_libraries(imgui PUBLIC glfw)
     target_compile_definitions(imgui PUBLIC IMGUI_DISABLE_OBSOLETE_FUNCTIONS)
     add_library(imgui::imgui ALIAS imgui)
+
+    # --- Native file dialogs (Open / Save as) ------------------------------------
+    set(NFD_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    set(NFD_INSTALL     OFF CACHE BOOL "" FORCE)
+    FetchContent_Declare(nfd
+        URL https://github.com/btzy/nativefiledialog-extended/archive/refs/tags/v1.4.1.tar.gz
+        SYSTEM)
+    FetchContent_MakeAvailable(nfd)
 
     find_package(OpenGL REQUIRED)
 endif()
