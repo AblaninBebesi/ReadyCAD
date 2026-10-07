@@ -39,6 +39,7 @@ endif()
 # a module may only depend on modules listed ABOVE it.
 # ---------------------------------------------------------------------------
 add_subdirectory(modules/core)       # geometry, furniture component tree, panels
+add_subdirectory(modules/i18n)       # user-visible texts (Turkish), names of parts
 add_subdirectory(modules/storage)    # project / workshop profile files (JSON)
 add_subdirectory(modules/detailing)  # saw/finish sizes, edges, System 32 drilling
 add_subdirectory(modules/nesting)    # stock, sheets, cutting/nesting optimisation

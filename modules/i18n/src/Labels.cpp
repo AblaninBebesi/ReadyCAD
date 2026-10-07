@@ -1,9 +1,9 @@
-#include "readycad/ui/Labels.hpp"
+#include "readycad/i18n/Labels.hpp"
 
 #include <cmath>
 #include <cstdio>
 
-namespace rc::ui {
+namespace rc::i18n {
 
 using core::ComponentKind;
 
@@ -56,6 +56,31 @@ TextId holeText(core::FastenerType type) noexcept
     return TextId::Holes;
 }
 
+TextId edgeText(core::EdgeSide side) noexcept
+{
+    switch (side) {
+    case core::EdgeSide::L1: return TextId::EdgeL1;
+    case core::EdgeSide::L2: return TextId::EdgeL2;
+    case core::EdgeSide::W1: return TextId::EdgeW1;
+    case core::EdgeSide::W2: return TextId::EdgeW2;
+    }
+    return TextId::EdgeL1;
+}
+
+TextId hardwareText(core::HardwareKind kind) noexcept
+{
+    switch (kind) {
+    case core::HardwareKind::Confirmat:    return TextId::HwConfirmat;
+    case core::HardwareKind::Dowel:        return TextId::HwDowel;
+    case core::HardwareKind::Eccentric:    return TextId::HwEccentric;
+    case core::HardwareKind::ShelfSupport: return TextId::HwShelfSupport;
+    case core::HardwareKind::Hinge:        return TextId::HwHinge;
+    case core::HardwareKind::Handle:       return TextId::HwHandle;
+    case core::HardwareKind::DrawerSlide:  return TextId::HwDrawerSlide;
+    }
+    return TextId::HwConfirmat;
+}
+
 std::string displayName(const core::FurnitureComponent& component)
 {
     if (!component.name().empty()) {
@@ -91,4 +116,4 @@ std::string mm(core::Real value)
     return buffer;
 }
 
-} // namespace rc::ui
+} // namespace rc::i18n

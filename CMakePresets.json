@@ -6,10 +6,7 @@
       "name": "base",
       "hidden": true,
       "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build/${presetName}",
-      "cacheVariables": {
-        "FETCHCONTENT_BASE_DIR": "${sourceDir}/build/_deps"
-      }
+      "binaryDir": "${sourceDir}/build/${presetName}"
     },
     {
       "name": "debug",

@@ -3,7 +3,7 @@
 #include <cstddef>
 #include <string_view>
 
-namespace rc::ui {
+namespace rc::i18n {
 
 /// Every user-visible string has an id. Code is written in English, the UI speaks Turkish.
 ///
@@ -49,6 +49,22 @@ enum class TextId : std::size_t {
     Save, DontSave, Cancel, Close,
     // 3D view
     ViewFit, ViewFronts, ViewHoles, ViewHint,
+    // Edges of a panel
+    EdgeL1, EdgeL2, EdgeW1, EdgeW2,
+    // Export: menu and dialog
+    MenuExport, MenuExportPdf, MenuExportDxfAll, MenuExportDxfFolder, PdfWindow, PaperSize,
+    PaperOrientation, Portrait, Landscape, ReportSections, CompanyName, DesignerName,
+    OpenAfterExport, ExportButton, ExportDoneTitle, ExportDoneFile, ExportDoneFiles,
+    ExportFailed, OpenFile, OpenFolder,
+    // Report pages and title block
+    ReportTitle, PageSummary, PageCutList, PageHardware, PageAssembly, PagePart, Continued,
+    TbProduct, TbSheet, TbScale, TbDate, TbCompany, TbDesigner, TbTitle,
+    // Report contents
+    OverallSize, CarcassSize, DistinctParts, MaterialNeed, ColArea, HoleCount,
+    GrooveCount, JointCount, Warnings, ColNo, ColItem, ColSpec, HwConfirmat, HwDowel,
+    HwEccentric, HwShelfSupport, HwHinge, HwHandle, HwDrawerSlide, ViewFrontClosed,
+    ViewFrontOpen, ViewSection, FaceA, FaceB, ViewFrom, HoleTable, ColSide, ColDiameter,
+    ColDepth, ColType, SideEdge, OriginNote, TitleBlock, HardwareList,
 
     Count // keep last
 };
@@ -64,4 +80,4 @@ void setLanguage(Language language) noexcept;
 /// Short alias for UI code: ImGui::Button(tr(TextId::Close))
 [[nodiscard]] inline const char* tr(TextId id) noexcept { return text(id).data(); }
 
-} // namespace rc::ui
+} // namespace rc::i18n

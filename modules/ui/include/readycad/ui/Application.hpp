@@ -17,6 +17,7 @@ struct ApplicationConfig {
     bool showHoles = false;
     bool showFronts = true;
     std::optional<std::string> selectKind; // select the first component of this kind, e.g. "Shelf"
+    bool pdfDialog = false;                 // open the PDF export settings at start
 
     /// Renders a few frames, saves the window as a .bmp file and exits — for documentation and
     /// automated smoke tests of the GUI.

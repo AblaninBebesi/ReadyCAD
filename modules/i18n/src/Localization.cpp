@@ -1,9 +1,9 @@
-#include "readycad/ui/Localization.hpp"
+#include "readycad/i18n/Localization.hpp"
 
 #include <array>
 #include <utility>
 
-namespace rc::ui {
+namespace rc::i18n {
 
 namespace {
 
@@ -179,6 +179,82 @@ constexpr std::pair<TextId, std::string_view> kTurkish[] = {
     {T::ViewFronts, "Kapaklar"},
     {T::ViewHoles, "Delikler"},
     {T::ViewHint, "Sol tuş: döndür · Sağ/orta tuş: kaydır · Tekerlek: yakınlaştır · Tık: seç"},
+
+    {T::EdgeL1, "U1"},
+    {T::EdgeL2, "U2"},
+    {T::EdgeW1, "G1"},
+    {T::EdgeW2, "G2"},
+
+    {T::MenuExport, "Dışa aktar"},
+    {T::MenuExportPdf, "PDF belgeleri..."},
+    {T::MenuExportDxfAll, "Tüm parçalar tek DXF dosyasında..."},
+    {T::MenuExportDxfFolder, "Her parça ayrı DXF dosyasında..."},
+    {T::PdfWindow, "PDF belgeleri###pdfexport"},
+    {T::PaperSize, "Kağıt boyutu"},
+    {T::PaperOrientation, "Sayfa yönü"},
+    {T::Portrait, "Dikey"},
+    {T::Landscape, "Yatay"},
+    {T::ReportSections, "Bölümler"},
+    {T::CompanyName, "Firma"},
+    {T::DesignerName, "Hazırlayan"},
+    {T::OpenAfterExport, "Kaydettikten sonra aç"},
+    {T::ExportButton, "Kaydet..."},
+    {T::ExportDoneTitle, "Dışa aktarıldı###exported"},
+    {T::ExportDoneFile, "Dosya kaydedildi:"},
+    {T::ExportDoneFiles, "Kaydedilen dosya sayısı:"},
+    {T::ExportFailed, "Dışa aktarılamadı:"},
+    {T::OpenFile, "Dosyayı aç"},
+    {T::OpenFolder, "Klasörü aç"},
+
+    {T::ReportTitle, "Üretim dokümantasyonu"},
+    {T::PageSummary, "Genel bilgiler"},
+    {T::PageCutList, "Kesim listesi"},
+    {T::PageHardware, "Kenar bandı ve bağlantı elemanları"},
+    {T::PageAssembly, "Montaj çizimi"},
+    {T::PagePart, "Parça çizimi"},
+    {T::Continued, "(devamı)"},
+    {T::TbProduct, "Ürün"},
+    {T::TbSheet, "Sayfa"},
+    {T::TbScale, "Ölçek"},
+    {T::TbDate, "Tarih"},
+    {T::TbCompany, "Firma"},
+    {T::TbDesigner, "Hazırlayan"},
+    {T::TbTitle, "Çizim"},
+
+    {T::OverallSize, "Dış ölçüler (G × Y × D)"},
+    {T::CarcassSize, "Gövde ölçüleri (G × Y × D)"},
+    {T::DistinctParts, "Farklı parça"},
+    {T::MaterialNeed, "Malzeme ihtiyacı"},
+    {T::ColArea, "Alan (m²)"},
+    {T::HoleCount, "Delik"},
+    {T::GrooveCount, "Kanal"},
+    {T::JointCount, "Birleşim"},
+    {T::Warnings, "Uyarılar"},
+    {T::ColNo, "No"},
+    {T::ColItem, "Eleman"},
+    {T::ColSpec, "Özellik"},
+    {T::HwConfirmat, "Konfirmat vidası"},
+    {T::HwDowel, "Kavela"},
+    {T::HwEccentric, "Eksantrik bağlantı (minifiks)"},
+    {T::HwShelfSupport, "Raf pimi"},
+    {T::HwHinge, "Menteşe"},
+    {T::HwHandle, "Kulp"},
+    {T::HwDrawerSlide, "Çekmece rayı (takım)"},
+    {T::ViewFrontClosed, "Ön görünüş"},
+    {T::ViewFrontOpen, "Ön görünüş (kapaksız)"},
+    {T::ViewSection, "A–A kesiti"},
+    {T::FaceA, "A yüzü"},
+    {T::FaceB, "B yüzü"},
+    {T::ViewFrom, "Görünüş"},
+    {T::HoleTable, "Delik tablosu"},
+    {T::ColSide, "Yüz"},
+    {T::ColDiameter, "Çap"},
+    {T::ColDepth, "Derinlik"},
+    {T::ColType, "Tür"},
+    {T::SideEdge, "Kenar"},
+    {T::OriginNote, "X, Y: net parçanın sol alt köşesinden, mm"},
+    {T::TitleBlock, "Antet"},
+    {T::HardwareList, "Bağlantı elemanları"},
 };
 
 Table buildTable(const auto& entries) noexcept
@@ -224,4 +300,4 @@ std::string_view text(TextId id) noexcept
     return value.empty() ? std::string_view("???") : value;
 }
 
-} // namespace rc::ui
+} // namespace rc::i18n

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "readycad/editor/Document.hpp"
+#include "readycad/export/Documentation.hpp"
 #include "readycad/render/Camera.hpp"
 #include "readycad/render/Renderer.hpp"
 #include "readycad/render/Scene.hpp"
@@ -8,6 +9,7 @@
 #include <imgui.h>
 
 #include <cstdint>
+#include <filesystem>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -43,6 +45,15 @@ struct UiState {
     bool quit = false;
 
     float treeFraction = 0.42f; // share of the product window used by the tree
+
+    // Export (stage 6)
+    exporting::DocumentationOptions pdfOptions;
+    bool openAfterExport = true;
+    bool openPdfPopup = false;
+    std::optional<exporting::PdfFonts> pdfFonts; // looked up once
+    std::string exportMessage;                   // "exported" popup
+    std::filesystem::path exportedFile;
+    bool openExportedPopup = false;
 };
 
 /// Runs a model operation; on an exception shows the error popup. Returns true if it succeeded.
@@ -60,6 +71,11 @@ void newDocument(UiState& state, core::CatalogItem item);
 void openDocument(UiState& state);
 void loadProfile(UiState& state);
 void saveProfile(UiState& state);
+
+// Export: PDF documents (asks for the settings first), all parts in one DXF, one DXF per part.
+void exportPdf(UiState& state);
+void exportPartsDxf(UiState& state);
+void exportPartsDxfFolder(UiState& state);
 
 // Windows
 void drawCatalogWindow(UiState& state);

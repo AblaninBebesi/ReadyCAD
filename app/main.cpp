@@ -15,6 +15,7 @@ void printUsage()
               "  --holes                   show drilled holes in the 3D view\n"
               "  --no-fronts               hide doors and drawer fronts\n"
               "  --select <Kind>           select the first part of a kind, e.g. Shelf, Door\n"
+              "  --pdf-dialog              open the PDF export settings\n"
               "  --screenshot <file.bmp>   save the window as an image and exit");
 }
 
@@ -36,6 +37,8 @@ int main(int argc, char** argv)
             config.showFronts = false;
         } else if (arg == "--select" && hasValue) {
             config.selectKind = argv[++i];
+        } else if (arg == "--pdf-dialog") {
+            config.pdfDialog = true;
         } else if (arg == "--screenshot" && hasValue) {
             config.screenshot = argv[++i];
         } else {

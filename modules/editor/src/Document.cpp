@@ -172,6 +172,7 @@ void Document::refresh()
     report_ = detailing::applyDetailing(*product_);
     cutList_ = detailing::buildCutList(*product_, product_->rules());
     edgeUsage_ = detailing::edgeBandUsage(cutList_, product_->rules());
+    hardware_ = detailing::hardwareList(*product_);
     if (selection_ && product_->find(*selection_) == nullptr) {
         selection_.reset();
     }

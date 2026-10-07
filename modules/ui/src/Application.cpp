@@ -5,8 +5,8 @@
 #include "Fonts.hpp"
 #include "readycad/core/Version.hpp"
 #include "readycad/editor/Operations.hpp"
-#include "readycad/ui/Labels.hpp"
-#include "readycad/ui/Localization.hpp"
+#include "readycad/i18n/Labels.hpp"
+#include "readycad/i18n/Localization.hpp"
 
 #include <glad/gl.h> // must come before GLFW
 #include <GLFW/glfw3.h>
@@ -24,6 +24,8 @@
 #include <vector>
 
 namespace rc::ui {
+
+using namespace i18n; // tr(), TextId, displayName(), mm(): the UI is mostly texts
 
 namespace {
 
@@ -217,6 +219,9 @@ struct Application::Impl {
                 }
             });
         }
+        if (config.pdfDialog) {
+            exportPdf(state);
+        }
     }
 
     void drawFrame();
@@ -348,6 +353,19 @@ void Application::Impl::drawMainMenu()
         }
         ImGui::EndMenu();
     }
+    if (ImGui::BeginMenu(tr(TextId::MenuExport))) {
+        if (ImGui::MenuItem(tr(TextId::MenuExportPdf), "Ctrl+P")) {
+            exportPdf(state);
+        }
+        ImGui::Separator();
+        if (ImGui::MenuItem(tr(TextId::MenuExportDxfAll))) {
+            exportPartsDxf(state);
+        }
+        if (ImGui::MenuItem(tr(TextId::MenuExportDxfFolder))) {
+            exportPartsDxfFolder(state);
+        }
+        ImGui::EndMenu();
+    }
     if (ImGui::BeginMenu(tr(TextId::MenuView))) {
         if (ImGui::MenuItem(tr(TextId::MenuShowFronts), nullptr, &state.sceneOptions.showFronts)
             || ImGui::MenuItem(tr(TextId::MenuShowHoles), nullptr, &state.sceneOptions.showHoles)) {
@@ -384,6 +402,9 @@ void Application::Impl::handleShortcuts()
     }
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_S, route)) {
         saveDocument(state, false);
+    }
+    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_P, route)) {
+        exportPdf(state);
     }
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_O, route)) {
         confirmUnsaved(state, [this] { openDocument(state); });

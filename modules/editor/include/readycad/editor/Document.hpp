@@ -4,6 +4,7 @@
 #include "readycad/core/model/Product.hpp"
 #include "readycad/detailing/CutList.hpp"
 #include "readycad/detailing/Detailing.hpp"
+#include "readycad/detailing/HardwareList.hpp"
 
 #include <cstdint>
 #include <filesystem>
@@ -29,7 +30,8 @@ using TreePath = std::vector<std::size_t>;
 /// Every change goes through edit(), which
 ///   1. remembers the state before (Memento pattern: the project serialised to JSON),
 ///   2. applies the change — if it throws, the model is restored and the error propagates,
-///   3. recomputes the derived data: drilling (detailing), cut list, edge banding usage.
+///   3. recomputes the derived data: drilling (detailing), cut list, edge banding usage,
+///      hardware list.
 /// So the UI never sees a half-applied change or stale drilling, and every change is undoable.
 class Document {
 public:
@@ -55,6 +57,10 @@ public:
     [[nodiscard]] const std::vector<detailing::EdgeBandUsage>& edgeUsage() const noexcept
     {
         return edgeUsage_;
+    }
+    [[nodiscard]] const std::vector<detailing::HardwareItem>& hardware() const noexcept
+    {
+        return hardware_;
     }
     /// Increases after every change (edit, undo, redo): views compare it to rebuild caches.
     [[nodiscard]] std::uint64_t revision() const noexcept { return revision_; }
@@ -113,6 +119,7 @@ private:
     detailing::DetailingReport report_;
     std::vector<detailing::CutListRow> cutList_;
     std::vector<detailing::EdgeBandUsage> edgeUsage_;
+    std::vector<detailing::HardwareItem> hardware_;
 };
 
 } // namespace rc::editor

@@ -101,6 +101,23 @@ TEST_CASE("Derived data follows every change", "[editor][document]")
     CHECK_FALSE(doc.product().carcass()->top().panel()->drillings().empty());
 }
 
+TEST_CASE("The hardware list follows the shelves", "[editor][document]")
+{
+    Document doc = Document::fromCatalog(CatalogItem::Wardrobe);
+    const auto supports = [&doc] {
+        int n = 0;
+        for (const rc::detailing::HardwareItem& item : doc.hardware()) {
+            n += item.kind == HardwareKind::ShelfSupport ? item.quantity : 0;
+        }
+        return n;
+    };
+    const int before = supports();
+    setShelfCount(doc, interior(doc).id(), static_cast<int>(interior(doc).shelves().size()) + 1);
+    CHECK(supports() == before + 4);
+    doc.undo();
+    CHECK(supports() == before);
+}
+
 TEST_CASE("Selection survives undo although the objects are rebuilt", "[editor][document]")
 {
     Document doc = Document::fromCatalog(CatalogItem::Wardrobe);

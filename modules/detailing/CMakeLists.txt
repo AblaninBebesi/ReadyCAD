@@ -2,6 +2,8 @@ rc_add_module(detailing
     SOURCES
         src/CutList.cpp
         src/Detailing.cpp
+        src/FlatPart.cpp
+        src/HardwareList.cpp
         src/Joints.cpp
         src/PanelFrame.cpp
     DEPENDS
@@ -10,4 +12,6 @@ rc_add_module(detailing
         tests/CutListTests.cpp
         tests/JointTests.cpp
         tests/DrillingTests.cpp
-        tests/DetailingSanityTests.cpp)
+        tests/DetailingSanityTests.cpp
+        tests/FlatPartTests.cpp
+        tests/HardwareListTests.cpp)

@@ -2,6 +2,11 @@
 
 #include <nfd.h>
 
+#ifdef _WIN32
+#include <windows.h>
+#include <shellapi.h>
+#endif
+
 #include <stdexcept>
 
 namespace rc::ui {
@@ -10,13 +15,24 @@ namespace {
 
 nfdu8filteritem_t filterFor(FileKind kind)
 {
-    return kind == FileKind::Project ? nfdu8filteritem_t{"ReadyCAD projesi", "rcproj"}
-                                     : nfdu8filteritem_t{"Atölye profili", "rcprofile"};
+    switch (kind) {
+    case FileKind::Project: return {"ReadyCAD projesi", "rcproj"};
+    case FileKind::Profile: return {"Atölye profili", "rcprofile"};
+    case FileKind::Pdf:     return {"PDF belgesi", "pdf"};
+    case FileKind::Dxf:     return {"DXF çizimi", "dxf"};
+    }
+    return {"ReadyCAD projesi", "rcproj"};
 }
 
 const char* extensionFor(FileKind kind)
 {
-    return kind == FileKind::Project ? ".rcproj" : ".rcprofile";
+    switch (kind) {
+    case FileKind::Project: return ".rcproj";
+    case FileKind::Profile: return ".rcprofile";
+    case FileKind::Pdf:     return ".pdf";
+    case FileKind::Dxf:     return ".dxf";
+    }
+    return ".rcproj";
 }
 
 } // namespace
@@ -58,6 +74,29 @@ std::optional<std::filesystem::path> showSaveDialog(FileKind kind, const std::st
         path += extensionFor(kind);
     }
     return path;
+}
+
+std::optional<std::filesystem::path> showFolderDialog()
+{
+    nfdu8char_t* out = nullptr;
+    if (NFD_PickFolderU8(&out, nullptr) != NFD_OKAY) {
+        return std::nullopt;
+    }
+    std::filesystem::path path = fromUtf8(out);
+    NFD_FreePathU8(out);
+    return path;
+}
+
+bool openWithSystem(const std::filesystem::path& path)
+{
+#ifdef _WIN32
+    const auto result = reinterpret_cast<INT_PTR>(
+        ShellExecuteW(nullptr, L"open", path.c_str(), nullptr, nullptr, SW_SHOWNORMAL));
+    return result > 32; // ShellExecute's way of saying "success"
+#else
+    (void)path; // TODO(stage 10): xdg-open / open on Linux and macOS
+    return false;
+#endif
 }
 
 FileDialogSession::FileDialogSession()

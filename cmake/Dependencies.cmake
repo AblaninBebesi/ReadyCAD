@@ -1,6 +1,7 @@
 # Third-party dependencies, fetched at configure time.
 # Versions are pinned so every machine (you, your teammate, the reviewer) builds the same thing.
-# Downloads are cached in <build>/_deps; set FETCHCONTENT_BASE_DIR to share them between builds.
+# Downloads and their builds live in <build>/_deps, separately for every preset: a shared folder
+# would mix objects compiled with Debug and Release flags.
 
 include(FetchContent)
 
@@ -22,6 +23,28 @@ FetchContent_Declare(nlohmann_json
     URL https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz
     SYSTEM)
 FetchContent_MakeAvailable(nlohmann_json)
+
+# --- libHaru: PDF documents (stage 6) ----------------------------------------
+# A static C library, built without zlib and libpng: page contents stay uncompressed (tests can
+# read them), TrueType fonts are embedded as subsets of the used glyphs, so files stay small.
+# block() keeps these settings away from the rest of the project.
+block(PROPAGATE libharu_SOURCE_DIR libharu_BINARY_DIR)
+    set(CMAKE_POLICY_DEFAULT_CMP0077 NEW) # let option() in libharu take our values
+    set(BUILD_SHARED_LIBS OFF)
+    set(LIBHPDF_EXAMPLES OFF)
+    set(CMAKE_DISABLE_FIND_PACKAGE_ZLIB ON)
+    set(CMAKE_DISABLE_FIND_PACKAGE_PNG ON)
+    set(CMAKE_C_STANDARD 99)              # old C code: not the C23 default of new compilers
+    FetchContent_Declare(libharu
+        URL https://github.com/libharu/libharu/archive/refs/tags/v2.4.6.tar.gz
+        SYSTEM)
+    FetchContent_MakeAvailable(libharu)
+endblock()
+# libharu sets its include folders per directory, not on the target: add them for users.
+target_include_directories(hpdf SYSTEM INTERFACE
+    ${libharu_SOURCE_DIR}/include
+    ${libharu_BINARY_DIR}/include)
+add_library(libharu::hpdf ALIAS hpdf)
 
 # --- Catch2: unit testing ---------------------------------------------------
 if(READYCAD_BUILD_TESTS)

@@ -1,7 +1,22 @@
-# Export — implemented in stage 6 (see docs/ARCHITECTURE.md).
-# Until then the module is a placeholder that only fixes its place in the dependency graph.
 rc_add_module(export
+    SOURCES
+        src/Documentation.cpp
+        src/Drawing.cpp
+        src/Dxf.cpp
+        src/Paper.cpp
+        src/PartDrawing.cpp
+        src/Pdf.cpp
+        src/ProductViews.cpp
     DEPENDS
         readycad::core
         readycad::detailing
-        readycad::nesting)
+        readycad::nesting
+        readycad::i18n
+    PRIVATE_DEPENDS
+        libharu::hpdf
+    TESTS
+        tests/DocumentationTests.cpp
+        tests/DrawingTests.cpp
+        tests/DxfTests.cpp
+        tests/PdfTests.cpp
+        tests/ProductViewTests.cpp)

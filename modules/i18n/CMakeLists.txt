@@ -1,0 +1,9 @@
+rc_add_module(i18n
+    SOURCES
+        src/Labels.cpp
+        src/Localization.cpp
+    DEPENDS
+        readycad::core
+    TESTS
+        tests/LocalizationTests.cpp
+        tests/LabelsTests.cpp)

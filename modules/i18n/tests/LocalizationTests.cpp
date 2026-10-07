@@ -1,13 +1,13 @@
-#include "readycad/ui/Localization.hpp"
+#include "readycad/i18n/Localization.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstddef>
 #include <string_view>
 
-using namespace rc::ui;
+using namespace rc::i18n;
 
-TEST_CASE("Every text id has a non-empty Turkish translation", "[ui][i18n]")
+TEST_CASE("Every text id has a non-empty Turkish translation", "[i18n]")
 {
     setLanguage(Language::Turkish);
     for (std::size_t i = 0; i < static_cast<std::size_t>(TextId::Count); ++i) {
@@ -16,7 +16,7 @@ TEST_CASE("Every text id has a non-empty Turkish translation", "[ui][i18n]")
     }
 }
 
-TEST_CASE("Turkish strings keep their special letters (UTF-8)", "[ui][i18n]")
+TEST_CASE("Turkish strings keep their special letters (UTF-8)", "[i18n]")
 {
     setLanguage(Language::Turkish);
     CHECK(text(TextId::MenuExit) == "Çıkış");
@@ -25,7 +25,7 @@ TEST_CASE("Turkish strings keep their special letters (UTF-8)", "[ui][i18n]")
     CHECK(text(TextId::MenuExit).size() > std::string_view("Cikis").size());
 }
 
-TEST_CASE("Out-of-range id does not crash", "[ui][i18n]")
+TEST_CASE("Out-of-range id does not crash", "[i18n]")
 {
     CHECK(text(TextId::Count) == "???");
 }

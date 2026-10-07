@@ -1,13 +1,13 @@
-#include "readycad/ui/Labels.hpp"
+#include "readycad/i18n/Labels.hpp"
 
 #include "readycad/core/builders/WardrobeBuilder.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
 using namespace rc;
-using namespace rc::ui;
+using namespace rc::i18n;
 
-TEST_CASE("Lengths are shown without useless decimals", "[ui][labels]")
+TEST_CASE("Lengths are shown without useless decimals", "[i18n][labels]")
 {
     CHECK(mm(1982.0) == "1982");
     CHECK(mm(559.5) == "559.5");
@@ -15,7 +15,7 @@ TEST_CASE("Lengths are shown without useless decimals", "[ui][labels]")
     CHECK(mm(18.04) == "18");
 }
 
-TEST_CASE("Tree names are numbered only among siblings of the same kind", "[ui][labels]")
+TEST_CASE("Tree names are numbered only among siblings of the same kind", "[i18n][labels]")
 {
     const auto wardrobe = core::WardrobeBuilder().shelvesPerSection(3).doorsPerSection(1).build();
     const core::Section& interior = wardrobe->carcass()->interior();

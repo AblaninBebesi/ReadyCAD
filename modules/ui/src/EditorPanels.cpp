@@ -4,8 +4,10 @@
 #include "readycad/core/model/Drawer.hpp"
 #include "readycad/editor/Operations.hpp"
 #include "readycad/editor/PartInfo.hpp"
+#include "readycad/export/Dxf.hpp"
+#include "readycad/export/PartDrawing.hpp"
 #include "readycad/storage/Storage.hpp"
-#include "readycad/ui/Labels.hpp"
+#include "readycad/i18n/Labels.hpp"
 
 #include <imgui.h>
 #include <imgui_stdlib.h>
@@ -17,6 +19,8 @@
 #include <utility>
 
 namespace rc::ui {
+
+using namespace i18n; // tr(), TextId, displayName(), mm(): the UI is mostly texts
 
 namespace ed = rc::editor;
 using core::ComponentKind;
@@ -591,10 +595,9 @@ void drawInfo(const ed::Document& doc, const core::FurnitureComponent& c)
     PropertyTable::textRow(tr(TextId::FinishSize), sizeText(p.finishLength, p.finishWidth) + " mm");
     PropertyTable::textRow(tr(TextId::CutSize), sizeText(p.cut.length, p.cut.width) + " mm");
 
-    const char* edgeNames[] = {"U1", "U2", "G1", "G2"};
     std::string edges;
     for (std::size_t i = 0; i < p.edges.size(); ++i) {
-        edges += std::string(i > 0 ? "  " : "") + edgeNames[i] + ": "
+        edges += std::string(i > 0 ? "  " : "") + tr(edgeText(static_cast<core::EdgeSide>(i))) + ": "
                + (p.edges[i].present() ? p.edges[i].name : std::string(tr(TextId::NoEdge)));
     }
     PropertyTable::row(tr(TextId::EdgeBanding));
@@ -828,6 +831,93 @@ void saveProfile(UiState& state)
 }
 
 // ---------------------------------------------------------------------------------------------
+// Export
+// ---------------------------------------------------------------------------------------------
+
+namespace {
+
+/// Name for exported files: the project file's name, else the product's.
+std::string exportBaseName(const ed::Document& doc)
+{
+    if (!doc.path().empty()) {
+        return toUtf8(doc.path().stem());
+    }
+    return doc.product().name().empty() ? tr(TextId::Untitled) : doc.product().name();
+}
+
+/// After a successful export: open the result right away or say where it is.
+void exported(UiState& state, std::string message, const std::filesystem::path& file, bool openNow)
+{
+    if (openNow && openWithSystem(file)) {
+        return;
+    }
+    state.exportMessage = std::move(message);
+    state.exportedFile = file;
+    state.openExportedPopup = true;
+}
+
+void writePdf(UiState& state)
+{
+    const ed::Document& doc = *state.document;
+    const auto path = showSaveDialog(FileKind::Pdf, exportBaseName(doc) + ".pdf");
+    if (!path) {
+        return;
+    }
+    if (!state.pdfFonts) {
+        state.pdfFonts = exporting::findPdfFonts();
+    }
+    exporting::DocumentationOptions options = state.pdfOptions;
+    if (doc.product().name().empty() && !doc.path().empty()) {
+        options.productName = toUtf8(doc.path().stem());
+    }
+    const exporting::DocumentationInput input{doc.product(), doc.cutList(), doc.edgeUsage(),
+                                              doc.detailingReport()};
+    if (run(state, [&] { exporting::saveDocumentationPdf(input, options, *path, *state.pdfFonts); })) {
+        exported(state, tr(TextId::ExportDoneFile), *path, state.openAfterExport);
+    }
+}
+
+} // namespace
+
+void exportPdf(UiState& state)
+{
+    state.openPdfPopup = true; // settings first, see drawPopups()
+}
+
+void exportPartsDxf(UiState& state)
+{
+    const ed::Document& doc = *state.document;
+    const auto path = showSaveDialog(FileKind::Dxf, exportBaseName(doc) + ".dxf");
+    if (!path) {
+        return;
+    }
+    if (run(state, [&] {
+            exporting::saveDxf(exporting::drawAllParts(doc.product(), doc.cutList()), *path);
+        })) {
+        exported(state, tr(TextId::ExportDoneFile), *path, false);
+    }
+}
+
+void exportPartsDxfFolder(UiState& state)
+{
+    const auto folder = showFolderDialog();
+    if (!folder) {
+        return;
+    }
+    const ed::Document& doc = *state.document;
+    // A folder of its own, ASCII-named like the files: CNC software and USB sticks cope with it.
+    const std::filesystem::path target =
+        *folder / (exporting::asciiFold(exportBaseName(doc)) + "_DXF");
+    std::size_t count = 0;
+    if (run(state, [&] {
+            count = exporting::savePartDxfs(doc.product(), doc.cutList(), target).size();
+        })) {
+        exported(state, std::string(tr(TextId::ExportDoneFiles)) + " " + std::to_string(count),
+                 target, false);
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
 // Windows
 // ---------------------------------------------------------------------------------------------
 
@@ -1012,6 +1102,24 @@ void drawCutListWindow(UiState& state)
         }
         ImGui::EndTable();
     }
+
+    ImGui::SeparatorText(tr(TextId::HardwareList));
+    if (ImGui::BeginTable("hardware", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+        ImGui::TableSetupColumn(tr(TextId::ColItem));
+        ImGui::TableSetupColumn(tr(TextId::ColSpec));
+        ImGui::TableSetupColumn(tr(TextId::ColQuantity));
+        ImGui::TableHeadersRow();
+        for (const detailing::HardwareItem& item : doc.hardware()) {
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::TextUnformatted(tr(hardwareText(item.kind)));
+            ImGui::TableNextColumn();
+            ImGui::TextUnformatted(item.spec.c_str());
+            ImGui::TableNextColumn();
+            ImGui::Text("%d", item.quantity);
+        }
+        ImGui::EndTable();
+    }
     ImGui::End();
 }
 
@@ -1029,8 +1137,114 @@ void drawWarningsWindow(UiState& state)
     ImGui::End();
 }
 
+namespace {
+
+void drawPdfPopup(UiState& state)
+{
+    if (state.openPdfPopup) {
+        ImGui::OpenPopup(tr(TextId::PdfWindow));
+        state.openPdfPopup = false;
+    }
+    bool write = false;
+    if (ImGui::BeginPopupModal(tr(TextId::PdfWindow), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        exporting::DocumentationOptions& o = state.pdfOptions;
+        ImGui::SetNextItemWidth(ImGui::GetFontSize() * 6.0f);
+        if (ImGui::BeginCombo(tr(TextId::PaperSize), exporting::toString(o.format.size).data())) {
+            for (const exporting::PaperSize size :
+                 {exporting::PaperSize::A4, exporting::PaperSize::A3, exporting::PaperSize::A2,
+                  exporting::PaperSize::A1}) {
+                if (ImGui::Selectable(exporting::toString(size).data(), o.format.size == size)) {
+                    o.format.size = size;
+                }
+            }
+            ImGui::EndCombo();
+        }
+        ImGui::TextUnformatted(tr(TextId::PaperOrientation));
+        ImGui::SameLine();
+        if (ImGui::RadioButton(tr(TextId::Landscape),
+                               o.format.orientation == exporting::Orientation::Landscape)) {
+            o.format.orientation = exporting::Orientation::Landscape;
+        }
+        ImGui::SameLine();
+        if (ImGui::RadioButton(tr(TextId::Portrait),
+                               o.format.orientation == exporting::Orientation::Portrait)) {
+            o.format.orientation = exporting::Orientation::Portrait;
+        }
+
+        ImGui::SeparatorText(tr(TextId::ReportSections));
+        ImGui::Checkbox(tr(TextId::PageSummary), &o.summary);
+        ImGui::Checkbox(tr(TextId::PageCutList), &o.cutList);
+        ImGui::Checkbox(tr(TextId::PageHardware), &o.hardware);
+        ImGui::Checkbox(tr(TextId::PageAssembly), &o.assembly);
+        ImGui::Checkbox(tr(TextId::PagePart), &o.partDrawings);
+
+        ImGui::SeparatorText(tr(TextId::TitleBlock));
+        ImGui::SetNextItemWidth(ImGui::GetFontSize() * 16.0f);
+        ImGui::InputText(tr(TextId::CompanyName), &o.company);
+        ImGui::SetNextItemWidth(ImGui::GetFontSize() * 16.0f);
+        ImGui::InputText(tr(TextId::DesignerName), &o.designer);
+        ImGui::Spacing();
+        ImGui::Checkbox(tr(TextId::OpenAfterExport), &state.openAfterExport);
+        ImGui::Spacing();
+
+        const bool any = o.summary || o.cutList || o.hardware || o.assembly || o.partDrawings;
+        ImGui::BeginDisabled(!any);
+        if (ImGui::Button(tr(TextId::ExportButton))) {
+            write = true;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndDisabled();
+        ImGui::SameLine();
+        if (ImGui::Button(tr(TextId::Cancel))) {
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+    if (write) {
+        writePdf(state); // after EndPopup: the native dialog must not run inside the popup
+    }
+}
+
+void drawExportedPopup(UiState& state)
+{
+    if (state.openExportedPopup) {
+        ImGui::OpenPopup(tr(TextId::ExportDoneTitle));
+        state.openExportedPopup = false;
+    }
+    if (!ImGui::BeginPopupModal(tr(TextId::ExportDoneTitle), nullptr,
+                                ImGuiWindowFlags_AlwaysAutoResize)) {
+        return;
+    }
+    ImGui::TextUnformatted(state.exportMessage.c_str());
+    ImGui::TextUnformatted(toUtf8(state.exportedFile).c_str());
+    ImGui::Spacing();
+    std::error_code ec;
+    const bool folder = std::filesystem::is_directory(state.exportedFile, ec);
+    if (!folder) {
+        if (ImGui::Button(tr(TextId::OpenFile))) {
+            openWithSystem(state.exportedFile);
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+    }
+    if (ImGui::Button(tr(TextId::OpenFolder))) {
+        openWithSystem(folder ? state.exportedFile : state.exportedFile.parent_path());
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button(tr(TextId::Close))) {
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
+}
+
+} // namespace
+
 void drawPopups(UiState& state)
 {
+    drawPdfPopup(state);
+    drawExportedPopup(state);
+
     if (state.openErrorPopup) {
         ImGui::OpenPopup(tr(TextId::ErrorTitle));
         state.openErrorPopup = false;

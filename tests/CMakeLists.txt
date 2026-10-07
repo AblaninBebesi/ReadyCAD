@@ -2,6 +2,7 @@
 # Stage 9 adds the end-to-end "user journey" test here.
 rc_add_test_executable(readycad_integration_tests
     SOURCES
+        integration/ExportPipelineTests.cpp
         integration/ModuleGraphTests.cpp
     DEPENDS
         readycad::editor)
