@@ -68,7 +68,8 @@ TEST_CASE("Broken stock files are rejected", "[storage][stock]")
 
 TEST_CASE("Cutting settings survive save and load", "[storage][settings]")
 {
-    NestingSettings s;
+    AppSettings settings;
+    NestingSettings& s = settings.nesting;
     s.machine = Machine::NestingCenter;
     s.saw.kerf = 3.2;
     s.saw.maxStages = 4;
@@ -80,7 +81,7 @@ TEST_CASE("Cutting settings survive save and load", "[storage][settings]")
     s.optimizer.memoryLimitMb = 1024;
     s.optimizer.seed = 123456789012345ULL;
 
-    const NestingSettings l = loadNestingSettings(saveNestingSettings(s));
+    const NestingSettings l = loadSettings(saveSettings(settings)).nesting;
     CHECK(l.machine == Machine::NestingCenter);
     CHECK(l.saw.kerf == 3.2);
     CHECK(l.saw.maxStages == 4);
@@ -93,12 +94,36 @@ TEST_CASE("Cutting settings survive save and load", "[storage][settings]")
     CHECK(l.optimizer.seed == 123456789012345ULL);
 
     // Older files without a field keep the default; impossible values are refused.
-    const NestingSettings partial = loadNestingSettings(
+    const AppSettings partial = loadSettings(
         R"({"format": "readycad-settings", "version": 1, "nesting": {"saw": {"kerf": 4.0}}})");
-    CHECK(partial.saw.kerf == 4.0);
-    CHECK(partial.saw.trim == NestingSettings{}.saw.trim);
-    CHECK_THROWS_AS(loadNestingSettings(R"({"format": "readycad-settings", "version": 1,
-                                            "nesting": {"saw": {"maxStages": 7}}})"),
+    CHECK(partial.nesting.saw.kerf == 4.0);
+    CHECK(partial.nesting.saw.trim == NestingSettings{}.saw.trim);
+    CHECK(partial.cnc == rc::cam::defaultProfile()); // a stage 7 file: the default machine
+    CHECK_THROWS_AS(loadSettings(R"({"format": "readycad-settings", "version": 1,
+                                     "nesting": {"saw": {"maxStages": 7}}})"),
+                    StorageError);
+}
+
+TEST_CASE("The CNC nesting centre survives save and load", "[storage][settings]")
+{
+    AppSettings settings;
+    rc::cam::NestingCenterProfile& cnc = settings.cnc;
+    cnc.dialect = rc::cam::kdtDialect();
+    cnc.dialect.zero = rc::cam::ZeroPlane::Top;
+    cnc.dialect.header = {"G90 G54", "(KDT {name})"};
+    cnc.tools.push_back({16, rc::cam::ToolKind::Drill, 10.0, 30.0, 3500, 0.0, 2000.0, 0.0, "Matkap D10"});
+    cnc.tools.front().feed = 15000.0;
+    cnc.spoilboardCut = 0.5;
+    cnc.climbMilling = false;
+
+    const AppSettings loaded = loadSettings(saveSettings(settings));
+    CHECK(loaded.cnc == cnc);
+    CHECK(loaded.cnc.dialect.name == "KDT (NcStudio)");
+    CHECK(loaded.cnc.tools.back().name == "Matkap D10");
+
+    // A tool table without a router for the contours cannot make programs.
+    CHECK_THROWS_AS(loadSettings(R"({"format": "readycad-settings", "version": 1,
+                                     "cnc": {"contourTool": 11}})"),
                     StorageError);
 }
 

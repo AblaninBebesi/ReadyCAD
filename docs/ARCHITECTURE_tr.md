@@ -29,12 +29,12 @@ Oklar sadeleştirilmiştir: her modülün tam bağımlılıkları tabloda listel
 | Modül       | Sorumluluk | Aşama | Bağımlılıklar |
 |-------------|------------|-------|---------------|
 | `core`      | Matematik (mm, double), `Aabb`, mobilya bileşen ağacı (Composite), `Panel`, parametrik yeniden hesaplama | 1–3 | glm |
-| `i18n`      | Metinler (`TextId` + Türkçe tablo) ve model öğelerinin adları: parça türleri, kenarlar, delikler, bağlantı elemanları | 1, 6 | core |
-| `storage`   | JSON dosyaları: proje (`*.rcproj`), atölye profili (`*.rcprofile`), levha stoku (`stock.rcstock`) ve kesim ayarları | 5, 7 | core, nesting |
+| `i18n`      | Metinler (`TextId` + Türkçe tablo), model öğelerinin adları (parça türleri, kenarlar, delikler, bağlantı elemanları), UTF-8 ve ASCII'ye çevirme | 1, 6, 8 | core |
+| `storage`   | JSON dosyaları: proje (`*.rcproj`), atölye profili (`*.rcprofile`), levha stoku (`stock.rcstock`), kesim ve CNC makinesi ayarları | 5, 7, 8 | core, nesting, cam |
 | `detailing` | Kesim ve net ölçüler, kenar bantları, «Sistem 32» delme, bağlantı elemanları, düzlemdeki parça (`FlatPart`), bağlantı elemanları listesi | 4, 6 | core |
 | `nesting`   | Levha ve artık stoku (`StockManager`), panel ebatlamada kesim planı (giyotin), CNC'de nesting (No-Fit Polygon), genetik algoritma, arka planda hesap | 7 | core, detailing; Clipper2 (modülün içinde gizli) |
 | `export`    | 2D çizimler (`Drawing`), DXF R12, PDF: listeler, kesim planı, montaj çizimi, parça çizimleri | 6, 7 | core, detailing, nesting, i18n; libHaru (modülün içinde gizli) |
-| `cam`       | İşleme operasyonlarının ara gösterimi + postprosesörler | 8 | core, detailing, nesting |
+| `cam`       | İşleme operasyonları (makineden bağımsız), CNC nesting planlaması (takımlar, sıra, rotalar), lehçesi ayarlanabilen G-code son işlemcisi | 8 | core, detailing, nesting, i18n; Clipper2 (modülün içinde gizli) |
 | `editor`    | Belge, seçim, geri al/yinele, arayüz için işlemler, otomatik detaylandırma. **OpenGL yok**, bu yüzden pencere olmadan test edilir | 5, 9 | yukarıdakilerin hepsi |
 | `render`    | OpenGL 3.3 core: sahne, kamera, fareyle seçim, GPU nesneleri için RAII sarmalayıcılar | 5 | core, detailing, glad |
 | `ui`        | ImGui pencereleri, diyaloglar, dışa aktarma menüsü, kesim planı ve stok pencereleri | 1, 5, 6, 7 | editor, i18n, render, ImGui |
@@ -681,4 +681,182 @@ Henüz yapılmadı:
 * artıklar her zaman önce kullanılır, «artığı alma» diye ayrı bir gen yok;
 * stoktan düşme geri alınamaz (onay sorar); adet stok penceresinde düzeltilebilir;
 * mobilya modelinin kendisinde şekilli parçalar (onlar için nesting hazır);
-* makine programları (Aşama 8).
+* makine programları: Aşama 8'de CNC nesting için yapıldı.
+
+## CNC programları (Aşama 8, `cam` modülü)
+
+![CNC nesting takım yolu: delme, kanallar, konturlar, boşta hareketler](images/stage8-toolpath.png)
+
+### Üç katman: ne, nasıl, hangi dilde
+
+```
+detailing::FlatPart ──► partMachining() ──► Operation         NE yapılacak: delik, kanal, kontur
+nesting::NestingResult ─► sheetJob() ─────► SheetJob          levha + yerlerindeki parçalar
+                                               │
+                    planSheet(makine profili)  ▼
+                                            Program           NASIL: takımlar, sıra, derinlikler, hareketler
+                                               │
+                         Postprocessor::write() ▼
+                                       program metni          belirli bir kontrol ünitesinin dilinde
+```
+
+* **İşlemler** makineden bağımsızdır:
+  * `Drilling`: altı yüzün herhangi birine (`Top`, `Bottom`, `Left`, `Right`, `Front`, `Back`)
+    açılan delik — giriş noktası, Ø, derinlik;
+  * `Groove`: kanal;
+  * `Contour`: parçayı konturundan kesip çıkarmak.
+
+  Parça `FlatPart` koordinatlarında tanımlanır. Levhada işlemler, parçanın yerleşimdeki
+  dönüşümüyle döndürülür: `Left` kenar yüzü 90° döndükten sonra `Front` olur.
+* **Planlayıcı** bir makine türünün kurallarını bilir. Bu aşamada bu CNC nesting'dir; takımları,
+  sırayı, pasoları ve boşta hareketleri o seçer. Sonuç bir `Program`'dır: takım değişimi, boşta
+  hareket, kesme hareketi, delme çevrimi, açıklama. Koordinatlar tabladan mm cinsindendir
+  (z = 0 levhanın altı). `analyse()` hareket uzunluklarını, delikleri, takım değişimlerini ve
+  süreyi hesaplar.
+* **Son işlemci** (`Postprocessor`), `Program`'ı bir tür kontrol ünitesinin metnine çevirir.
+
+**Nasıl genişler:**
+* Aynı ISO dilini konuşan yeni bir kontrol ünitesi yeni bir **lehçedir** (dialect): yalnızca
+  veri, kod yazmak gerekmez.
+* Başka bir dosya biçimi bir `Postprocessor` daha demektir.
+* Yeni bir makine türü, aynı işlemler üzerinde bir planlayıcı daha demektir. Örneğin yatay delme
+  makinesi `partMachining()`'den kenar deliklerini ve alt yüz deliklerini alacak. Bu yüzden
+  işlemlerde baştan beri tüm yüzler vardır, CNC nesting yalnızca üstten çalışsa da.
+
+### CNC nesting bir levhayla ne yapar
+
+1. **Delme kafası.** Üstteki delikler matkap matkap delinir; çap ±0.05 mm ile eşleşmelidir.
+   Boydan boya delikler kurban tablaya 0.3 mm girer. Her matkabın rotası: en yakın komşu, sonra
+   2-opt (rota kısaldığı sürece rota parçalarını yer değiştirir; sonunda kesişme kalmaz). Levha
+   bütün ve sağlamken her şey delinir.
+2. **Matkabı olmayan delikleri** delikten dar olan en büyük freze açar: ortada dalma,
+   dışa doğru halkalar, derinlikte pasolar.
+3. **Kanalları** kanaldan geniş olmayan bir freze keser. Kanal frezeden genişse zikzak
+   yapan birkaç paralel paso. Derinlik pasolarla alınır.
+4. **Konturları** kontur frezesi keser:
+   * freze merkezinin yolu, yarıçap kadar büyütülmüş konturdur; köşeler «sivri» (miter) olarak
+     tamamlanır, böylece parçanın köşeleri keskin kalır;
+   * tırmanma frezelemede kontur saat yönünde dolaşılır;
+   * başlangıç, frezeye en yakın köşedir; derinlik pasolarla alınır;
+   * **küçük parçalar önce kesilir**: serbest kalınca vakum tablada en kötü onlar tutunur. Benzer
+     büyüklükteki parçalar arasından en yakını seçilir.
+
+* **Boşta hareketler.** Güvenli yüksekliğe çıkış, geçiş, yaklaşma yüksekliğine iniş. Son
+  işlemci çıkışı geçişten önce, inişi geçişten sonra yazar; bu yüzden takım levhanın üzerinde
+  asla alçaktan gitmez.
+* **Hatalara karşı koruma** (`CamError`):
+  * kontur frezesi, nesting'in bıraktığı aralıktan geniş: komşu parçaları keserdi;
+  * frezenin boyu levha kalınlığı artı kurban tablaya yetmiyor;
+  * takım tablosu çelişkili (`validate()`).
+* **Makinenin üstten yapamadıkları** (`Leftover`) kaybolmaz, parça parça listelenir:
+  * kenar delikleri — bunları yatay delme makinesi deler;
+  * alt yüzün delikleri ve kanalları — parça çevrilmelidir;
+  * takımı olmayan işlemler.
+
+### G-code
+
+Bir gardırop levhasının programının başı ve ilk parçanın kesimi:
+
+```
+%
+(ReadyCAD 01_Suntalam_18_2800x2100)
+(2800 x 2100 x 18 mm, Z0 = TABLE)
+G21 G90 G17
+G54
+T11 M6
+S4000 M3
+(Delme T11 D5 - 42)
+G0 Z38.000
+G0 X531.000 Y573.000
+G99 G81 X531.000 Y573.000 Z8.000 R21.000 F2500
+X563.000 Y573.000
+...
+G80
+...
+T1 M6
+S18000 M3
+(1 Yan panel 2182x599)
+G0 X4.000 Y4.000
+G0 Z21.000
+G1 Z-0.300 F3000
+G1 Y615.000 F12000
+G1 X2198.000
+...
+M5
+G0 X0 Y0
+M30
+%
+```
+
+* **Lehçe** (`GCodeDialect`), ISO G-code konuşan kontrol ünitelerini birbirinden ayıranlardır:
+  * programın başı ve sonu, takım değişimi, iş milinin çalıştırılması — `{tool}`, `{rpm}`,
+    `{name}`, `{thickness}`... içeren şablonlar;
+  * `G81` delme çevrimleri veya açık `G0/G1/G0` hareketleri;
+  * satır numaraları, açıklama biçimi, `%`, ondalık basamak sayısı;
+  * Z = 0'ın yeri: tablada mı, levhanın üstünde mi.
+* **Hazır ayarlar:**
+  * «ISO G-code» — G81 çevrimleri, Z0 tablada.
+  * «KDT (NcStudio)» — satır numaraları, `M06`, delikler açık hareketlerle (çevrimi olmayan
+    kontrol üniteleri için de uygun). Bunlar **başlangıç değerleridir**: takım numaraları ve
+    programın başlangıç satırları gerçek makineyle karşılaştırılmalıdır.
+* Çıktı modaldır: satırda yalnızca değişen eksenler, ilerleme yalnızca değiştiğinde yazılır.
+  Sayılar `std::to_chars` ile yazılır; bu yüzden nokta her yerel ayarda nokta kalır ve
+  «-0.000» hiç çıkmaz.
+* Açıklamalar yalnızca ASCII'dir (`asciiFold`), içinde parantez olmaz: kontrol üniteleri çoğu
+  zaman UTF-8 anlamaz.
+* **Freze yarıçapı telafisini kendimiz hesaplarız**, G41/G42 kullanılmaz: merkez yolu zaten
+  programdadır, program kontrol ünitesinin telafiyi nasıl yorumladığına bağlı değildir.
+
+### Arayüz
+
+![CNC ayarları: lehçe, yükseklikler, takım tablosu](images/stage8-cnc-settings.png)
+
+* **«Kesim → CNC ayarları...»**:
+  * lehçe ve temel parametreleri;
+  * kontur frezesi;
+  * güvenli yükseklik, yaklaşma yüksekliği, kurban tablaya dalma;
+  * tırmanma frezeleme;
+  * takım tablosu: numara, tür, Ø, kesme boyu, devir, ilerleme, dalma, paso.
+
+  Hepsi kesim ayarlarının yanında `settings.json` içinde saklanır (`storage::AppSettings`).
+* **«Dışa aktar → CNC programları (her levha ayrı)...»** her yerleşim için bir programı
+  `<proje>_CNC` klasörüne yazar (`01_Suntalam_18_2800x2100.nc`). Ardından diğer makinelere
+  kalanları gösterir. Kesim planı CNC nesting için hesaplanmış ve güncelse etkindir.
+* **«Kesim planı» penceresinde** «Takım yolu» kutusu seçili levhanın takım yolunu gösterir:
+  * konturlar turuncu, kanallar açık mavi, delikler halka, boşta hareketler ince çizgi;
+  * haritanın üstünde işleme süresi, delik ve takım değişimi sayısı, yapılmayanlar.
+* Başlatma parametreleri: `--export-cnc <klasör>`, `--cnc-settings`, `--toolpath`.
+
+### Bu aşamadaki diğer değişiklikler
+
+* `asciiFold`, `decodeUtf8`, `pathToUtf8`, `export` modülünden `i18n/Utf8.hpp` dosyasına taşındı:
+  CNC programları da onlara ihtiyaç duyuyor.
+* `PartSource` (ürün + kesim listesi) `detailing` modülüne taşındı, `export` içinde bir takma ad
+  kaldı.
+* `storage` artık `cam` modülüne bağımlı (ayar dosyasında makine profili); `CMakeLists.txt`
+  içinde `cam`, `storage`'dan önce gelir.
+* Nesting, parça konumlarını 0.01 mm'ye yuvarlar. Bu olmasa temas toleransı (1 µm) programlarda
+  `X17.999` gibi sayılar bırakıyordu.
+* Testler için küçük bir G-code yorumlayıcı (`tests/support/readycad/test/GCodeReader.hpp`)
+  programı yeniden oynatır; onu yazan koddan bağımsızdır.
+
+### Aşama 8 testleri
+
+| Ne test ediliyor | Dosya |
+|------------------|-------|
+| Yüzler ve yönler; katalogdaki her parçanın tüm delikleri, kanalları ve konturu; yüzlerin parçayla birlikte dönmesi; levha görevi | `cam/tests/OperationsTests.cpp` |
+| Rota her noktadan bir kez geçiyor, raf pimi sırası tek hareketle, verilen sıradan en az 2 kat kısa, kendini kesmiyor | `cam/tests/RouteTests.cpp` |
+| Takım sırası, derinlikler (kör, boydan boya, menteşe kasesi), diğer makinelere kalanlar; freze yarıçapında kontur, tırmanmada saat yönünde; pasolar; matkapsız deliğin frezelenmesi delik içinde kalıyor; takım yok; çok geniş veya kısa frezenin reddedilmesi | `cam/tests/NestingCenterTests.cpp` |
+| **Delikli ve konturlu bir parça için doğru komut sırası**: başlık, takım değişimi, iş mili, çıkış, geçiş, `G81 ... Z R F`, sonraki delik yalnızca X Y, takım değişiminden önce `G80`, dalma `G1 Z-0.3 F`, kontur `G1`, `M5`, `M30`, `%`. **Programın oynatılması**: boşta hareketler yalnızca levhanın üstünde, freze hiçbir parçaya yarıçapından yakın değil, her parça boydan boya kesilmiş, her delik delinmiş (iki hazır ayar, iki Z sıfırı). Lehçeler: satır numaraları, `M06`, açık hareketler, basamaklar, açıklamalar | `cam/tests/GCodeTests.cpp` (+ `GCodeReader.hpp`) |
+| Ayar dosyasında makine profili; Aşama 7 dosyası varsayılan makineyi alıyor; hatalı profil reddediliyor | `storage/tests/WorkshopFilesTests.cpp` |
+| UTF-8 ve `asciiFold` | `i18n/tests/Utf8Tests.cpp` |
+| Çekmeceli gardırop → nesting → programlar → oynatma: her parça temiz kesilmiş, üstteki her delik delinmiş, her delik delinmiş, frezelenmiş veya başka makineye aktarılmış | `tests/integration/CncPipelineTests.cpp` |
+
+Henüz yapılmadı:
+* programlar yalnızca CNC nesting için. Panel ebatlama, yatay delme makinesi ve barkodlu
+  etiketler yapılmadı (bu aşamada yapılmamasına karar verildi); onlar için işlemler hazır;
+* G2/G3 yayları kullanılmıyor: daire 48 doğru parçasıdır;
+* çok küçük parçalar için «soğan kabuğu» ve köprüler yok, yalnızca «önce küçükler» sırası;
+* dalma doğrudan kontur üzerinde (aralık zaten kesiliyor), rampa yok;
+* KDT hazır ayarı gerçek makinede denenmedi;
+* takım yolu yalnızca üstten (2B) gösteriliyor.

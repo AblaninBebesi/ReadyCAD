@@ -119,7 +119,8 @@ void saveSettingsFile(UiState& state)
     }
     run(state, [&] {
         std::filesystem::create_directories(state.settingsFile.parent_path());
-        storage::writeTextFile(state.settingsFile, storage::saveNestingSettings(state.nestingSettings));
+        storage::writeTextFile(state.settingsFile,
+                               storage::saveSettings({state.nestingSettings, state.cnc}));
     });
 }
 
@@ -164,6 +165,10 @@ constexpr ImU32 kRemnantLine = IM_COL32(110, 220, 140, 255);
 constexpr ImU32 kCut = IM_COL32(235, 70, 60, 220);
 constexpr ImU32 kUsable = IM_COL32(255, 255, 255, 70);
 constexpr ImU32 kLabel = IM_COL32(25, 25, 28, 255);
+constexpr ImU32 kRapid = IM_COL32(120, 200, 255, 110);
+constexpr ImU32 kContourPath = IM_COL32(255, 140, 30, 230);
+constexpr ImU32 kRouterPath = IM_COL32(40, 210, 220, 230);
+constexpr ImU32 kDrill = IM_COL32(200, 40, 160, 255);
 
 bool insidePolygon(ImVec2 p, const std::vector<ImVec2>& poly)
 {
@@ -194,7 +199,8 @@ void centredText(ImDrawList* draw, ImVec2 min, ImVec2 max, const std::string& te
                   colour, text.c_str());
 }
 
-void drawSheet(UiState& state, const nesting::NestingResult& result, std::size_t index)
+void drawSheet(UiState& state, const nesting::NestingResult& result, std::size_t index,
+               const cam::SheetProgram* toolpath)
 {
     const nesting::SheetLayout& layout = result.layouts[index];
     const ImVec2 origin = ImGui::GetCursorScreenPos();
@@ -266,6 +272,36 @@ void drawSheet(UiState& state, const nesting::NestingResult& result, std::size_t
     if (state.showSawCuts) {
         for (const nesting::SawCut& cut : layout.cuts) {
             draw->AddLine(screen(cut.from), screen(cut.to), kCut, cut.stage == 0 ? 1.0f : 1.5f);
+        }
+    }
+
+    // The CNC toolpath seen from above: travel thin, cuts in the colour of their tool, holes as
+    // rings. Routers: orange (contours), cyan (grooves, milled holes).
+    if (toolpath != nullptr) {
+        std::optional<core::Vec3> at;
+        int tool = 0;
+        for (const cam::Step& step : toolpath->program.steps) {
+            if (const auto* t = std::get_if<cam::ToolChange>(&step)) {
+                tool = t->tool.number;
+            } else if (const auto* r = std::get_if<cam::Rapid>(&step)) {
+                if (at && (at->x != r->to.x || at->y != r->to.y)) {
+                    draw->AddLine(screen({at->x, at->y}), screen({r->to.x, r->to.y}), kRapid, 1.0f);
+                }
+                at = r->to;
+            } else if (const auto* f = std::get_if<cam::Feed>(&step)) {
+                if (at) {
+                    const bool contour = tool == state.cnc.contourTool;
+                    draw->AddLine(screen({at->x, at->y}), screen({f->to.x, f->to.y}),
+                                  contour ? kContourPath : kRouterPath, contour ? 2.0f : 1.5f);
+                }
+                at = f->to;
+            } else if (const auto* d = std::get_if<cam::DrillCycle>(&step)) {
+                if (at && (at->x != d->at.x || at->y != d->at.y)) {
+                    draw->AddLine(screen({at->x, at->y}), screen(d->at), kRapid, 1.0f);
+                }
+                draw->AddCircle(screen(d->at), 3.0f, kDrill, 12, 1.5f);
+                at = core::Vec3(d->at.x, d->at.y, d->clearance);
+            }
         }
     }
 
@@ -509,8 +545,10 @@ void loadWorkshopFiles(UiState& state, const std::filesystem::path& where)
     }
     if (std::filesystem::exists(state.settingsFile, ec)) {
         run(state, [&] {
-            state.nestingSettings =
-                storage::loadNestingSettings(storage::readTextFile(state.settingsFile));
+            const storage::AppSettings settings =
+                storage::loadSettings(storage::readTextFile(state.settingsFile));
+            state.nestingSettings = settings.nesting;
+            state.cnc = settings.cnc;
         });
     }
     ++state.stockRevision;
@@ -540,6 +578,7 @@ void startNesting(UiState& state)
                                                                  state.nestingSettings);
         state.nestingVersion = 0;
         state.nesting.reset();
+        ++state.nestingChanges;
         state.nestingFor = {state.documentSerial, doc.revision(), state.stockRevision,
                             state.productCount};
         state.nestingConsumed = false;
@@ -566,6 +605,7 @@ void updateNesting(UiState& state)
     if (run.version() != state.nestingVersion) {
         state.nestingVersion = run.version();
         state.nesting = run.result();
+        ++state.nestingChanges;
     }
     if (finished) {
         if (!run.error().empty()) {
@@ -667,6 +707,9 @@ void drawNestingWindow(UiState& state)
     if (!state.nesting || state.nesting->settings.machine == nesting::Machine::PanelSaw) {
         ImGui::SameLine();
         ImGui::Checkbox(tr(TextId::ShowCuts), &state.showSawCuts);
+    } else {
+        ImGui::SameLine();
+        ImGui::Checkbox(tr(TextId::ShowToolpath), &state.showToolpath);
     }
 
     if (running) {
@@ -713,7 +756,17 @@ void drawNestingWindow(UiState& state)
             ImGui::Text("%s  ·  %s  ·  %s  ·  %s %s", l.sheet.material.name.c_str(),
                         sizeText(l.sheet.length, l.sheet.width).c_str(), sourceText(l.source),
                         tr(TextId::Utilization), percent(l.utilization()).c_str());
-            drawSheet(state, result, state.selectedSheet);
+            const cam::SheetProgram* toolpath = nullptr;
+            if (state.showToolpath && result.settings.machine == nesting::Machine::NestingCenter) {
+                toolpath = sheetToolpath(state);
+                if (toolpath != nullptr) {
+                    ImGui::TextWrapped("%s", toolpathSummary(*toolpath).c_str());
+                } else if (!state.toolpathError.empty()) {
+                    ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.4f, 1.0f), "%s",
+                                       state.toolpathError.c_str());
+                }
+            }
+            drawSheet(state, result, state.selectedSheet, toolpath);
         }
     }
     ImGui::EndChild();

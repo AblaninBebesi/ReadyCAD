@@ -1,6 +1,7 @@
 #pragma once
 
 #include "readycad/core/ConstructionRules.hpp"
+#include "readycad/cam/NestingCenter.hpp"
 #include "readycad/core/model/Product.hpp"
 #include "readycad/nesting/Nesting.hpp"
 #include "readycad/nesting/Stock.hpp"
@@ -47,11 +48,18 @@ inline constexpr int kSettingsFormatVersion = 1;
 [[nodiscard]] std::string saveStock(const nesting::StockManager& stock);
 [[nodiscard]] nesting::StockManager loadStock(std::string_view json);
 
-// --- Application settings (settings.json): cutting machines and the optimiser ----------------
+// --- Application settings (settings.json) -------------------------------------------------------
 
-[[nodiscard]] std::string saveNestingSettings(const nesting::NestingSettings& settings);
+/// The workshop's machines: cutting and its optimiser (stage 7), the CNC nesting centre with its
+/// tools and controller dialect (stage 8).
+struct AppSettings {
+    nesting::NestingSettings nesting;
+    cam::NestingCenterProfile cnc;
+};
+
+[[nodiscard]] std::string saveSettings(const AppSettings& settings);
 /// Missing fields keep their defaults; throws StorageError for broken files or invalid values.
-[[nodiscard]] nesting::NestingSettings loadNestingSettings(std::string_view json);
+[[nodiscard]] AppSettings loadSettings(std::string_view json);
 
 // --- Files (UTF-8 paths) ----------------------------------------------------------------------
 

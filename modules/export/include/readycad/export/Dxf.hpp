@@ -1,6 +1,7 @@
 #pragma once
 
 #include "readycad/export/Drawing.hpp"
+#include "readycad/i18n/Utf8.hpp"
 
 #include <filesystem>
 #include <iosfwd>
@@ -38,7 +39,7 @@ void saveDxf(const Drawing& drawing, const std::filesystem::path& path);
 [[nodiscard]] std::string dxfName(std::string_view name);
 
 /// Turkish letters to ASCII ("Çekmece yanı" -> "Cekmece yani"): for file names that CNC
-/// software and USB sticks of machines can handle.
-[[nodiscard]] std::string asciiFold(std::string_view text);
+/// software and USB sticks of machines can handle. Lives in i18n, shared with the CAM module.
+using i18n::asciiFold;
 
 } // namespace rc::exporting

@@ -792,6 +792,7 @@ void setDocument(UiState& state, std::unique_ptr<ed::Document> document)
     // A cutting plan belongs to its product: the new document starts without one.
     state.nestingRun.reset();
     state.nesting.reset();
+    ++state.nestingChanges;
     state.nestingMessage.clear();
 }
 

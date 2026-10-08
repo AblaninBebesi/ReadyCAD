@@ -1,5 +1,6 @@
 #pragma once
 
+#include "readycad/cam/NestingCenter.hpp"
 #include "readycad/editor/Document.hpp"
 #include "readycad/export/Documentation.hpp"
 #include "readycad/nesting/NestingRun.hpp"
@@ -71,6 +72,7 @@ struct UiState {
     std::unique_ptr<nesting::NestingRun> nestingRun; ///< running (or just finished) optimisation
     std::uint64_t nestingVersion = 0;                ///< of the run's result last shown
     std::optional<nesting::NestingResult> nesting;   ///< shown result; live while running
+    std::uint64_t nestingChanges = 0;                ///< increases whenever `nesting` changes
 
     /// What the shown result was computed for: when any of it changes, the result is stale.
     struct NestingInput {
@@ -90,6 +92,22 @@ struct UiState {
     // "Add sheet" form of the stock window
     int newSheetMaterial = 0;
     nesting::Sheet newSheet;
+
+    // CNC programs (stage 8): the nesting centre, part of the settings file
+    cam::NestingCenterProfile cnc;
+    cam::NestingCenterProfile cncDraft; ///< edited in the CNC settings dialog
+    bool openCncSettings = false;
+    bool showToolpath = false;
+    /// Program of the sheet shown with its toolpath; rebuilt when the key changes.
+    std::optional<cam::SheetProgram> toolpath;
+    std::string toolpathError;
+    struct ToolpathKey {
+        std::uint64_t nesting = 0; ///< nestingChanges
+        std::size_t sheet = 0;
+        cam::NestingCenterProfile profile;
+        friend bool operator==(const ToolpathKey&, const ToolpathKey&) = default;
+    };
+    std::optional<ToolpathKey> toolpathKey;
 };
 
 /// Runs a model operation; on an exception shows the error popup. Returns true if it succeeded.
@@ -142,5 +160,18 @@ void updateNesting(UiState& state);
 void drawNestingWindow(UiState& state);
 void drawStockWindow(UiState& state);
 void drawNestingPopups(UiState& state);
+
+// CNC programs (stage 8), CncPanels.cpp
+/// Asks for a folder and writes one program per sheet of a nesting centre plan.
+void exportCncPrograms(UiState& state);
+/// The same into `folder` without dialogs (command line); sets the "exported" message.
+bool writeCncPrograms(UiState& state, const std::filesystem::path& folder);
+/// The program of the selected sheet for the toolpath preview, planned again only when the
+/// plan, the sheet or the machine changed. Null for a panel saw plan or if it cannot be made
+/// (UiState::toolpathError says why).
+const cam::SheetProgram* sheetToolpath(UiState& state);
+/// "Tahmini süre: 4 dk 12 sn   Delik: 96   ..." and what is left for other machines.
+[[nodiscard]] std::string toolpathSummary(const cam::SheetProgram& program);
+void drawCncPopups(UiState& state);
 
 } // namespace rc::ui

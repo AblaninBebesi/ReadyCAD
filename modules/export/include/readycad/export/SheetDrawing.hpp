@@ -2,6 +2,7 @@
 
 #include "readycad/core/model/Product.hpp"
 #include "readycad/detailing/CutList.hpp"
+#include "readycad/detailing/FlatPart.hpp"
 #include "readycad/export/Drawing.hpp"
 #include "readycad/nesting/Nesting.hpp"
 
@@ -22,10 +23,7 @@ inline constexpr std::string_view kPartFill = "PART_FILL"; ///< PDF only: parts 
 
 /// Where the parts of a cut list come from: their part drawings and names. Without it the
 /// parts are drawn as plain outlines with their labels.
-struct PartSource {
-    const core::Product& product;
-    const std::vector<detailing::CutListRow>& cutList;
-};
+using detailing::PartSource;
 
 struct SheetDrawingOptions {
     /// Height of texts in drawing units (mm of the sheet): 20 for a DXF at 1:1, paper height /

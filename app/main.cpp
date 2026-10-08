@@ -21,6 +21,9 @@ void printUsage()
               "  --export-pdf <file.pdf>   write the PDF documents and exit\n"
               "  --cutting-settings        open the cutting settings\n"
               "  --data-dir <folder>       stock and settings files from this folder\n"
+              "  --export-cnc <folder>     write the CNC programs (with --nesting router) and exit\n"
+              "  --cnc-settings            open the CNC settings\n"
+              "  --toolpath                show the toolpath in the cutting plan\n"
               "  --screenshot <file.bmp>   save the window as an image and exit");
 }
 
@@ -55,6 +58,12 @@ int main(int argc, char** argv)
             config.cuttingSettings = true;
         } else if (arg == "--data-dir" && hasValue) {
             config.dataFolder = argv[++i];
+        } else if (arg == "--export-cnc" && hasValue) {
+            config.exportCnc = argv[++i];
+        } else if (arg == "--cnc-settings") {
+            config.cncSettings = true;
+        } else if (arg == "--toolpath") {
+            config.toolpath = true;
         } else if (arg == "--screenshot" && hasValue) {
             config.screenshot = argv[++i];
         } else {

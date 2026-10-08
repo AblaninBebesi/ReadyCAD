@@ -5,6 +5,7 @@ rc_add_module(storage
     DEPENDS
         readycad::core
         readycad::nesting
+        readycad::cam
     PRIVATE_DEPENDS
         nlohmann_json::nlohmann_json
     TESTS

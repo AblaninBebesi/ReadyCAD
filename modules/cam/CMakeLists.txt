@@ -1,7 +1,19 @@
-# CAM — implemented in stage 8 (see docs/ARCHITECTURE.md).
-# Until then the module is a placeholder that only fixes its place in the dependency graph.
 rc_add_module(cam
+    SOURCES
+        src/GCode.cpp
+        src/NestingCenter.cpp
+        src/Operations.cpp
+        src/Program.cpp
+        src/Route.cpp
     DEPENDS
         readycad::core
         readycad::detailing
-        readycad::nesting)
+        readycad::nesting
+        readycad::i18n
+    PRIVATE_DEPENDS
+        Clipper2::Clipper2
+    TESTS
+        tests/GCodeTests.cpp
+        tests/NestingCenterTests.cpp
+        tests/OperationsTests.cpp
+        tests/RouteTests.cpp)

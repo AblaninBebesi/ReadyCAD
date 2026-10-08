@@ -1,6 +1,7 @@
 rc_add_module(ui
     SOURCES
         src/Application.cpp
+        src/CncPanels.cpp
         src/EditorPanels.cpp
         src/FileDialogs.cpp
         src/Fonts.cpp

@@ -204,6 +204,7 @@ struct Application::Impl {
     bool layoutChecked = false;
     bool resetLayout = false;
     bool pdfWritten = false;
+    bool cncWritten = false;
     int frame = 0;
 
     explicit Impl(const ApplicationConfig& cfg)
@@ -244,6 +245,8 @@ struct Application::Impl {
         }
         state.focusStock = config.stockWindow ? 3 : 0;
         state.openNestingSettings = config.cuttingSettings;
+        state.openCncSettings = config.cncSettings;
+        state.showToolpath = config.toolpath;
     }
 
     void drawFrame();
@@ -312,6 +315,7 @@ void Application::Impl::drawFrame()
     }
     drawPopups(state);
     drawNestingPopups(state);
+    drawCncPopups(state);
     updateWindowTitle();
 
     ImGui::Render();
@@ -323,6 +327,15 @@ void Application::Impl::drawFrame()
     glClear(GL_COLOR_BUFFER_BIT);
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
+    if (config.exportCnc && !state.nestingRun && !cncWritten) {
+        cncWritten = true;
+        if (writeCncPrograms(state, *config.exportCnc)) {
+            std::printf("%s\n", state.exportMessage.c_str());
+        } else {
+            std::fprintf(stderr, "ReadyCAD: %s\n", state.errorMessage.c_str());
+        }
+        state.quit = !config.screenshot && !config.exportPdf;
+    }
     if (config.exportPdf && !state.nestingRun && !pdfWritten) {
         pdfWritten = true;
         if (!writePdfFile(state, *config.exportPdf)) {
@@ -404,6 +417,12 @@ void Application::Impl::drawMainMenu()
                             nestingIsFresh(state))) {
             exportSheetsDxf(state);
         }
+        if (ImGui::MenuItem(tr(TextId::MenuExportCnc), nullptr, false,
+                            nestingIsFresh(state)
+                                && state.nesting->settings.machine
+                                       == nesting::Machine::NestingCenter)) {
+            exportCncPrograms(state);
+        }
         ImGui::EndMenu();
     }
     if (ImGui::BeginMenu(tr(TextId::MenuCutting))) {
@@ -416,6 +435,9 @@ void Application::Impl::drawMainMenu()
         }
         if (ImGui::MenuItem(tr(TextId::MenuNestingSettings), nullptr, false, !state.nestingRun)) {
             state.openNestingSettings = true;
+        }
+        if (ImGui::MenuItem(tr(TextId::MenuCncSettings))) {
+            state.openCncSettings = true;
         }
         if (ImGui::MenuItem(tr(TextId::MenuConsumeStock), nullptr, false,
                             nestingIsFresh(state) && !state.nestingConsumed)) {

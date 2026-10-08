@@ -34,6 +34,34 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(Sheet, id, material, length, wid
 
 } // namespace rc::nesting
 
+namespace rc::cam {
+
+NLOHMANN_JSON_SERIALIZE_ENUM(ToolKind, {
+    {ToolKind::Router, "router"},
+    {ToolKind::Drill, "drill"},
+})
+NLOHMANN_JSON_SERIALIZE_ENUM(ZeroPlane, {
+    {ZeroPlane::Table, "table"},
+    {ZeroPlane::Top, "top"},
+})
+NLOHMANN_JSON_SERIALIZE_ENUM(CommentStyle, {
+    {CommentStyle::Parentheses, "parentheses"},
+    {CommentStyle::Semicolon, "semicolon"},
+})
+
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(Tool, number, kind, diameter, cuttingLength, rpm,
+                                                feed, plungeFeed, stepDown, name)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(GCodeDialect, name, extension, decimals,
+                                                lineNumbers, lineNumberStep, comments,
+                                                percentLines, zero, header, footer, toolChange,
+                                                spindleOn, drillCycles)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(NestingCenterProfile, tools, contourTool,
+                                                spoilboardCut, safeHeight, clearance,
+                                                climbMilling, rapidSpeed, toolChangeSeconds,
+                                                dialect)
+
+} // namespace rc::cam
+
 namespace rc::storage {
 
 namespace {
@@ -77,26 +105,32 @@ nesting::StockManager loadStock(std::string_view text)
     }
 }
 
-std::string saveNestingSettings(const nesting::NestingSettings& settings)
+std::string saveSettings(const AppSettings& settings)
 {
     json doc;
     doc["format"] = std::string(kSettingsFormat);
     doc["version"] = kSettingsFormatVersion;
-    doc["nesting"] = settings;
+    doc["nesting"] = settings.nesting;
+    doc["cnc"] = settings.cnc;
     return doc.dump(2);
 }
 
-nesting::NestingSettings loadNestingSettings(std::string_view text)
+AppSettings loadSettings(std::string_view text)
 {
     const json doc = detail::parse(text);
     detail::checkHeader(doc, kSettingsFormat, kSettingsFormatVersion);
     try {
-        const auto settings = doc.value("nesting", json::object()).get<nesting::NestingSettings>();
-        nesting::validate(settings);
+        AppSettings settings;
+        settings.nesting = doc.value("nesting", json::object()).get<nesting::NestingSettings>();
+        settings.cnc = doc.value("cnc", json::object()).get<cam::NestingCenterProfile>();
+        nesting::validate(settings.nesting);
+        cam::validate(settings.cnc);
         return settings;
     } catch (const json::exception& e) {
         throw StorageError(std::string("Invalid settings file: ") + e.what());
     } catch (const std::invalid_argument& e) {
+        throw StorageError(e.what());
+    } catch (const cam::CamError& e) {
         throw StorageError(e.what());
     }
 }

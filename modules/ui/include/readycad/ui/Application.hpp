@@ -27,6 +27,11 @@ struct ApplicationConfig {
     /// Writes the PDF documents (default settings, with the cutting plan if one is computed)
     /// and exits — the documents without a click, e.g. for a demo or to check a layout.
     std::optional<std::filesystem::path> exportPdf;
+    /// Writes the CNC programs of the cutting plan (needs `nesting` = 1) into this folder and
+    /// exits.
+    std::optional<std::filesystem::path> exportCnc;
+    bool cncSettings = false;        // open the CNC settings at start
+    bool toolpath = false;           // show the toolpath in the cutting plan window
 
     /// Renders a few frames, saves the window as a .bmp file and exits — for documentation and
     /// automated smoke tests of the GUI. A cutting plan started with `nesting` is finished first.

@@ -92,6 +92,13 @@ enum class ViewFace {
 [[nodiscard]] FlatPart flatten(const core::Panel& panel, const core::ConstructionRules& rules,
                                ViewFace face = ViewFace::Auto);
 
+/// A product with its cut list: where sheet drawings and CNC programs find the part of a cut
+/// list row (nesting parts remember their row).
+struct PartSource {
+    const core::Product& product;
+    const std::vector<CutListRow>& cutList;
+};
+
 /// The unfolded part of a cut list row (its first component, view face chosen automatically).
 /// Throws std::invalid_argument if the row's component is not in the product.
 [[nodiscard]] FlatPart flatPartOf(const core::Product& product, const CutListRow& row);

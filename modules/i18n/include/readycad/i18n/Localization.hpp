@@ -83,6 +83,14 @@ enum class TextId : std::size_t {
     ThreadsHint, MemoryLimit, Defaults,
     // Cutting plan pages
     PageCutting, ColSource, CutsNote, ShowCuts, StackCount,
+    // CNC programs (stage 8): comments in programs, menu, settings, window
+    CamDrilling, CamMilledHoles, CamGrooves, CamContours, MenuExportCnc, MenuCncSettings,
+    CncSettingsWindow, PostprocessorLabel, ZeroPlaneLabel, ZeroTable, ZeroTop, Decimals,
+    LineNumbers, DrillCycles, SafeHeight, ClearanceLabel, SpoilboardCut, ClimbMilling,
+    ContourTool, ToolsHeader, ToolKindLabel, ToolRouter, ToolDrill, CuttingLength, Rpm,
+    FeedRate, PlungeFeed, StepDown, AddTool, ShowToolpath, EstimatedTime, ToolChangesLabel,
+    HolesLabel, MilledHolesLabel, LeftoverTitle, LeftoverEdge, LeftoverBottom, LeftoverNoTool,
+    CncNeedsRouter, CncProgramsDone, Minutes, SecondsShort, Preset,
 
     Count // keep last
 };

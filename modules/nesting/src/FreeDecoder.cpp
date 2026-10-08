@@ -119,10 +119,14 @@ std::optional<Point64> FreeDecoder::position(const OpenSheet& sheet, std::uint32
     const auto score = [&](const Point64& c) {
         return std::tuple(std::max(sheet.maxX, c.x + s.outline.x1), c.y, c.x);
     };
-    return *std::min_element(candidates.begin(), candidates.end(),
-                             [&](const Point64& a, const Point64& b) {
-                                 return score(a) < score(b);
-                             });
+    const Point64 best = *std::min_element(candidates.begin(), candidates.end(),
+                                           [&](const Point64& a, const Point64& b) {
+                                               return score(a) < score(b);
+                                           });
+    // The touch tolerance leaves positions a micrometre off (9.999 instead of 10): round to
+    // 1/100 mm so that layouts and CNC programs show clean numbers. At most 5 µm move.
+    const auto snap = [](std::int64_t v) { return (v >= 0 ? v + 5 : v - 5) / 10 * 10; };
+    return Point64(snap(best.x), snap(best.y));
 }
 
 Decoded FreeDecoder::decode(const Genome& genome) const
