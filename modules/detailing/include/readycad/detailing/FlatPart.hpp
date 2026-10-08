@@ -2,6 +2,8 @@
 
 #include "readycad/core/ConstructionRules.hpp"
 #include "readycad/core/Panel.hpp"
+#include "readycad/core/model/Product.hpp"
+#include "readycad/detailing/CutList.hpp"
 
 #include <array>
 #include <cstddef>
@@ -89,6 +91,10 @@ enum class ViewFace {
 /// Unfolds a panel. Its drillings and grooves must be up to date (detailing applied).
 [[nodiscard]] FlatPart flatten(const core::Panel& panel, const core::ConstructionRules& rules,
                                ViewFace face = ViewFace::Auto);
+
+/// The unfolded part of a cut list row (its first component, view face chosen automatically).
+/// Throws std::invalid_argument if the row's component is not in the product.
+[[nodiscard]] FlatPart flatPartOf(const core::Product& product, const CutListRow& row);
 
 /// True if the panel's local frame (length, width, thickness axes) is right-handed. Looking at
 /// the Top face of such a panel you see local x to the right and local y up.

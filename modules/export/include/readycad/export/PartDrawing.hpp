@@ -50,11 +50,6 @@ struct PartDrawingOptions {
 /// Name of a cut list row as people read it: the user's own name or the kind ("Yan panel").
 [[nodiscard]] std::string partName(const detailing::CutListRow& row);
 
-/// The unfolded part of a cut list row (its first component). Throws std::invalid_argument if
-/// the row's component is not in the product.
-[[nodiscard]] detailing::FlatPart flatPartOf(const core::Product& product,
-                                             const detailing::CutListRow& row);
-
 struct PartsSheetOptions {
     Real textHeight = 20.0; ///< 1:1 drawing, so texts are big
     Real gap = 150.0;       ///< between parts

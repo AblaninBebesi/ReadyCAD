@@ -210,18 +210,6 @@ std::string partName(const detailing::CutListRow& row)
     return row.name.empty() ? std::string(i18n::text(i18n::kindText(row.kind))) : row.name;
 }
 
-FlatPart flatPartOf(const core::Product& product, const detailing::CutListRow& row)
-{
-    if (row.components.empty()) {
-        throw std::invalid_argument("cut list row without components");
-    }
-    const core::FurnitureComponent* component = product.find(row.components.front());
-    if (component == nullptr || !component->hasPanel()) {
-        throw std::invalid_argument("cut list row does not belong to this product");
-    }
-    return detailing::flatten(*component->panel(), product.rules());
-}
-
 Drawing drawAllParts(const core::Product& product,
                      const std::vector<detailing::CutListRow>& cutList,
                      const PartsSheetOptions& options)
@@ -237,7 +225,7 @@ Drawing drawAllParts(const core::Product& product,
         partOptions.textHeight = options.textHeight;
         partOptions.cutContour = options.cutContour;
         partOptions.title = partTitle(i + 1, row);
-        const Drawing part = drawPart(flatPartOf(product, row), partOptions);
+        const Drawing part = drawPart(detailing::flatPartOf(product, row), partOptions);
         const Bounds b = part.bounds(metrics);
         if (x > 0.0 && x + b.size().x > options.rowWidth) {
             x = 0.0;
@@ -282,7 +270,7 @@ std::vector<std::filesystem::path> savePartDxfs(const core::Product& product,
         partOptions.cutContour = options.cutContour;
         partOptions.title = partTitle(i + 1, cutList[i]);
         const std::filesystem::path file = folder / partFileName(i + 1, cutList[i]);
-        saveDxf(drawPart(flatPartOf(product, cutList[i]), partOptions), file);
+        saveDxf(drawPart(detailing::flatPartOf(product, cutList[i]), partOptions), file);
         files.push_back(file);
     }
     return files;

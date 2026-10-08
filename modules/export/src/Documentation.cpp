@@ -4,6 +4,7 @@
 #include "readycad/detailing/HardwareList.hpp"
 #include "readycad/export/PartDrawing.hpp"
 #include "readycad/export/ProductViews.hpp"
+#include "readycad/export/SheetDrawing.hpp"
 #include "readycad/i18n/Labels.hpp"
 
 #include <algorithm>
@@ -677,7 +678,7 @@ Table holeTable(const detailing::FlatPart& part)
 void partPages(Composer& composer, const DocumentationInput& in, std::size_t number,
                const detailing::CutListRow& row, const TextMetrics& metrics)
 {
-    const detailing::FlatPart part = flatPartOf(in.product, row);
+    const detailing::FlatPart part = detailing::flatPartOf(in.product, row);
     const std::string title = std::to_string(number) + ". " + partName(row);
     const Vec2 min = composer.contentMin();
     const Vec2 max = composer.contentMax();
@@ -773,6 +774,241 @@ void partPages(Composer& composer, const DocumentationInput& in, std::size_t num
     }
 }
 
+// --- Cutting plan -----------------------------------------------------------------------------
+
+std::string machineName(nesting::Machine machine)
+{
+    return txt(machine == nesting::Machine::PanelSaw ? TextId::MachinePanelSaw
+                                                     : TextId::MachineNestingCenter);
+}
+
+std::string sourceName(nesting::SheetSource source)
+{
+    switch (source) {
+    case nesting::SheetSource::Remnant:  return txt(TextId::FromRemnant);
+    case nesting::SheetSource::Stock:    return txt(TextId::FromStock);
+    case nesting::SheetSource::Purchase: return txt(TextId::ToPurchase);
+    }
+    return {};
+}
+
+/// "%78": the Turkish way of writing a percentage.
+std::string percent(Real fraction)
+{
+    char buffer[16];
+    std::snprintf(buffer, sizeof buffer, "%%%.0f", fraction * 100.0);
+    return buffer;
+}
+
+/// The machine settings the layouts depend on, in one line.
+std::string machineSettings(const nesting::NestingSettings& s)
+{
+    if (s.machine == nesting::Machine::PanelSaw) {
+        return txt(TextId::Kerf) + " " + mm(s.saw.kerf) + " mm · " + txt(TextId::Trim) + " "
+             + mm(s.saw.trim) + " mm · " + txt(TextId::Stages) + " "
+             + std::to_string(s.saw.maxStages);
+    }
+    return txt(TextId::ToolDiameter) + " " + mm(s.router.toolDiameter) + " mm · "
+         + txt(TextId::SheetMargin) + " " + mm(s.router.margin) + " mm";
+}
+
+/// Overview: machine, sheets per material, every layout. A long list continues on more pages.
+void cuttingOverview(Composer& composer, const DocumentationInput& in, const PartSource& source)
+{
+    const nesting::NestingResult& r = *in.cutting;
+    Canvas canvas = composer.newPage(txt(TextId::PageCutting), txt(TextId::PageCutting));
+    const Vec2 min = composer.contentMin();
+    const Vec2 max = composer.contentMax();
+    const Real width = std::min(220.0, max.x - min.x);
+    Real y = max.y;
+
+    Table facts;
+    facts.header = false;
+    facts.columns = {{"", 1.0}, {"", 2.6}};
+    facts.rows = {
+        {{txt(TextId::Machine), machineName(r.settings.machine)}, true},
+        {{"", machineSettings(r.settings)}},
+        {{txt(TextId::SheetsTotal), std::to_string(r.sheetCount())}},
+        {{txt(TextId::Utilization), percent(r.utilization())}},
+    };
+    y -= drawTable(canvas, Vec2(min.x, y), std::min(width, 150.0), y - min.y, facts, 0).second
+       + kGap;
+
+    Table materials;
+    materials.columns = {{txt(TextId::ColMaterial), 2.4},
+                         {txt(TextId::ColSheetSize), 1.8, HAlign::Right},
+                         {txt(TextId::FromStock), 1.1, HAlign::Right},
+                         {txt(TextId::FromRemnant), 1.1, HAlign::Right},
+                         {txt(TextId::ToPurchase), 1.4, HAlign::Right},
+                         {txt(TextId::Utilization), 1.1, HAlign::Right},
+                         {txt(TextId::NewRemnants), 1.1, HAlign::Right}};
+    for (const nesting::MaterialUsage& u : r.usage()) {
+        std::string size = "—";
+        for (const nesting::SheetLayout& l : r.layouts) {
+            if (nesting::sameMaterial(l.sheet.material, u.material)
+                && l.source != nesting::SheetSource::Remnant) {
+                size = sizeText(l.sheet.length, l.sheet.width);
+                break;
+            }
+        }
+        materials.rows.push_back({{u.material.name, size, std::to_string(u.stock),
+                                   std::to_string(u.remnants), std::to_string(u.purchase),
+                                   percent(u.utilization()), std::to_string(u.newRemnants)}});
+    }
+    y -= drawTable(canvas, Vec2(min.x, y), width, y - min.y, materials, 0).second + kGap;
+
+    if (!r.unplaced.empty()) {
+        canvas.text(Vec2(min.x, y), txt(TextId::Unplaced), kBody, true, HAlign::Left, VAlign::Top);
+        y -= kBody + 2.5;
+        for (const nesting::NestingResult::Unplaced& u : r.unplaced) {
+            const nesting::NestingPart& p = r.parts[u.part];
+            const nesting::Rect box = nesting::bounds(p.outline);
+            canvas.text(Vec2(min.x, y),
+                        "• " + p.label + ". " + placedPartName(r, u.part, &source) + "  "
+                            + sizeText(box.width(), box.height()) + "  ×"
+                            + std::to_string(u.quantity),
+                        kTable, false, HAlign::Left, VAlign::Top);
+            y -= kTable * 1.9;
+        }
+        y -= kGap - kTable;
+    }
+
+    Table sheets;
+    sheets.columns = {{txt(TextId::ColNo), 0.6, HAlign::Right},
+                      {txt(TextId::ColMaterial), 2.4},
+                      {txt(TextId::ColSheetSize), 1.8, HAlign::Right},
+                      {txt(TextId::ColQuantity), 0.9, HAlign::Right},
+                      {txt(TextId::PartsOnSheet), 1.5, HAlign::Right},
+                      {txt(TextId::Utilization), 1.1, HAlign::Right},
+                      {txt(TextId::ColSource), 1.5}};
+    for (std::size_t i = 0; i < r.layouts.size(); ++i) {
+        const nesting::SheetLayout& l = r.layouts[i];
+        sheets.rows.push_back({{std::to_string(i + 1), l.sheet.material.name,
+                                sizeText(l.sheet.length, l.sheet.width), std::to_string(l.count),
+                                std::to_string(l.parts.size()), percent(l.utilization()),
+                                sourceName(l.source)}});
+    }
+    std::size_t next = 0;
+    if (y - min.y > 4.0 * kRow) {
+        next = drawTable(canvas, Vec2(min.x, y), width, y - min.y, sheets, 0).first;
+    }
+    while (next < sheets.rows.size()) {
+        Canvas more = composer.newPage(txt(TextId::PageCutting) + " " + txt(TextId::Continued), {});
+        next = drawTable(more, Vec2(min.x, max.y), width, max.y - min.y, sheets, next).first;
+    }
+}
+
+/// One sheet layout: the cutting map as large as it fits, its facts and the parts on it.
+void cuttingSheetPage(Composer& composer, const DocumentationInput& in, const PartSource& source,
+                      std::size_t index)
+{
+    const nesting::NestingResult& r = *in.cutting;
+    const nesting::SheetLayout& l = r.layouts[index];
+    const Vec2 min = composer.contentMin();
+    const Vec2 max = composer.contentMax();
+    const bool side = max.x - min.x >= 230.0;
+    const Real infoWidth = side ? 78.0 : max.x - min.x;
+    const Vec2 drawMin = side ? min : Vec2(min.x, min.y + (max.y - min.y) * 0.4 + kGap);
+    const Vec2 drawMax = side ? Vec2(max.x - infoWidth - kGap, max.y) : max;
+
+    // Labels stay inside the sheet: the sheet itself decides the scale.
+    const int denominator = chooseScale([&](Real s) {
+        return l.sheet.length * s <= drawMax.x - drawMin.x
+            && l.sheet.width * s + 4.0 <= drawMax.y - drawMin.y;
+    });
+    const Real s = 1.0 / denominator;
+    SheetDrawingOptions options;
+    options.textHeight = kTable / s;
+    options.partDetails = false;
+    options.fills = true;
+    const Drawing map = drawSheetLayout(r, index, &source, options);
+
+    const std::string title = sheetTitle(r, index);
+    Canvas canvas = composer.newPage(txt(TextId::PageCutting) + ": " + title,
+                                     txt(TextId::SheetLabel) + " " + std::to_string(index + 1));
+    composer.setScale(scaleText(denominator));
+    const Vec2 offset((drawMin.x + drawMax.x) / 2.0 - l.sheet.length * s / 2.0,
+                      drawMax.y - l.sheet.width * s);
+    canvas.drawing().append(map, s, offset);
+    if (r.settings.machine == nesting::Machine::PanelSaw) {
+        canvas.text(Vec2(offset.x, offset.y - 1.5), txt(TextId::CutsNote), kSmall, false,
+                    HAlign::Left, VAlign::Top, true);
+    }
+
+    const Vec2 infoTopLeft = side ? Vec2(max.x - infoWidth, max.y)
+                                  : Vec2(min.x, offset.y - kGap - 3.0);
+    std::string remnants;
+    for (const nesting::Rect& rest : l.remnants) {
+        remnants += (remnants.empty() ? "" : ", ") + sizeText(rest.width(), rest.height());
+    }
+    Table facts;
+    facts.header = false;
+    facts.textHeight = 2.0;
+    facts.columns = {{"", 1.0}, {"", 1.6}};
+    facts.rows = {
+        {{txt(TextId::ColMaterial), l.sheet.material.name}, true},
+        {{txt(TextId::ColSheetSize), sizeText(l.sheet.length, l.sheet.width) + " mm"}},
+        {{txt(TextId::ColQuantity), std::to_string(l.count) + "  (" + sourceName(l.source) + ")"}},
+        {{txt(TextId::Utilization), percent(l.utilization())}},
+        {{txt(TextId::Remnant), remnants.empty() ? "—" : remnants}},
+    };
+    if (r.settings.machine == nesting::Machine::PanelSaw) {
+        const int perStack = nesting::sheetsPerStack(r.settings.saw, l.sheet.material.thickness);
+        const int stacks = (l.count + perStack - 1) / perStack;
+        facts.rows.push_back(
+            {{txt(TextId::StackCount), std::to_string(stacks)}});
+    }
+    Real y = infoTopLeft.y;
+    y -= drawTable(canvas, infoTopLeft, infoWidth, y - min.y, facts, 0).second + kGap;
+
+    // The parts of one sheet, counted.
+    std::vector<std::pair<std::size_t, int>> counts;
+    for (const nesting::PlacedPart& p : l.parts) {
+        const auto it = std::find_if(counts.begin(), counts.end(),
+                                     [&](const auto& c) { return c.first == p.part; });
+        if (it == counts.end()) {
+            counts.emplace_back(p.part, 1);
+        } else {
+            ++it->second;
+        }
+    }
+    std::sort(counts.begin(), counts.end()); // in cut list order
+    Table parts;
+    parts.textHeight = 2.0;
+    parts.columns = {{txt(TextId::ColNo), 0.6, HAlign::Right},
+                     {txt(TextId::ColPart), 2.0},
+                     {txt(TextId::ColCut), 1.7, HAlign::Right},
+                     {txt(TextId::ColQuantity), 0.7, HAlign::Right}};
+    for (const auto& [part, count] : counts) {
+        const nesting::Rect box = nesting::bounds(r.parts[part].outline);
+        parts.rows.push_back({{r.parts[part].label, placedPartName(r, part, &source),
+                               sizeText(box.width(), box.height()), std::to_string(count)}});
+    }
+    canvas.text(Vec2(infoTopLeft.x, y), txt(TextId::PartsOnSheet), kBody, true, HAlign::Left,
+                VAlign::Top);
+    y -= kBody + 2.5;
+    std::size_t next =
+        drawTable(canvas, Vec2(infoTopLeft.x, y), infoWidth, y - min.y, parts, 0).first;
+    while (next < parts.rows.size()) {
+        Canvas more = composer.newPage(txt(TextId::PageCutting) + ": " + title + " "
+                                           + txt(TextId::Continued),
+                                       {});
+        composer.setScale(scaleText(denominator));
+        next = drawTable(more, Vec2(min.x, max.y), std::min(max.x - min.x, 160.0), max.y - min.y,
+                         parts, next)
+                   .first;
+    }
+}
+
+void cuttingPages(Composer& composer, const DocumentationInput& in)
+{
+    const PartSource source{in.product, in.cutList};
+    cuttingOverview(composer, in, source);
+    for (std::size_t i = 0; i < in.cutting->layouts.size(); ++i) {
+        cuttingSheetPage(composer, in, source, i);
+    }
+}
+
 } // namespace
 
 // ---------------------------------------------------------------------------------------------
@@ -813,6 +1049,9 @@ PageSet buildDocumentation(const DocumentationInput& in, const DocumentationOpti
     }
     if (options.hardware) {
         hardwarePage(composer, in);
+    }
+    if (options.cuttingPlan && in.cutting != nullptr && !in.cutting->layouts.empty()) {
+        cuttingPages(composer, in);
     }
     if (options.assembly) {
         assemblyPage(composer, in, metrics);

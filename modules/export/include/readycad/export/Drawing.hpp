@@ -124,6 +124,16 @@ public:
 // Drawing
 // ---------------------------------------------------------------------------------------------
 
+/// Scale, then turn counter-clockwise about the origin, then move:
+/// p' = rotate(p * scale, angle) + offset. Multiples of 90° are exact.
+struct Transform2D {
+    Real scale = 1.0;
+    Real angle = 0.0; ///< degrees, counter-clockwise
+    Vec2 offset{0.0};
+
+    [[nodiscard]] Vec2 apply(Vec2 p) const noexcept;
+};
+
 struct Bounds {
     Vec2 min{0.0};
     Vec2 max{0.0};
@@ -158,7 +168,12 @@ public:
 
     /// Copies `other` into this drawing as p' = p * scale + offset (texts and dimensions are
     /// scaled too, dimensions keep showing their real length). Layers are merged by name.
-    void append(const Drawing& other, Real scale = 1.0, Vec2 offset = Vec2(0.0));
+    void append(const Drawing& other, Real scale = 1.0, Vec2 offset = Vec2(0.0))
+    {
+        append(other, Transform2D{scale, 0.0, offset});
+    }
+    /// The same with a rotation: texts turn with the drawing (a part turned on a sheet).
+    void append(const Drawing& other, const Transform2D& transform);
 
     /// Extent of everything, texts included (estimated with `metrics`).
     [[nodiscard]] Bounds bounds(const TextMetrics& metrics) const;

@@ -65,6 +65,24 @@ enum class TextId : std::size_t {
     HwEccentric, HwShelfSupport, HwHinge, HwHandle, HwDrawerSlide, ViewFrontClosed,
     ViewFrontOpen, ViewSection, FaceA, FaceB, ViewFrom, HoleTable, ColSide, ColDiameter,
     ColDepth, ColType, SideEdge, OriginNote, TitleBlock, HardwareList,
+    // Cutting and nesting (stage 7): menu, windows
+    MenuCutting, MenuRunNesting, MenuNestingSettings, MenuConsumeStock, MenuShowNesting,
+    MenuShowStock, MenuExportSheetsDxf, WindowNesting, WindowStock, NestingSettingsWindow,
+    // Cutting plan window
+    Machine, MachinePanelSaw, MachineNestingCenter, ProductCount, Calculate, Stop,
+    SettingsButton, Generation, Utilization, Computing, NestingStale, NestingEmpty, SheetsTotal,
+    FromStock, FromRemnant, ToPurchase, NewRemnants, Unplaced, Remnant, SheetLabel, Stacks,
+    ConsumeTitle, ConsumeBody, ConsumeDone, CacheMemory, PartsOnSheet,
+    // Stock window
+    ColSheetSize, ColKind, SheetFull, ColNote, AddSheet, StandardSheet, MinRemnant, StockFile,
+    Length, StockEmpty,
+    // Cutting settings
+    SawSettings, Kerf, Trim, Stages, StackHeight, FirstCuts, AlongLength, AlongWidth,
+    AutoDirection, RouterSettings, ToolDiameter, ExtraSpacing, SheetMargin, GaSettings,
+    Population, Generations, MutationRate, Elites, Seed, ComputeResources, Threads,
+    ThreadsHint, MemoryLimit, Defaults,
+    // Cutting plan pages
+    PageCutting, ColSource, CutsNote, ShowCuts, StackCount,
 
     Count // keep last
 };

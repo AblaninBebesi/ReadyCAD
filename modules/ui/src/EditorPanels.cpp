@@ -783,15 +783,24 @@ bool saveDocument(UiState& state, bool forceDialog)
     return run(state, [&] { doc.save(); });
 }
 
+void setDocument(UiState& state, std::unique_ptr<ed::Document> document)
+{
+    state.document = std::move(document);
+    ++state.documentSerial;
+    state.fitRequested = true;
+    state.sceneValid = false;
+    // A cutting plan belongs to its product: the new document starts without one.
+    state.nestingRun.reset();
+    state.nesting.reset();
+    state.nestingMessage.clear();
+}
+
 void newDocument(UiState& state, core::CatalogItem item)
 {
     const core::ConstructionRules rules =
         state.document ? state.document->product().rules() : core::ConstructionRules{};
     run(state, [&] {
-        state.document =
-            std::make_unique<ed::Document>(ed::Document::fromCatalog(item, rules));
-        state.fitRequested = true;
-        state.sceneValid = false;
+        setDocument(state, std::make_unique<ed::Document>(ed::Document::fromCatalog(item, rules)));
     });
 }
 
@@ -801,11 +810,7 @@ void openDocument(UiState& state)
     if (!path) {
         return;
     }
-    run(state, [&] {
-        state.document = std::make_unique<ed::Document>(ed::Document::open(*path));
-        state.fitRequested = true;
-        state.sceneValid = false;
-    });
+    run(state, [&] { setDocument(state, std::make_unique<ed::Document>(ed::Document::open(*path))); });
 }
 
 void loadProfile(UiState& state)
@@ -858,11 +863,17 @@ void exported(UiState& state, std::string message, const std::filesystem::path& 
 
 void writePdf(UiState& state)
 {
-    const ed::Document& doc = *state.document;
-    const auto path = showSaveDialog(FileKind::Pdf, exportBaseName(doc) + ".pdf");
-    if (!path) {
-        return;
+    const auto path = showSaveDialog(FileKind::Pdf, exportBaseName(*state.document) + ".pdf");
+    if (path && writePdfFile(state, *path)) {
+        exported(state, tr(TextId::ExportDoneFile), *path, state.openAfterExport);
     }
+}
+
+} // namespace
+
+bool writePdfFile(UiState& state, const std::filesystem::path& path)
+{
+    const ed::Document& doc = *state.document;
     if (!state.pdfFonts) {
         state.pdfFonts = exporting::findPdfFonts();
     }
@@ -870,14 +881,13 @@ void writePdf(UiState& state)
     if (doc.product().name().empty() && !doc.path().empty()) {
         options.productName = toUtf8(doc.path().stem());
     }
-    const exporting::DocumentationInput input{doc.product(), doc.cutList(), doc.edgeUsage(),
-                                              doc.detailingReport()};
-    if (run(state, [&] { exporting::saveDocumentationPdf(input, options, *path, *state.pdfFonts); })) {
-        exported(state, tr(TextId::ExportDoneFile), *path, state.openAfterExport);
+    exporting::DocumentationInput input{doc.product(), doc.cutList(), doc.edgeUsage(),
+                                        doc.detailingReport()};
+    if (nestingIsFresh(state)) {
+        input.cutting = &*state.nesting; // only a plan that belongs to this product as it is now
     }
+    return run(state, [&] { exporting::saveDocumentationPdf(input, options, path, *state.pdfFonts); });
 }
-
-} // namespace
 
 void exportPdf(UiState& state)
 {
@@ -1177,6 +1187,17 @@ void drawPdfPopup(UiState& state)
         ImGui::Checkbox(tr(TextId::PageHardware), &o.hardware);
         ImGui::Checkbox(tr(TextId::PageAssembly), &o.assembly);
         ImGui::Checkbox(tr(TextId::PagePart), &o.partDrawings);
+        const bool cutting = nestingIsFresh(state) && !state.nesting->layouts.empty();
+        ImGui::BeginDisabled(!cutting);
+        bool cuttingPlan = cutting && o.cuttingPlan;
+        if (ImGui::Checkbox(tr(TextId::PageCutting), &cuttingPlan)) {
+            o.cuttingPlan = cuttingPlan;
+        }
+        ImGui::EndDisabled();
+        if (!cutting) {
+            ImGui::SameLine();
+            ImGui::TextDisabled("(%s)", tr(TextId::Calculate));
+        }
 
         ImGui::SeparatorText(tr(TextId::TitleBlock));
         ImGui::SetNextItemWidth(ImGui::GetFontSize() * 16.0f);
@@ -1187,7 +1208,8 @@ void drawPdfPopup(UiState& state)
         ImGui::Checkbox(tr(TextId::OpenAfterExport), &state.openAfterExport);
         ImGui::Spacing();
 
-        const bool any = o.summary || o.cutList || o.hardware || o.assembly || o.partDrawings;
+        const bool any = o.summary || o.cutList || o.hardware || o.assembly || o.partDrawings
+                      || (cutting && o.cuttingPlan);
         ImGui::BeginDisabled(!any);
         if (ImGui::Button(tr(TextId::ExportButton))) {
             write = true;

@@ -2,6 +2,8 @@
 
 #include "readycad/core/ConstructionRules.hpp"
 #include "readycad/core/model/Product.hpp"
+#include "readycad/nesting/Nesting.hpp"
+#include "readycad/nesting/Stock.hpp"
 
 #include <filesystem>
 #include <memory>
@@ -19,6 +21,8 @@ public:
 
 inline constexpr int kProjectFormatVersion = 1;
 inline constexpr int kProfileFormatVersion = 1;
+inline constexpr int kStockFormatVersion = 1;
+inline constexpr int kSettingsFormatVersion = 1;
 
 // --- Workshop profile (*.rcprofile): ConstructionRules incl. the handle catalogue -------------
 
@@ -35,9 +39,29 @@ inline constexpr int kProfileFormatVersion = 1;
 /// Returns a fully laid-out product.
 [[nodiscard]] std::shared_ptr<core::Product> loadProduct(std::string_view json);
 
+// --- Stock of sheets and remnants (stock.rcstock, stage 7) -------------------------------------
+//
+// Belongs to the workshop, not to a project: one file in userDataFolder(), shared by all
+// projects, so the remnants of one job are offered to the next.
+
+[[nodiscard]] std::string saveStock(const nesting::StockManager& stock);
+[[nodiscard]] nesting::StockManager loadStock(std::string_view json);
+
+// --- Application settings (settings.json): cutting machines and the optimiser ----------------
+
+[[nodiscard]] std::string saveNestingSettings(const nesting::NestingSettings& settings);
+/// Missing fields keep their defaults; throws StorageError for broken files or invalid values.
+[[nodiscard]] nesting::NestingSettings loadNestingSettings(std::string_view json);
+
 // --- Files (UTF-8 paths) ----------------------------------------------------------------------
 
+/// Writes to "<path>.tmp" and then renames it over `path`: a crash or a full disk while writing
+/// never leaves a half-written project or stock file behind.
 void writeTextFile(const std::filesystem::path& path, std::string_view content);
 [[nodiscard]] std::string readTextFile(const std::filesystem::path& path);
+
+/// Where files of the user (not of a project) live: %APPDATA%\ReadyCAD on Windows,
+/// $XDG_CONFIG_HOME/ReadyCAD or ~/.config/ReadyCAD elsewhere. Not created here.
+[[nodiscard]] std::filesystem::path userDataFolder();
 
 } // namespace rc::storage

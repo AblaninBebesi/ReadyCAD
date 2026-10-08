@@ -1,0 +1,121 @@
+// Stage 7: files of the workshop — the stock of sheets and remnants, the cutting settings —
+// and the safe (write, then rename) saving of every file.
+
+#include "readycad/storage/Storage.hpp"
+#include "readycad/test/TempFolder.hpp"
+
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
+
+#include <filesystem>
+
+using namespace rc::storage;
+using namespace rc::nesting;
+using rc::core::Material;
+using rc::core::MaterialType;
+
+TEST_CASE("The stock survives save and load", "[storage][stock]")
+{
+    StockManager stock;
+    stock.standardLength = 3660;
+    stock.standardWidth = 1830;
+    stock.remnantRules.minLength = 400;
+    stock.remnantRules.minWidth = 150;
+    const SheetId full = stock.add(
+        Sheet{0, Material{"Suntalam 18", MaterialType::Chipboard, 18.0, true}, 2800, 2100, 12,
+              false, {}});
+    const SheetId remnant = stock.add(
+        Sheet{0, Material{"MDF Lam 18", MaterialType::MDF, 18.0, false}, 1430.5, 610, 1, true,
+              "Şifonyer · 08.10.2026"});
+
+    const StockManager loaded = loadStock(saveStock(stock));
+    REQUIRE(loaded.sheets().size() == 2);
+    CHECK(loaded.standardLength == 3660);
+    CHECK(loaded.standardWidth == 1830);
+    CHECK(loaded.remnantRules.minLength == 400);
+    CHECK(loaded.remnantRules.minWidth == 150);
+    const Sheet* a = loaded.find(full);
+    const Sheet* b = loaded.find(remnant);
+    REQUIRE(a);
+    REQUIRE(b);
+    CHECK(a->quantity == 12);
+    CHECK(a->material.hasGrain);
+    CHECK(a->material.type == MaterialType::Chipboard);
+    CHECK(b->length == 1430.5);
+    CHECK(b->remnant);
+    CHECK(b->note == "Şifonyer · 08.10.2026");
+
+    // New sheets get ids after the loaded ones.
+    StockManager next = loaded;
+    CHECK(next.add(Sheet{0, a->material, 1000, 500, 1, true, "x"}) > std::max(full, remnant));
+}
+
+TEST_CASE("Broken stock files are rejected", "[storage][stock]")
+{
+    CHECK_THROWS_AS(loadStock("{"), StorageError);
+    CHECK_THROWS_AS(loadStock(R"({"format": "readycad-profile", "version": 1})"), StorageError);
+    CHECK_THROWS_AS(loadStock(R"({"format": "readycad-stock", "version": 99})"), StorageError);
+    CHECK_THROWS_WITH(
+        loadStock(R"({"format": "readycad-stock", "version": 1,
+                      "sheets": [{"id": 1, "length": 100, "width": 100},
+                                 {"id": 1, "length": 200, "width": 100}]})"),
+        Catch::Matchers::ContainsSubstring("Inconsistent stock file"));
+    // An empty stock is fine: the defaults.
+    const StockManager empty = loadStock(R"({"format": "readycad-stock", "version": 1})");
+    CHECK(empty.sheets().empty());
+    CHECK(empty.standardLength == 2800);
+}
+
+TEST_CASE("Cutting settings survive save and load", "[storage][settings]")
+{
+    NestingSettings s;
+    s.machine = Machine::NestingCenter;
+    s.saw.kerf = 3.2;
+    s.saw.maxStages = 4;
+    s.saw.firstCuts = CutDirection::Auto;
+    s.router.toolDiameter = 10.0;
+    s.router.extraSpacing = 1.5;
+    s.optimizer.populationSize = 50;
+    s.optimizer.threads = 6;
+    s.optimizer.memoryLimitMb = 1024;
+    s.optimizer.seed = 123456789012345ULL;
+
+    const NestingSettings l = loadNestingSettings(saveNestingSettings(s));
+    CHECK(l.machine == Machine::NestingCenter);
+    CHECK(l.saw.kerf == 3.2);
+    CHECK(l.saw.maxStages == 4);
+    CHECK(l.saw.firstCuts == CutDirection::Auto);
+    CHECK(l.router.toolDiameter == 10.0);
+    CHECK(l.router.extraSpacing == 1.5);
+    CHECK(l.optimizer.populationSize == 50);
+    CHECK(l.optimizer.threads == 6);
+    CHECK(l.optimizer.memoryLimitMb == 1024);
+    CHECK(l.optimizer.seed == 123456789012345ULL);
+
+    // Older files without a field keep the default; impossible values are refused.
+    const NestingSettings partial = loadNestingSettings(
+        R"({"format": "readycad-settings", "version": 1, "nesting": {"saw": {"kerf": 4.0}}})");
+    CHECK(partial.saw.kerf == 4.0);
+    CHECK(partial.saw.trim == NestingSettings{}.saw.trim);
+    CHECK_THROWS_AS(loadNestingSettings(R"({"format": "readycad-settings", "version": 1,
+                                            "nesting": {"saw": {"maxStages": 7}}})"),
+                    StorageError);
+}
+
+TEST_CASE("Files are replaced in one step", "[storage][file]")
+{
+    const rc::test::TempFolder folder("atomic_write");
+    const auto file = folder.path() / "depo.rcstock";
+    writeTextFile(file, "first version, longer than the second");
+    writeTextFile(file, "second");
+    CHECK(readTextFile(file) == "second");
+    CHECK_FALSE(std::filesystem::exists(folder.path() / "depo.rcstock.tmp"));
+    CHECK_THROWS_AS(writeTextFile(folder.path() / "missing" / "x.json", "{}"), StorageError);
+}
+
+TEST_CASE("User files live in a ReadyCAD folder", "[storage][file]")
+{
+    const std::filesystem::path folder = userDataFolder();
+    CHECK(folder.filename() == "ReadyCAD");
+    CHECK(folder.is_absolute());
+}

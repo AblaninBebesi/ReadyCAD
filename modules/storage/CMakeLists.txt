@@ -1,9 +1,12 @@
 rc_add_module(storage
     SOURCES
         src/Storage.cpp
+        src/Workshop.cpp
     DEPENDS
         readycad::core
+        readycad::nesting
     PRIVATE_DEPENDS
         nlohmann_json::nlohmann_json
     TESTS
-        tests/StorageTests.cpp)
+        tests/StorageTests.cpp
+        tests/WorkshopFilesTests.cpp)

@@ -59,9 +59,10 @@ Polyline arrowHead(Vec2 tip, Vec2 direction, Real size)
     return Polyline{{tip, back + side, back - side}, true, true};
 }
 
-Shape transformed(const Shape& shape, Real s, Vec2 offset)
+Shape transformed(const Shape& shape, const Transform2D& t)
 {
-    const auto p = [&](Vec2 v) { return v * s + offset; };
+    const Real s = t.scale;
+    const auto p = [&](Vec2 v) { return t.apply(v); };
     return std::visit(
         [&](const auto& e) -> Shape {
             using T = std::decay_t<decltype(e)>;
@@ -79,6 +80,7 @@ Shape transformed(const Shape& shape, Real s, Vec2 offset)
             } else if constexpr (std::is_same_v<T, Text>) {
                 copy.position = p(e.position);
                 copy.height = e.height * s;
+                copy.angle = e.angle + t.angle;
             } else {
                 if (copy.text.empty()) {
                     copy.text = dimensionText(e); // the real length, not the length on paper
@@ -206,7 +208,23 @@ void Drawing::rectangle(std::size_t layer, Vec2 min, Vec2 max, bool filled)
     add(layer, Polyline{{min, {max.x, min.y}, max, {min.x, max.y}}, true, filled});
 }
 
-void Drawing::append(const Drawing& other, Real scale, Vec2 offset)
+Vec2 Transform2D::apply(Vec2 p) const noexcept
+{
+    const Vec2 v = p * scale;
+    // Quarter turns without sin/cos: a part turned on a sheet keeps exact coordinates.
+    const Real quarters = angle / 90.0;
+    if (std::abs(quarters - std::round(quarters)) < 1e-12) {
+        switch (((static_cast<long long>(std::llround(quarters)) % 4) + 4) % 4) {
+        case 1: return Vec2(-v.y, v.x) + offset;
+        case 2: return Vec2(-v.x, -v.y) + offset;
+        case 3: return Vec2(v.y, -v.x) + offset;
+        default: return v + offset;
+        }
+    }
+    return rotate(v, angle) + offset;
+}
+
+void Drawing::append(const Drawing& other, const Transform2D& transform)
 {
     std::vector<std::size_t> remap;
     remap.reserve(other.layers_.size());
@@ -215,7 +233,7 @@ void Drawing::append(const Drawing& other, Real scale, Vec2 offset)
     }
     entities_.reserve(entities_.size() + other.entities_.size());
     for (const Entity& e : other.entities_) {
-        entities_.push_back({remap[e.layer], transformed(e.shape, scale, offset)});
+        entities_.push_back({remap[e.layer], transformed(e.shape, transform)});
     }
 }
 

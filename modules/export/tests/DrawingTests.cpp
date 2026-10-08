@@ -73,6 +73,31 @@ TEST_CASE("Appending scales and moves everything, layers are merged", "[export][
     CHECK(text.position == Vec2(20.0, 36.0));
 }
 
+TEST_CASE("Appending with a quarter turn is exact, texts turn too", "[export][drawing]")
+{
+    Drawing part;
+    const std::size_t visible = part.addLayer(kVisible);
+    part.rectangle(visible, Vec2(0.0), Vec2(762.0, 518.0));
+    part.text(visible, {.position = Vec2(10.0, 20.0), .text = "3", .height = 20.0});
+    part.dimension(visible, {.a = Vec2(0.0), .b = Vec2(762.0, 0.0), .offset = -30.0});
+
+    Drawing sheet;
+    sheet.append(part, Transform2D{1.0, 90.0, Vec2(600.0, 10.0)}); // as a part turned on a sheet
+
+    const auto& rect = std::get<Polyline>(sheet.entities()[0].shape);
+    CHECK(rect.points[1] == Vec2(600.0, 772.0)); // (762, 0) -> (0, 762) + offset, no rounding
+    CHECK(rect.points[2] == Vec2(82.0, 772.0));
+    const auto& text = std::get<Text>(sheet.entities()[1].shape);
+    CHECK(text.position == Vec2(580.0, 20.0));
+    CHECK(text.angle == Approx(90.0));
+    const auto& dim = std::get<Dimension>(sheet.entities()[2].shape);
+    CHECK(dim.b == Vec2(600.0, 772.0));
+    CHECK(dim.text == "762"); // frozen before turning
+
+    CHECK(Transform2D{2.0, 180.0, Vec2(1.0, 1.0)}.apply(Vec2(3.0, 4.0)) == Vec2(-5.0, -7.0));
+    CHECK(Transform2D{1.0, 45.0, Vec2(0.0)}.apply(Vec2(1.0, 0.0)).x == Approx(std::sqrt(0.5)));
+}
+
 TEST_CASE("Bounds include texts and dimensions", "[export][drawing]")
 {
     Drawing d;

@@ -1,5 +1,6 @@
 #include "readycad/storage/Storage.hpp"
 
+#include "Json.hpp"
 #include "readycad/core/model/Drawer.hpp"
 
 #include <nlohmann/json.hpp>
@@ -9,108 +10,20 @@
 
 using nlohmann::json;
 
-// =============================================================================================
-// JSON mapping of the plain data types. The macros generate to_json/from_json; they must live
-// in the types' namespace so that nlohmann finds them (argument-dependent lookup).
-// "_WITH_DEFAULT": a field missing in the file keeps its default value.
-// =============================================================================================
-
-namespace rc::core {
-
-NLOHMANN_JSON_SERIALIZE_ENUM(MaterialType, {
-    {MaterialType::Chipboard, "chipboard"},
-    {MaterialType::MDF, "mdf"},
-    {MaterialType::HDF, "hdf"},
-    {MaterialType::Plywood, "plywood"},
-})
-NLOHMANN_JSON_SERIALIZE_ENUM(HandleType, {
-    {HandleType::Bar, "bar"},
-    {HandleType::Knob, "knob"},
-})
-NLOHMANN_JSON_SERIALIZE_ENUM(ConstructionRules::JointFastener, {
-    {ConstructionRules::JointFastener::Confirmat, "confirmat"},
-    {ConstructionRules::JointFastener::Eccentric, "eccentric"},
-    {ConstructionRules::JointFastener::Dowel, "dowel"},
-})
-NLOHMANN_JSON_SERIALIZE_ENUM(JointType, {
-    {JointType::Overlay, "overlay"},
-    {JointType::Inset, "inset"},
-})
-NLOHMANN_JSON_SERIALIZE_ENUM(BackMountType, {
-    {BackMountType::Groove, "groove"},
-    {BackMountType::Overlay, "overlay"},
-    {BackMountType::Inset, "inset"},
-})
-NLOHMANN_JSON_SERIALIZE_ENUM(ShelfMount, {
-    {ShelfMount::Supports, "supports"},
-    {ShelfMount::Confirmat, "confirmat"},
-})
-NLOHMANN_JSON_SERIALIZE_ENUM(HingeSide, {
-    {HingeSide::Left, "left"},
-    {HingeSide::Right, "right"},
-})
-NLOHMANN_JSON_SERIALIZE_ENUM(HandleOrientation, {
-    {HandleOrientation::Vertical, "vertical"},
-    {HandleOrientation::Horizontal, "horizontal"},
-})
-NLOHMANN_JSON_SERIALIZE_ENUM(HandleAnchor, {
-    {HandleAnchor::Top, "top"},
-    {HandleAnchor::Center, "center"},
-    {HandleAnchor::Bottom, "bottom"},
-})
-NLOHMANN_JSON_SERIALIZE_ENUM(Axis, {
-    {Axis::X, "x"},
-    {Axis::Y, "y"},
-    {Axis::Z, "z"},
-})
-
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(Material, name, type, thickness, hasGrain)
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(EdgeBand, thickness, name)
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(Size3D, width, height, depth)
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(HandleModel, id, name, supplier, article, type,
-                                                holeSpacing, holeDiameter, length, width,
-                                                projection)
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(HandlePlacement, modelId, orientation, anchor,
-                                                edgeOffset, anchorOffset)
-
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(ConstructionRules::System32, pitch,
-                                                frontRowOffset, rearRowMinOffset, snapShelves)
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(ConstructionRules::Joints, fastener,
-                                                alignmentDowels, endOffset, maxSpacing)
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(ConstructionRules::Confirmat, faceDiameter,
-                                                edgeDiameter, length)
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(ConstructionRules::Dowel, diameter, length,
-                                                faceDepth)
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(ConstructionRules::Eccentric, camDiameter,
-                                                camDepth, camDistance, channelDiameter,
-                                                boltHoleDiameter, boltHoleDepth)
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(ConstructionRules::ShelfSupport, diameter, depth,
-                                                holeBelowShelf, extraHoles)
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(ConstructionRules::Hinge, cupDiameter, cupDepth,
-                                                cupEdgeDistance, endOffset, plateHoleDiameter,
-                                                plateHoleDepth, plateHoleSpacing, heightLimits)
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(ConstructionRules::Handles, catalog,
-                                                defaultDoorHandle, defaultDrawerHandle,
-                                                drillOnMachine, minEdgeDistance)
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(ConstructionRules::Cutting, premillAllowance,
-                                                rounding, edgeTrimAllowance)
-
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
-    ConstructionRules, carcassMaterial, backMaterial, frontMaterial, drawerBoxMaterial,
-    drawerBottomMaterial, visibleEdge, hiddenEdge, backGrooveDepth, backGrooveOffset,
-    backGrooveWidth, backExpansionGap, backOverlayInset, shelfSideGap, shelfFrontSetback,
-    shelfBackGap, confirmatShelfFrontSetback, confirmatShelfBackGap, partitionFrontSetback,
-    frontEdgeGap, frontGap, drawerSlideClearance, drawerBoxBottomClearance, drawerBoxTopClearance,
-    drawerBoxMaxHeight, drawerRearClearance, drawerSlideLengths, system32, joints, confirmat,
-    dowel, eccentric, shelfSupport, hinge, minWallBetweenHoles, handles, cutting)
-
-} // namespace rc::core
-
 namespace rc::storage {
 
 using namespace rc::core;
+using detail::checkHeader;
+using detail::parse;
 
 namespace {
+
+/// Paths in messages: UTF-8 also for Turkish names (path::string() may throw on Windows).
+std::string toUtf8(const std::filesystem::path& path)
+{
+    const std::u8string text = path.u8string();
+    return {text.begin(), text.end()};
+}
 
 constexpr std::string_view kProjectFormat = "readycad-project";
 constexpr std::string_view kProfileFormat = "readycad-profile";
@@ -354,26 +267,6 @@ void readCarcass(const json& in, Carcass& carcass)
     readSection(in.at("interior"), carcass.interior());
 }
 
-json parse(std::string_view text)
-{
-    try {
-        return json::parse(text);
-    } catch (const json::exception& e) {
-        throw StorageError(std::string("Invalid JSON: ") + e.what());
-    }
-}
-
-void checkHeader(const json& doc, std::string_view format, int supportedVersion)
-{
-    if (!doc.is_object() || doc.value("format", std::string{}) != format) {
-        throw StorageError("Not a " + std::string(format) + " file");
-    }
-    const int version = doc.value("version", 0);
-    if (version < 1 || version > supportedVersion) {
-        throw StorageError("Unsupported file version " + std::to_string(version));
-    }
-}
-
 } // namespace
 
 std::string saveProfile(const ConstructionRules& rules)
@@ -436,13 +329,27 @@ std::shared_ptr<Product> loadProduct(std::string_view text)
 
 void writeTextFile(const std::filesystem::path& path, std::string_view content)
 {
-    std::ofstream out(path, std::ios::binary | std::ios::trunc);
-    if (!out) {
-        throw StorageError("Cannot open the file for writing: " + path.string());
+    std::filesystem::path temporary = path;
+    temporary += ".tmp";
+    {
+        std::ofstream out(temporary, std::ios::binary | std::ios::trunc);
+        if (!out) {
+            throw StorageError("Cannot open the file for writing: " + toUtf8(path));
+        }
+        out.write(content.data(), static_cast<std::streamsize>(content.size()));
+        out.close();
+        if (!out) {
+            std::error_code ignored;
+            std::filesystem::remove(temporary, ignored);
+            throw StorageError("Cannot write the file: " + toUtf8(path));
+        }
     }
-    out.write(content.data(), static_cast<std::streamsize>(content.size()));
-    if (!out) {
-        throw StorageError("Cannot write the file: " + path.string());
+    std::error_code ec;
+    std::filesystem::rename(temporary, path, ec); // replaces an existing file
+    if (ec) {
+        std::error_code ignored;
+        std::filesystem::remove(temporary, ignored);
+        throw StorageError("Cannot write the file: " + toUtf8(path) + " (" + ec.message() + ")");
     }
 }
 
@@ -450,7 +357,7 @@ std::string readTextFile(const std::filesystem::path& path)
 {
     std::ifstream in(path, std::ios::binary);
     if (!in) {
-        throw StorageError("Cannot open the file: " + path.string());
+        throw StorageError("Cannot open the file: " + toUtf8(path));
     }
     std::ostringstream buffer;
     buffer << in.rdbuf();

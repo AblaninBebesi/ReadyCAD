@@ -7,6 +7,7 @@ rc_add_module(export
         src/PartDrawing.cpp
         src/Pdf.cpp
         src/ProductViews.cpp
+        src/SheetDrawing.cpp
     DEPENDS
         readycad::core
         readycad::detailing
@@ -19,4 +20,5 @@ rc_add_module(export
         tests/DrawingTests.cpp
         tests/DxfTests.cpp
         tests/PdfTests.cpp
-        tests/ProductViewTests.cpp)
+        tests/ProductViewTests.cpp
+        tests/SheetDrawingTests.cpp)

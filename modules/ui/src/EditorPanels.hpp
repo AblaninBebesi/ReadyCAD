@@ -2,6 +2,8 @@
 
 #include "readycad/editor/Document.hpp"
 #include "readycad/export/Documentation.hpp"
+#include "readycad/nesting/NestingRun.hpp"
+#include "readycad/nesting/Stock.hpp"
 #include "readycad/render/Camera.hpp"
 #include "readycad/render/Renderer.hpp"
 #include "readycad/render/Scene.hpp"
@@ -20,6 +22,7 @@ namespace rc::ui {
 /// Everything the windows share. The model lives in `document`; the UI keeps only view state.
 struct UiState {
     std::unique_ptr<editor::Document> document;
+    std::uint64_t documentSerial = 0; ///< increases whenever another document is opened
 
     // 3D view
     render::OrbitCamera camera;
@@ -54,6 +57,39 @@ struct UiState {
     std::string exportMessage;                   // "exported" popup
     std::filesystem::path exportedFile;
     bool openExportedPopup = false;
+
+    // Cutting and nesting (stage 7). The stock and the settings belong to the workshop: they
+    // live in files of the user folder, not in the project.
+    nesting::StockManager stock;
+    std::uint64_t stockRevision = 0; ///< increases with every change of the stock
+    std::filesystem::path stockFile;
+    std::filesystem::path settingsFile;
+    nesting::NestingSettings nestingSettings;
+    nesting::NestingSettings settingsDraft; ///< edited in the settings dialog
+    bool openNestingSettings = false;
+    int productCount = 1;
+    std::unique_ptr<nesting::NestingRun> nestingRun; ///< running (or just finished) optimisation
+    std::uint64_t nestingVersion = 0;                ///< of the run's result last shown
+    std::optional<nesting::NestingResult> nesting;   ///< shown result; live while running
+
+    /// What the shown result was computed for: when any of it changes, the result is stale.
+    struct NestingInput {
+        std::uint64_t document = 0;
+        std::uint64_t revision = 0;
+        std::uint64_t stock = 0;
+        int productCount = 1;
+    } nestingFor;
+    bool nestingConsumed = false; ///< the stock was already updated with this result
+    std::size_t selectedSheet = 0;
+    bool showSawCuts = true;
+    bool openConsumePopup = false;
+    std::string nestingMessage; ///< status line under the sheet list
+    int focusNesting = 0; ///< frames left to bring the window to the front (docking settles first)
+    int focusStock = 0;
+
+    // "Add sheet" form of the stock window
+    int newSheetMaterial = 0;
+    nesting::Sheet newSheet;
 };
 
 /// Runs a model operation; on an exception shows the error popup. Returns true if it succeeded.
@@ -67,6 +103,8 @@ void confirmUnsaved(UiState& state, std::function<void()> action);
 /// Saves (asks for a file name if there is none yet). Returns false if cancelled or failed.
 bool saveDocument(UiState& state, bool forceDialog);
 
+/// Makes `document` the open one: the 3D view refits, cutting results of the old one go.
+void setDocument(UiState& state, std::unique_ptr<editor::Document> document);
 void newDocument(UiState& state, core::CatalogItem item);
 void openDocument(UiState& state);
 void loadProfile(UiState& state);
@@ -74,6 +112,8 @@ void saveProfile(UiState& state);
 
 // Export: PDF documents (asks for the settings first), all parts in one DXF, one DXF per part.
 void exportPdf(UiState& state);
+/// Writes the PDF documents with the current settings to `path`, without dialogs (command line).
+bool writePdfFile(UiState& state, const std::filesystem::path& path);
 void exportPartsDxf(UiState& state);
 void exportPartsDxfFolder(UiState& state);
 
@@ -85,5 +125,22 @@ void drawViewportWindow(UiState& state, render::Renderer& renderer);
 void drawCutListWindow(UiState& state);
 void drawWarningsWindow(UiState& state);
 void drawPopups(UiState& state);
+
+// Cutting and nesting (stage 7), NestingPanels.cpp
+/// Loads the stock and the cutting settings from `folder` (empty: the user folder, see
+/// storage::userDataFolder()). Missing files: an empty stock and default settings.
+void loadWorkshopFiles(UiState& state, const std::filesystem::path& folder = {});
+void startNesting(UiState& state);
+void stopNesting(UiState& state);
+/// Asks for confirmation, then takes the sheets of the cutting plan out of the stock.
+void consumeStock(UiState& state);
+void exportSheetsDxf(UiState& state);
+/// True if the shown cutting plan belongs to the current product, stock and settings.
+[[nodiscard]] bool nestingIsFresh(const UiState& state);
+/// Every frame, before the windows: takes over progress and results of the background run.
+void updateNesting(UiState& state);
+void drawNestingWindow(UiState& state);
+void drawStockWindow(UiState& state);
+void drawNestingPopups(UiState& state);
 
 } // namespace rc::ui

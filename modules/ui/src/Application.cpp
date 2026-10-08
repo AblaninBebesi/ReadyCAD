@@ -138,9 +138,21 @@ void buildDefaultLayout(ImGuiID dockspace)
     ImGui::DockBuilderDockWindow(tr(TextId::WindowParameters), leftBottom);
     ImGui::DockBuilderDockWindow(tr(TextId::WindowProduct), right);
     ImGui::DockBuilderDockWindow(tr(TextId::WindowViewport), center);
+    ImGui::DockBuilderDockWindow(tr(TextId::WindowNesting), center);
     ImGui::DockBuilderDockWindow(tr(TextId::WindowCutList), bottom);
+    ImGui::DockBuilderDockWindow(tr(TextId::WindowStock), bottom);
     ImGui::DockBuilderDockWindow(tr(TextId::WindowWarnings), bottom);
     ImGui::DockBuilderFinish(dockspace);
+}
+
+/// A window new in this version, opened with a layout saved by an older one, docks as a tab
+/// next to `neighbour` instead of floating. Call right before the window's Begin().
+void dockNextTo(const char* neighbour)
+{
+    if (const ImGuiWindow* window = ImGui::FindWindowByName(neighbour);
+        window != nullptr && window->DockId != 0) {
+        ImGui::SetNextWindowDockID(window->DockId, ImGuiCond_FirstUseEver);
+    }
 }
 
 /// Writes the current back buffer as an uncompressed 24-bit BMP (no image library needed).
@@ -191,6 +203,7 @@ struct Application::Impl {
     bool showImGuiDemo = false;
     bool layoutChecked = false;
     bool resetLayout = false;
+    bool pdfWritten = false;
     int frame = 0;
 
     explicit Impl(const ApplicationConfig& cfg)
@@ -201,14 +214,16 @@ struct Application::Impl {
     {
         state.sceneOptions.showHoles = config.showHoles;
         state.sceneOptions.showFronts = config.showFronts;
+        // Stock of sheets and cutting settings of this user (or of a demo folder).
+        loadWorkshopFiles(state, config.dataFolder.value_or(std::filesystem::path{}));
         const auto items = core::catalogItems();
         const auto index = static_cast<std::size_t>(
             std::clamp(config.catalogItem, 0, static_cast<int>(items.size()) - 1));
         newDocument(state, items[index]);
         if (config.openFile) {
             ui::run(state, [&] {
-                state.document =
-                    std::make_unique<editor::Document>(editor::Document::open(*config.openFile));
+                setDocument(state, std::make_unique<editor::Document>(
+                                       editor::Document::open(*config.openFile)));
             });
         }
         if (config.selectKind) {
@@ -222,6 +237,13 @@ struct Application::Impl {
         if (config.pdfDialog) {
             exportPdf(state);
         }
+        if (config.nesting >= 0) {
+            state.nestingSettings.machine = config.nesting == 0 ? nesting::Machine::PanelSaw
+                                                                : nesting::Machine::NestingCenter;
+            startNesting(state);
+        }
+        state.focusStock = config.stockWindow ? 3 : 0;
+        state.openNestingSettings = config.cuttingSettings;
     }
 
     void drawFrame();
@@ -273,17 +295,23 @@ void Application::Impl::drawFrame()
 
     drawMainMenu();
     handleShortcuts();
+    updateNesting(state); // progress and results of a cutting plan computed in the background
     drawCatalogWindow(state);
     drawParametersWindow(state);
     drawProductWindow(state);
     drawCutListWindow(state);
     drawWarningsWindow(state);
     drawViewportWindow(state, renderer);
+    dockNextTo(tr(TextId::WindowViewport));
+    drawNestingWindow(state);
+    dockNextTo(tr(TextId::WindowCutList));
+    drawStockWindow(state);
     drawAboutWindow();
     if (showImGuiDemo) {
         ImGui::ShowDemoWindow(&showImGuiDemo);
     }
     drawPopups(state);
+    drawNestingPopups(state);
     updateWindowTitle();
 
     ImGui::Render();
@@ -295,8 +323,16 @@ void Application::Impl::drawFrame()
     glClear(GL_COLOR_BUFFER_BIT);
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
-    // The layout settles over the first frames; then the picture is stable.
-    if (config.screenshot && ++frame == 10) {
+    if (config.exportPdf && !state.nestingRun && !pdfWritten) {
+        pdfWritten = true;
+        if (!writePdfFile(state, *config.exportPdf)) {
+            std::fprintf(stderr, "ReadyCAD: %s\n", state.errorMessage.c_str());
+        }
+        state.quit = !config.screenshot;
+    }
+    // The layout settles over the first frames; then the picture is stable. A cutting plan
+    // being computed is waited for.
+    if (config.screenshot && !state.nestingRun && ++frame == 10) {
         writeBackBufferBmp(*config.screenshot, width, height);
         state.quit = true;
     }
@@ -364,6 +400,34 @@ void Application::Impl::drawMainMenu()
         if (ImGui::MenuItem(tr(TextId::MenuExportDxfFolder))) {
             exportPartsDxfFolder(state);
         }
+        if (ImGui::MenuItem(tr(TextId::MenuExportSheetsDxf), nullptr, false,
+                            nestingIsFresh(state))) {
+            exportSheetsDxf(state);
+        }
+        ImGui::EndMenu();
+    }
+    if (ImGui::BeginMenu(tr(TextId::MenuCutting))) {
+        if (state.nestingRun) {
+            if (ImGui::MenuItem(tr(TextId::Stop))) {
+                stopNesting(state);
+            }
+        } else if (ImGui::MenuItem(tr(TextId::MenuRunNesting), "F5")) {
+            startNesting(state);
+        }
+        if (ImGui::MenuItem(tr(TextId::MenuNestingSettings), nullptr, false, !state.nestingRun)) {
+            state.openNestingSettings = true;
+        }
+        if (ImGui::MenuItem(tr(TextId::MenuConsumeStock), nullptr, false,
+                            nestingIsFresh(state) && !state.nestingConsumed)) {
+            consumeStock(state);
+        }
+        ImGui::Separator();
+        if (ImGui::MenuItem(tr(TextId::MenuShowNesting))) {
+            state.focusNesting = 3;
+        }
+        if (ImGui::MenuItem(tr(TextId::MenuShowStock))) {
+            state.focusStock = 3;
+        }
         ImGui::EndMenu();
     }
     if (ImGui::BeginMenu(tr(TextId::MenuView))) {
@@ -405,6 +469,9 @@ void Application::Impl::handleShortcuts()
     }
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_P, route)) {
         exportPdf(state);
+    }
+    if (ImGui::Shortcut(ImGuiKey_F5, route)) {
+        startNesting(state);
     }
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_O, route)) {
         confirmUnsaved(state, [this] { openDocument(state); });

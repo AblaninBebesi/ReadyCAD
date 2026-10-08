@@ -5,6 +5,7 @@
 #include "readycad/detailing/Detailing.hpp"
 #include "readycad/export/Paper.hpp"
 #include "readycad/export/Pdf.hpp"
+#include "readycad/nesting/Nesting.hpp"
 
 #include <filesystem>
 #include <functional>
@@ -20,6 +21,7 @@ struct DocumentationOptions {
     bool hardware = true;     ///< edge banding consumption and hardware list
     bool assembly = true;     ///< front, open front and section A-A with dimensions
     bool partDrawings = true; ///< one sheet per distinct part with its hole table
+    bool cuttingPlan = true;  ///< sheet layouts, if DocumentationInput::cutting is given
     std::string productName;  ///< empty: the product's own name or "Adsız"
     std::string company;
     std::string designer;
@@ -32,6 +34,8 @@ struct DocumentationInput {
     const std::vector<detailing::CutListRow>& cutList;
     const std::vector<detailing::EdgeBandUsage>& edgeUsage;
     const detailing::DetailingReport& detailing;
+    /// Cutting plan of these parts (stage 7); none: the documents have no cutting section.
+    const nesting::NestingResult* cutting = nullptr;
 };
 
 /// Lays the documents out on pages of the chosen size and orientation. Every page has a frame

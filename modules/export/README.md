@@ -8,5 +8,6 @@ Namespace `rc::exporting` (`export` is a C++ keyword).
 * `Dxf` — DXF R12 writer.
 * `Paper`, `Documentation` — pages (A4-A1, portrait/landscape) with frame and title block: summary, cut list, edge banding + hardware, assembly drawing, part drawings.
 * `Pdf` — PDF writer on libHaru (private dependency), TrueType embedding, font metrics.
+* `SheetDrawing` — sheet layouts of the cutting plan (stage 7): parts turned and moved to their place with their machining, remnants, saw cuts; one DXF per layout and the "Kesim planı" pages of the PDF.
 
-**Stage:** 6
+**Stages:** 6, 7

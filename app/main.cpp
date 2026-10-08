@@ -16,6 +16,11 @@ void printUsage()
               "  --no-fronts               hide doors and drawer fronts\n"
               "  --select <Kind>           select the first part of a kind, e.g. Shelf, Door\n"
               "  --pdf-dialog              open the PDF export settings\n"
+              "  --nesting <saw|router>    compute the cutting plan for this machine\n"
+              "  --stock                   show the stock of sheets\n"
+              "  --export-pdf <file.pdf>   write the PDF documents and exit\n"
+              "  --cutting-settings        open the cutting settings\n"
+              "  --data-dir <folder>       stock and settings files from this folder\n"
               "  --screenshot <file.bmp>   save the window as an image and exit");
 }
 
@@ -39,6 +44,17 @@ int main(int argc, char** argv)
             config.selectKind = argv[++i];
         } else if (arg == "--pdf-dialog") {
             config.pdfDialog = true;
+        } else if (arg == "--nesting" && hasValue) {
+            const std::string machine = argv[++i];
+            config.nesting = machine == "router" ? 1 : 0;
+        } else if (arg == "--stock") {
+            config.stockWindow = true;
+        } else if (arg == "--export-pdf" && hasValue) {
+            config.exportPdf = argv[++i];
+        } else if (arg == "--cutting-settings") {
+            config.cuttingSettings = true;
+        } else if (arg == "--data-dir" && hasValue) {
+            config.dataFolder = argv[++i];
         } else if (arg == "--screenshot" && hasValue) {
             config.screenshot = argv[++i];
         } else {

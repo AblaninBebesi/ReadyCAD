@@ -4,6 +4,7 @@ rc_add_module(ui
         src/EditorPanels.cpp
         src/FileDialogs.cpp
         src/Fonts.cpp
+        src/NestingPanels.cpp
     DEPENDS
         readycad::editor
         readycad::i18n

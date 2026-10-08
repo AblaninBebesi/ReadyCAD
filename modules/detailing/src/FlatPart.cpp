@@ -180,4 +180,16 @@ FlatPart flatten(const core::Panel& panel, const core::ConstructionRules& rules,
     return part;
 }
 
+FlatPart flatPartOf(const core::Product& product, const CutListRow& row)
+{
+    if (row.components.empty()) {
+        throw std::invalid_argument("cut list row without components");
+    }
+    const core::FurnitureComponent* component = product.find(row.components.front());
+    if (component == nullptr || !component->hasPanel()) {
+        throw std::invalid_argument("cut list row does not belong to this product");
+    }
+    return flatten(*component->panel(), product.rules());
+}
+
 } // namespace rc::detailing

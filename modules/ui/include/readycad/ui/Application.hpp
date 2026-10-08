@@ -18,9 +18,18 @@ struct ApplicationConfig {
     bool showFronts = true;
     std::optional<std::string> selectKind; // select the first component of this kind, e.g. "Shelf"
     bool pdfDialog = false;                 // open the PDF export settings at start
+    /// Stage 7: compute the cutting plan at start (0 panel saw, 1 nesting centre, -1 no).
+    int nesting = -1;
+    bool stockWindow = false;               // bring the stock window to the front
+    bool cuttingSettings = false;           // open the cutting settings at start
+    /// Folder of the stock and settings files instead of the user's own (demos, tests).
+    std::optional<std::filesystem::path> dataFolder;
+    /// Writes the PDF documents (default settings, with the cutting plan if one is computed)
+    /// and exits — the documents without a click, e.g. for a demo or to check a layout.
+    std::optional<std::filesystem::path> exportPdf;
 
     /// Renders a few frames, saves the window as a .bmp file and exits — for documentation and
-    /// automated smoke tests of the GUI.
+    /// automated smoke tests of the GUI. A cutting plan started with `nesting` is finished first.
     std::optional<std::filesystem::path> screenshot;
 };
 

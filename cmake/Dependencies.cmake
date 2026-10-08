@@ -5,6 +5,8 @@
 
 include(FetchContent)
 
+find_package(Threads REQUIRED) # std::jthread in the nesting optimiser
+
 if(POLICY CMP0135)
     cmake_policy(SET CMP0135 NEW) # extracted file timestamps = extraction time
 endif()
@@ -45,6 +47,27 @@ target_include_directories(hpdf SYSTEM INTERFACE
     ${libharu_SOURCE_DIR}/include
     ${libharu_BINARY_DIR}/include)
 add_library(libharu::hpdf ALIAS hpdf)
+
+# --- Clipper2: polygon booleans, offsets, Minkowski sums (stage 7 nesting) ---------------
+# deepnest builds its No-Fit Polygons with Clipper as well. Clipper works on integer
+# coordinates, so unions and differences are exact; the nesting module uses micrometres.
+set(CLIPPER2_USINGZ OFF CACHE STRING "" FORCE) # only the plain 2D library
+block()
+    set(CLIPPER2_UTILS OFF)
+    set(CLIPPER2_EXAMPLES OFF)
+    set(CLIPPER2_TESTS OFF)
+    set(BUILD_SHARED_LIBS OFF)
+    FetchContent_Declare(clipper2
+        URL https://github.com/AngusJohnson/Clipper2/archive/refs/tags/Clipper2_2.0.1.tar.gz
+        SOURCE_SUBDIR CPP
+        SYSTEM)
+    FetchContent_MakeAvailable(clipper2)
+endblock()
+# Clipper2 builds itself with -Werror: a warning added by a newer compiler must not stop us.
+if(NOT MSVC)
+    target_compile_options(Clipper2 PRIVATE -Wno-error)
+endif()
+add_library(Clipper2::Clipper2 ALIAS Clipper2)
 
 # --- Catch2: unit testing ---------------------------------------------------
 if(READYCAD_BUILD_TESTS)

@@ -8,6 +8,7 @@
 #include "readycad/detailing/HardwareList.hpp"
 #include "readycad/export/Documentation.hpp"
 #include "readycad/export/PartDrawing.hpp"
+#include "readycad/export/SheetDrawing.hpp"
 #include "readycad/i18n/Labels.hpp"
 
 #include <catch2/catch_approx.hpp>
@@ -229,7 +230,7 @@ TEST_CASE("Part drawings: one sheet per part with its holes", "[export][docs]")
     CHECK(bookmarks == f.cutList.size());
 
     // The side wall's page lists every hole and the groove: rows numbered 1..n.
-    const detailing::FlatPart wall = flatPartOf(*f.product, f.cutList.front());
+    const detailing::FlatPart wall = detailing::flatPartOf(*f.product, f.cutList.front());
     const auto texts = textsOf(pages.pages.front());
     CHECK(has(texts, "1. " + partName(f.cutList.front())));
     const std::size_t rows = wall.holes.size() + wall.grooves.size();
@@ -256,6 +257,43 @@ TEST_CASE("Sections can be switched off", "[export][docs]")
     const auto texts = textsOf(summary.pages[0]);
     CHECK(has(texts, txt(i18n::TextId::NoWarnings)));
     CHECK(has(texts, "900 × 1800 × 320"));
+}
+
+TEST_CASE("The cutting plan: an overview and a page per sheet layout", "[export][docs][cutting]")
+{
+    const Fixture f(core::createProduct(core::CatalogItem::Wardrobe));
+    nesting::NestingSettings settings;
+    settings.optimizer.generations = 2;
+    settings.optimizer.populationSize = 6;
+    const nesting::NestingResult cutting = nesting::optimize(
+        nesting::partsFromCutList(*f.product, f.cutList), nesting::StockManager{}, settings);
+    DocumentationInput input = f.input();
+    input.cutting = &cutting;
+
+    const PageSet pages =
+        buildDocumentation(input, only(false, false, false, false, false), kMetrics);
+    REQUIRE(pages.pages.size() == 1 + cutting.layouts.size());
+    const auto overview = textsOf(pages.pages[0]);
+    CHECK(has(overview, txt(i18n::TextId::PageCutting)));
+    CHECK(has(overview, txt(i18n::TextId::MachinePanelSaw)));
+    CHECK(has(overview, std::to_string(cutting.sheetCount())));
+    CHECK(pages.pages[0].bookmark == txt(i18n::TextId::PageCutting));
+
+    for (std::size_t i = 0; i < cutting.layouts.size(); ++i) {
+        const Page& page = pages.pages[i + 1];
+        const auto texts = textsOf(page);
+        CHECK(has(texts, txt(i18n::TextId::PageCutting) + ": " + sheetTitle(cutting, i)));
+        CHECK(page.bookmark == txt(i18n::TextId::SheetLabel) + " " + std::to_string(i + 1));
+        CHECK(page.drawing.count<Polyline>(layers::kSheet) == 1);
+        for (const nesting::PlacedPart& p : cutting.layouts[i].parts) {
+            CHECK(has(texts, cutting.parts[p.part].label)); // on the map and in the table
+        }
+        CHECK_FALSE(has(texts, "1:200")); // a sheet fits A4 at a usual scale
+    }
+
+    DocumentationOptions off = only(false, false, false, false, false);
+    off.cuttingPlan = false;
+    CHECK(buildDocumentation(input, off, kMetrics).pages.empty());
 }
 
 TEST_CASE("The largest standard scale that fits is chosen", "[export][docs]")

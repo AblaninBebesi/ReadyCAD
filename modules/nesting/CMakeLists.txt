@@ -1,6 +1,24 @@
-# Nesting — implemented in stage 7 (see docs/ARCHITECTURE.md).
-# Until then the module is a placeholder that only fixes its place in the dependency graph.
 rc_add_module(nesting
+    SOURCES
+        src/FreeDecoder.cpp
+        src/Genetic.cpp
+        src/Geometry.cpp
+        src/GuillotineDecoder.cpp
+        src/Nesting.cpp
+        src/NestingRun.cpp
+        src/Nfp.cpp
+        src/Stock.cpp
     DEPENDS
         readycad::core
-        readycad::detailing)
+        readycad::detailing
+        Threads::Threads
+    PRIVATE_DEPENDS
+        Clipper2::Clipper2
+    TESTS
+        tests/FreeNestingTests.cpp
+        tests/GeneticTests.cpp
+        tests/GeometryTests.cpp
+        tests/GuillotineTests.cpp
+        tests/NestingRunTests.cpp
+        tests/NfpTests.cpp
+        tests/StockTests.cpp)
