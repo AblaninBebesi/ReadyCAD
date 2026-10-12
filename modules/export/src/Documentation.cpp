@@ -51,7 +51,9 @@ std::string sizeText(Real a, Real b, Real c)
     return mm(a) + " × " + mm(b) + " × " + mm(c);
 }
 
-std::string today()
+} // namespace
+
+std::string todayText()
 {
     const auto days = std::chrono::floor<std::chrono::days>(std::chrono::system_clock::now());
     const std::chrono::year_month_day ymd(days);
@@ -60,6 +62,8 @@ std::string today()
                   static_cast<unsigned>(ymd.month()), static_cast<int>(ymd.year()));
     return buffer;
 }
+
+namespace {
 
 /// Removes the last UTF-8 code point.
 void popCodePoint(std::string& text)
@@ -306,7 +310,7 @@ private:
         cell(1, 0, txt(TextId::OverallSize), productSize_);
         cell(2, 2, txt(TextId::TbSheet), std::to_string(page) + " / " + std::to_string(count));
         cell(2, 1, txt(TextId::TbScale), scale);
-        cell(2, 0, txt(TextId::TbDate), options_.date.empty() ? today() : options_.date);
+        cell(2, 0, txt(TextId::TbDate), options_.date.empty() ? todayText() : options_.date);
     }
 
     const DocumentationOptions& options_;
@@ -324,18 +328,28 @@ private:
 };
 
 /// A table over as many pages as it needs, starting on a new page.
+/// The table on as many pages as it needs; `footnote` (if any) under its last row.
 void paginate(Composer& composer, const std::string& title, const std::string& bookmark,
-              const Table& table)
+              const Table& table, const std::string& footnote = {})
 {
     std::size_t next = 0;
     bool first = true;
     do {
         Canvas canvas = composer.newPage(first ? title : title + " " + txt(TextId::Continued),
                                          first ? bookmark : std::string());
-        next = drawTable(canvas, Vec2(composer.contentMin().x, composer.contentMax().y),
-                         composer.contentSize().x, composer.contentSize().y, table, next)
-                   .first;
+        const auto [rest, used] =
+            drawTable(canvas, Vec2(composer.contentMin().x, composer.contentMax().y),
+                      composer.contentSize().x, composer.contentSize().y, table, next);
+        next = rest;
         first = false;
+        if (next == table.rows.size() && !footnote.empty()) {
+            const Real y = composer.contentMax().y - used - kGap - kTable;
+            if (y >= composer.contentMin().y) {
+                canvas.text(Vec2(composer.contentMin().x, y),
+                            canvas.fit(footnote, composer.contentSize().x, kTable, false), kTable,
+                            false);
+            }
+        }
     } while (next < table.rows.size());
 }
 
@@ -376,7 +390,8 @@ Table cutListTable(const std::vector<detailing::CutListRow>& cutList)
     for (std::size_t i = 0; i < cutList.size(); ++i) {
         const detailing::CutListRow& r = cutList[i];
         total += r.quantity;
-        table.rows.push_back({{std::to_string(i + 1), partName(r), r.material.name,
+        table.rows.push_back({{std::to_string(i + 1), partName(r) + (r.inCuttingPlan ? "" : " *"),
+                               r.material.name,
                                std::to_string(r.quantity), sizeText(r.finishLength, r.finishWidth),
                                sizeText(r.cut.length, r.cut.width), edgeCell(r.edges[0]),
                                edgeCell(r.edges[1]), edgeCell(r.edges[2]), edgeCell(r.edges[3]),
@@ -1044,8 +1059,10 @@ PageSet buildDocumentation(const DocumentationInput& in, const DocumentationOpti
         summaryPage(composer, in, product);
     }
     if (options.cutList) {
+        const bool outOfPlan = std::any_of(in.cutList.begin(), in.cutList.end(),
+                                           [](const auto& r) { return !r.inCuttingPlan; });
         paginate(composer, txt(TextId::PageCutList), txt(TextId::PageCutList),
-                 cutListTable(in.cutList));
+                 cutListTable(in.cutList), outOfPlan ? txt(TextId::NotInCuttingPlanNote) : "");
     }
     if (options.hardware) {
         hardwarePage(composer, in);

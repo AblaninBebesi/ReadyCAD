@@ -188,6 +188,31 @@ TEST_CASE("Chest of drawers: equal fronts, boxes on standard slides", "[core][se
     CHECK(findOverlaps(*chest).empty());
 }
 
+TEST_CASE("Drawer box parts meet with the thickness their neighbours really have",
+          "[core][section][drawer][material]")
+{
+    // Stage 9: found by the random-edit test — the box ends assumed 16 mm sides, the sides a
+    // 3 mm bottom, whatever material the user chose for them.
+    const auto chest = WardrobeBuilder().dimensions({800, 850, 450}).drawers(2).build();
+    Drawer& drawer = *chest->carcass()->interior().drawerStack()->drawers().front();
+    const auto sides = findAll<DrawerBoxSide>(drawer);
+    const auto ends = findAll<DrawerBoxEnd>(drawer);
+    const auto bottoms = findAll<DrawerBottom>(drawer);
+    REQUIRE(sides.size() == 2);
+    REQUIRE(ends.size() == 2);
+    REQUIRE(bottoms.size() == 1);
+
+    sides[0]->setMaterialOverride(Material{"Suntalam 18", MaterialType::Chipboard, 18.0, true});
+    bottoms[0]->setMaterialOverride(Material{"HDF 6", MaterialType::HDF, 6.0, false});
+    CHECK(findOverlaps(*chest).empty());
+
+    const Aabb& body = drawer.body();
+    CHECK(ends[0]->box().min().x == Approx(body.min().x + 18.0)); // after the 18 mm left side
+    CHECK(ends[0]->box().size().x == Approx(body.size().x - 18.0 - 16.0));
+    CHECK(sides[1]->box().min().y == Approx(body.min().y + 6.0)); // on the 6 mm bottom
+    CHECK(ends[0]->box().min().y == Approx(body.min().y + 6.0));
+}
+
 TEST_CASE("Drawers below doors: fronts meet at the fixed shelf with one gap",
           "[core][section][drawer]")
 {

@@ -46,6 +46,9 @@ struct DocumentationInput {
                                          const DocumentationOptions& options,
                                          const TextMetrics& metrics);
 
+/// Today's date as the title blocks print it: "12.10.2026".
+[[nodiscard]] std::string todayText();
+
 /// buildDocumentation() + savePdf() with the same fonts. Throws ExportError.
 void saveDocumentationPdf(const DocumentationInput& input, const DocumentationOptions& options,
                           const std::filesystem::path& path, const PdfFonts& fonts);

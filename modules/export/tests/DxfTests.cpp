@@ -1,6 +1,6 @@
 // Stage 6: structure of the DXF files (sections, layers, primitives) and part export.
 
-#include "DxfReader.hpp"
+#include "readycad/test/DxfReader.hpp"
 #include "readycad/test/TempFolder.hpp"
 
 #include "readycad/core/builders/WardrobeBuilder.hpp"

@@ -23,6 +23,13 @@ TEST_CASE("Turkish letters fold to ASCII, other symbols to underscores", "[i18n]
     CHECK(asciiFold("") == "");
 }
 
+TEST_CASE("Names become file names that work everywhere", "[i18n][utf8]")
+{
+    CHECK(safeFileName("Gardırop 1/2") == "Gardirop_1_2");
+    CHECK(safeFileName("Mutfak: köşe*") == "Mutfak__kose_");
+    CHECK(safeFileName("A-12") == "A-12");
+}
+
 TEST_CASE("Paths come out as UTF-8", "[i18n][utf8]")
 {
     const std::filesystem::path path(u8"Şifonyer.nc");

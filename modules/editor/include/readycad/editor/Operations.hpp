@@ -5,6 +5,7 @@
 
 #include <optional>
 #include <string>
+#include <vector>
 
 /// Everything the user can change in the UI, as named, undoable operations on a Document.
 ///
@@ -43,6 +44,9 @@ void setHandle(Document& doc, core::ComponentId front,
                std::optional<core::HandlePlacement> placement);
 void setMaterialOverride(Document& doc, core::ComponentId part,
                          std::optional<core::Material> material);
+/// Puts parts into the cutting plan or leaves them out (bought cut to size, cut elsewhere), in one
+/// step — e.g. all parts of a cut list row.
+void setInCuttingPlan(Document& doc, const std::vector<core::ComponentId>& parts, bool inPlan);
 /// Removes a shelf, a door or a drawer stack. Structural parts cannot be removed.
 void removeComponent(Document& doc, core::ComponentId component);
 

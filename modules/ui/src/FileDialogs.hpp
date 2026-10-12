@@ -11,6 +11,7 @@ enum class FileKind {
     Profile, // *.rcprofile — workshop profile
     Pdf,     // documentation
     Dxf,     // drawings for CAD/CAM
+    Csv,     // cut list for the saw's optimiser or a spreadsheet
 };
 
 /// Native "Open" / "Save as" dialogs (nativefiledialog-extended). nullopt = cancelled.

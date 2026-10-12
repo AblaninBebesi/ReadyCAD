@@ -135,6 +135,53 @@ AppSettings loadSettings(std::string_view text)
     }
 }
 
+WorkshopFiles WorkshopFiles::in(const std::filesystem::path& folder)
+{
+    const std::filesystem::path base = folder.empty() ? userDataFolder() : folder;
+    return {base / "stock.rcstock", base / "settings.json"};
+}
+
+namespace {
+
+bool fileExists(const std::filesystem::path& file)
+{
+    std::error_code ec;
+    return std::filesystem::exists(file, ec);
+}
+
+void createFolderOf(const std::filesystem::path& file)
+{
+    std::error_code ec;
+    if (file.has_parent_path()) {
+        std::filesystem::create_directories(file.parent_path(), ec);
+    }
+    // A failure shows up as a clear write error in writeTextFile().
+}
+
+} // namespace
+
+nesting::StockManager loadStockFile(const std::filesystem::path& file)
+{
+    return fileExists(file) ? loadStock(readTextFile(file)) : nesting::StockManager{};
+}
+
+AppSettings loadSettingsFile(const std::filesystem::path& file)
+{
+    return fileExists(file) ? loadSettings(readTextFile(file)) : AppSettings{};
+}
+
+void saveStockFile(const nesting::StockManager& stock, const std::filesystem::path& file)
+{
+    createFolderOf(file);
+    writeTextFile(file, saveStock(stock));
+}
+
+void saveSettingsFile(const AppSettings& settings, const std::filesystem::path& file)
+{
+    createFolderOf(file);
+    writeTextFile(file, saveSettings(settings));
+}
+
 std::filesystem::path userDataFolder()
 {
 #ifdef _WIN32

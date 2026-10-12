@@ -200,3 +200,20 @@ TEST_CASE("A cut list becomes nesting parts in FlatPart coordinates", "[nesting]
     }
     CHECK_THROWS_AS(partsFromCutList(*product, cutList, 0), std::invalid_argument);
 }
+
+TEST_CASE("Parts left out of the cutting plan are not nested", "[nesting][cutlist]")
+{
+    const auto product = rc::core::createProduct(rc::core::CatalogItem::Wardrobe);
+    product->carcass()->back().setInCuttingPlan(false); // HDF back bought cut to size
+    const auto cutList = rc::detailing::buildCutList(*product, product->rules());
+    const std::vector<NestingPart> parts = partsFromCutList(*product, cutList);
+
+    REQUIRE(parts.size() == cutList.size() - 1);
+    for (const NestingPart& p : parts) {
+        REQUIRE(p.cutListRow.has_value());
+        const auto& row = cutList[*p.cutListRow];
+        CHECK(row.inCuttingPlan);
+        CHECK(p.label == std::to_string(*p.cutListRow + 1)); // the number of its cut list row
+        CHECK(row.kind != rc::core::ComponentKind::BackPanel);
+    }
+}

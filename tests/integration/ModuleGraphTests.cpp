@@ -1,4 +1,4 @@
-// Smoke test for the build itself: `editor` sits on top of all GL-free modules, so if this
+// Smoke test for the build itself: `production` sits on top of all GL-free modules, so if this
 // executable links, the whole headless part of the dependency graph is wired correctly.
 
 #include "readycad/core/Aabb.hpp"

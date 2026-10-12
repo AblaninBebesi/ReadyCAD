@@ -34,11 +34,13 @@ struct CutListRow {
     CutSize cut;
     std::array<core::EdgeBand, 4> edges{}; // indexed by EdgeSide
     bool keepGrainDirection = false;       // decor with grain: nesting must not rotate it
+    bool inCuttingPlan = true;             // false: listed, but not cut from the workshop's sheets
     int quantity = 0;
     std::vector<core::ComponentId> components;
 };
 
-/// Cut list of all panels in the subtree, in tree order (carcass first), identical parts merged.
+/// Cut list of all panels in the subtree, in tree order (carcass first), identical parts merged
+/// (a part left out of the cutting plan never merges with one that is in it).
 [[nodiscard]] std::vector<CutListRow> buildCutList(const core::FurnitureComponent& root,
                                                    const core::ConstructionRules& rules);
 

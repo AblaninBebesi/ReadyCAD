@@ -7,4 +7,6 @@ JSON files (nlohmann/json):
 
 Every file is written to `<name>.tmp` and then renamed over the old one, so a crash never leaves a half-written file.
 
-**Stages:** 5, 7, 8
+Stage 9: `WorkshopFiles` (stock and settings of a workshop in one folder, missing files give defaults, broken ones an error); parts left out of the cutting plan; the choices of drawer box parts are saved too.
+
+**Stages:** 5, 7, 8, 9

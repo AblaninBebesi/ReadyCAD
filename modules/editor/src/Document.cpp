@@ -1,11 +1,45 @@
 #include "readycad/editor/Document.hpp"
 
+#include "readycad/i18n/Labels.hpp"
+#include "readycad/i18n/Localization.hpp"
 #include "readycad/storage/Storage.hpp"
 
 #include <algorithm>
 #include <utility>
 
 namespace rc::editor {
+
+namespace {
+
+std::string txt(i18n::TextId id)
+{
+    return std::string(i18n::text(id));
+}
+
+/// Throws ConstructionError if the change made a part lose its size or put parts into each
+/// other's space (more overlapping pairs than `overlapsBefore`).
+void requireBuildable(const core::Product& product, std::size_t overlapsBefore)
+{
+    for (const core::FurnitureComponent* c : core::collectPanels(product)) {
+        const core::Panel& panel = *c->panel();
+        if (!(panel.finishLength() > Document::kOverlapTolerance)
+            || !(panel.finishWidth() > Document::kOverlapTolerance)) {
+            throw ConstructionError(txt(i18n::TextId::ChangeRefused) + ": "
+                                    + txt(i18n::TextId::PartWithoutSize) + " ("
+                                    + i18n::displayName(*c) + ")");
+        }
+    }
+    const auto overlaps = core::findOverlaps(product, Document::kOverlapTolerance);
+    if (overlaps.size() > overlapsBefore) {
+        const core::Overlap& o = overlaps.front();
+        throw ConstructionError(txt(i18n::TextId::ChangeRefused) + ": "
+                                + txt(i18n::TextId::PartsOverlap) + " ("
+                                + i18n::displayName(*o.first) + " — "
+                                + i18n::displayName(*o.second) + ")");
+    }
+}
+
+} // namespace
 
 TreePath pathOf(const core::FurnitureComponent& node)
 {
@@ -97,6 +131,7 @@ void Document::edit(std::string_view description,
 
     try {
         change(*product_);
+        requireBuildable(*product_, overlaps_.size());
     } catch (...) {
         restore(before); // strong guarantee: a failed edit leaves no trace
         refresh();
@@ -173,6 +208,7 @@ void Document::refresh()
     cutList_ = detailing::buildCutList(*product_, product_->rules());
     edgeUsage_ = detailing::edgeBandUsage(cutList_, product_->rules());
     hardware_ = detailing::hardwareList(*product_);
+    overlaps_ = core::findOverlaps(*product_, kOverlapTolerance);
     if (selection_ && product_->find(*selection_) == nullptr) {
         selection_.reset();
     }

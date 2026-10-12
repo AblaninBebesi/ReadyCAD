@@ -5,6 +5,7 @@
 #include "readycad/export/Documentation.hpp"
 #include "readycad/nesting/NestingRun.hpp"
 #include "readycad/nesting/Stock.hpp"
+#include "readycad/production/Pipeline.hpp"
 #include "readycad/render/Camera.hpp"
 #include "readycad/render/Renderer.hpp"
 #include "readycad/render/Scene.hpp"
@@ -88,6 +89,7 @@ struct UiState {
     std::string nestingMessage; ///< status line under the sheet list
     int focusNesting = 0; ///< frames left to bring the window to the front (docking settles first)
     int focusStock = 0;
+    int focusCutList = 0;
 
     // "Add sheet" form of the stock window
     int newSheetMaterial = 0;
@@ -108,6 +110,10 @@ struct UiState {
         friend bool operator==(const ToolpathKey&, const ToolpathKey&) = default;
     };
     std::optional<ToolpathKey> toolpathKey;
+
+    // Production package (stage 9): asked for while the cutting plan was still being computed;
+    // written into this folder as soon as the plan is ready.
+    std::optional<std::filesystem::path> pendingPackage;
 };
 
 /// Runs a model operation; on an exception shows the error popup. Returns true if it succeeded.
@@ -134,6 +140,16 @@ void exportPdf(UiState& state);
 bool writePdfFile(UiState& state, const std::filesystem::path& path);
 void exportPartsDxf(UiState& state);
 void exportPartsDxfFolder(UiState& state);
+void exportCutListCsv(UiState& state);
+
+// Production package (stage 9): everything for the workshop in one folder, made by the same
+// production pipeline as the command line and the tests.
+/// Asks for a folder. With a fresh cutting plan the package is written right away; otherwise
+/// the plan is computed first and the package follows when it is ready.
+void exportPackage(UiState& state);
+/// Writes the package of the current, fresh plan into a new sub-folder of `parent`, without
+/// dialogs; prepares the "exported" message. Returns false on an error (shown in the popup).
+bool writePackageInto(UiState& state, const std::filesystem::path& parent);
 
 // Windows
 void drawCatalogWindow(UiState& state);

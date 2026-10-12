@@ -72,6 +72,9 @@ std::vector<NestingPart> partsFromCutList(const core::Product& product,
     parts.reserve(cutList.size());
     for (std::size_t i = 0; i < cutList.size(); ++i) {
         const detailing::CutListRow& row = cutList[i];
+        if (!row.inCuttingPlan) {
+            continue; // bought cut to size or cut elsewhere
+        }
         const detailing::FlatPart flat = detailing::flatPartOf(product, row);
         NestingPart part;
         part.label = std::to_string(i + 1);

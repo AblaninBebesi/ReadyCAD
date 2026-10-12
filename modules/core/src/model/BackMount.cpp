@@ -12,8 +12,8 @@ Aabb rearOpening(const CarcassFrame& frame)
 {
     const Vec3& lo = frame.outer.min();
     const Vec3& hi = frame.outer.max();
-    const Real t = frame.thickness;
-    return Aabb(Vec3(lo.x + t, lo.y + t, lo.z), Vec3(hi.x - t, hi.y - t, hi.z));
+    return Aabb(Vec3(lo.x + frame.leftThickness, lo.y + frame.bottomThickness, lo.z),
+                Vec3(hi.x - frame.rightThickness, hi.y - frame.topThickness, hi.z));
 }
 
 class GrooveMount final : public BackMount {

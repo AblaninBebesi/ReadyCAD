@@ -43,7 +43,10 @@ void Carcass::layoutChildren(const LayoutSlot& slot)
 
     // 1. Context for the structural parts' own formulas.
     frame_.outer = outer;
-    frame_.thickness = left_->thickness(slot);
+    frame_.leftThickness = left_->thickness(slot);
+    frame_.rightThickness = right_->thickness(slot);
+    frame_.topThickness = top_->thickness(slot);
+    frame_.bottomThickness = bottom_->thickness(slot);
     frame_.topJoint = topJoint_;
     frame_.bottomJoint = bottomJoint_;
     frame_.backMount = backMount_.get();

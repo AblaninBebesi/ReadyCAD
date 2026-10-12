@@ -2,6 +2,7 @@
 
 #include "readycad/core/builders/Catalog.hpp"
 #include "readycad/core/model/Product.hpp"
+#include "readycad/core/model/Queries.hpp"
 #include "readycad/detailing/CutList.hpp"
 #include "readycad/detailing/Detailing.hpp"
 #include "readycad/detailing/HardwareList.hpp"
@@ -11,11 +12,20 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
 
 namespace rc::editor {
+
+/// An edit that would make the product impossible to build — parts in each other's space, a
+/// part left without size — is refused with this error (a Turkish message for the user); the
+/// document stays as it was.
+class ConstructionError : public std::logic_error {
+public:
+    using std::logic_error::logic_error;
+};
 
 /// Position of a node in the tree: child indices from the root. Unlike ComponentId it stays
 /// valid when the product is rebuilt from a file or an undo snapshot.
@@ -30,9 +40,12 @@ using TreePath = std::vector<std::size_t>;
 /// Every change goes through edit(), which
 ///   1. remembers the state before (Memento pattern: the project serialised to JSON),
 ///   2. applies the change — if it throws, the model is restored and the error propagates,
-///   3. recomputes the derived data: drilling (detailing), cut list, edge banding usage,
-///      hardware list.
-/// So the UI never sees a half-applied change or stale drilling, and every change is undoable.
+///   3. checks that the product can still be built: no new parts in each other's space, no
+///      part without size — otherwise the change is refused (ConstructionError) and undone,
+///   4. recomputes the derived data: drilling (detailing), cut list, edge banding usage,
+///      hardware list, overlapping parts.
+/// So the UI never sees a half-applied change, stale drilling or a product that cannot be
+/// built, and every change is undoable.
 class Document {
 public:
     explicit Document(std::shared_ptr<core::Product> product);
@@ -62,6 +75,12 @@ public:
     {
         return hardware_;
     }
+    /// Pairs of parts in each other's space. An edit never adds one; a project file of an older
+    /// version may bring some, and the warnings show them.
+    [[nodiscard]] const std::vector<core::Overlap>& overlaps() const noexcept { return overlaps_; }
+
+    /// Panels closer than this (mm) do not count as overlapping: rounding of the formulas.
+    static constexpr core::Real kOverlapTolerance = 0.01;
     /// Increases after every change (edit, undo, redo): views compare it to rebuild caches.
     [[nodiscard]] std::uint64_t revision() const noexcept { return revision_; }
 
@@ -118,6 +137,7 @@ private:
 
     detailing::DetailingReport report_;
     std::vector<detailing::CutListRow> cutList_;
+    std::vector<core::Overlap> overlaps_;
     std::vector<detailing::EdgeBandUsage> edgeUsage_;
     std::vector<detailing::HardwareItem> hardware_;
 };

@@ -1,0 +1,12 @@
+rc_add_module(production
+    SOURCES
+        src/Batch.cpp
+        src/Pipeline.cpp
+        src/Summary.cpp
+    DEPENDS
+        readycad::editor
+        readycad::i18n
+    TESTS
+        tests/BatchTests.cpp
+        tests/PipelineTests.cpp
+        tests/SummaryTests.cpp)

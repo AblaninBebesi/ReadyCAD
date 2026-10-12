@@ -2,9 +2,15 @@
 
 #include "readycad/editor/Operations.hpp"
 #include "readycad/editor/PartInfo.hpp"
+#include "readycad/i18n/Localization.hpp"
+#include "readycad/storage/Storage.hpp"
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
+
+#include <functional>
+#include <string>
 
 using namespace rc::core;
 using namespace rc::editor;
@@ -99,6 +105,75 @@ TEST_CASE("Part parameters: shelf, door, handle, material, removal", "[editor][o
     const auto shelves = interior.shelves().size();
     removeComponent(doc, interior.shelves().back()->id());
     CHECK(interior.shelves().size() == shelves - 1);
+}
+
+TEST_CASE("A cut list row is left out of the cutting plan in one undoable step",
+          "[editor][operations]")
+{
+    Document doc = Document::fromCatalog(CatalogItem::Wardrobe);
+    const auto shelfRow = [&doc]() -> const rc::detailing::CutListRow* {
+        for (const auto& row : doc.cutList()) {
+            if (row.kind == ComponentKind::Shelf) {
+                return &row;
+            }
+        }
+        return nullptr;
+    };
+    REQUIRE(shelfRow() != nullptr);
+    const std::vector<ComponentId> shelves = shelfRow()->components;
+    REQUIRE(shelves.size() == 4);
+
+    setInCuttingPlan(doc, shelves, false);
+    REQUIRE(shelfRow() != nullptr);
+    CHECK_FALSE(shelfRow()->inCuttingPlan);
+    CHECK(shelfRow()->quantity == 4); // still one row: all of them changed together
+    CHECK(doc.undoDescription() == "Cutting plan");
+
+    doc.undo();
+    CHECK(shelfRow()->inCuttingPlan);
+
+    // A wrong id changes nothing, not even the parts before it in the list.
+    CHECK_THROWS_AS(setInCuttingPlan(doc, {shelfRow()->components[0], ComponentId{999999}}, false),
+                    std::invalid_argument);
+    CHECK(shelfRow()->inCuttingPlan);
+    CHECK(shelfRow()->quantity == 4);
+}
+
+TEST_CASE("An edit that would make the product impossible to build is refused",
+          "[editor][operations][overlap]")
+{
+    // Stage 9: the random-edit test found these ways to put parts into each other's space.
+    Document doc = Document::fromCatalog(CatalogItem::WardrobeWithDrawers);
+    const auto column = [&doc] { return doc.product().carcass()->interior().subsections()[0]; };
+    const auto refused = [&](const std::function<void()>& edit) {
+        const std::string before = rc::storage::saveProduct(doc.product());
+        CHECK_THROWS_AS(edit(), ConstructionError);
+        CHECK(rc::storage::saveProduct(doc.product()) == before); // nothing changed
+        CHECK(doc.overlaps().empty());
+    };
+
+    // Doors over the whole column would cover the drawer fronts of its lower compartment.
+    refused([&] { setDoorCount(doc, column()->id(), 2); });
+    // Five shelves do not fit into a 100 mm compartment.
+    setDrawerCount(doc, column()->subsections()[0]->id(), 0);
+    setSectionFixedSize(doc, column()->subsections()[0]->id(), 100.0);
+    refused([&] { setShelfCount(doc, column()->subsections()[0]->id(), 5); });
+    // Drawers would get boxes without height there.
+    refused([&] { setDrawerCount(doc, column()->subsections()[0]->id(), 3); });
+
+    // A refused edit tells why, in the language of the interface.
+    try {
+        setDoorCount(doc, column()->id(), 1);
+        FAIL("the doors were accepted");
+    } catch (const ConstructionError& e) {
+        CHECK_THAT(e.what(), Catch::Matchers::ContainsSubstring(
+                                 std::string(rc::i18n::text(rc::i18n::TextId::PartsOverlap))));
+    }
+
+    // A thicker top is fine now: its neighbours follow it.
+    setMaterialOverride(doc, doc.product().carcass()->top().id(),
+                        Material{"Suntalam 25", MaterialType::Chipboard, 25.0, true});
+    CHECK(doc.overlaps().empty());
 }
 
 TEST_CASE("Part info for the properties panel", "[editor][partinfo]")

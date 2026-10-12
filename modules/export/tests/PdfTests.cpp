@@ -9,6 +9,7 @@
 #include "readycad/export/Documentation.hpp"
 #include "readycad/export/Dxf.hpp"
 #include "readycad/export/Pdf.hpp"
+#include "readycad/test/PdfReader.hpp"
 #include "readycad/test/TempFolder.hpp"
 
 #include <catch2/catch_approx.hpp>
@@ -21,25 +22,9 @@
 using namespace rc;
 using namespace rc::exporting;
 using Catch::Approx;
+using rc::test::occurrences;
 
 namespace {
-
-std::size_t occurrences(const std::string& text, const std::string& what)
-{
-    std::size_t n = 0;
-    for (std::size_t pos = text.find(what); pos != std::string::npos;
-         pos = text.find(what, pos + 1)) {
-        ++n;
-    }
-    return n;
-}
-
-/// Page objects (not the /Pages tree node).
-std::size_t pageCount(const std::string& pdf)
-{
-    return occurrences(pdf, "/Type /Page\n") + occurrences(pdf, "/Type /Page\r")
-         + occurrences(pdf, "/Type /Page/") + occurrences(pdf, "/Type /Page>");
-}
 
 /// "Kesim" -> "FEFF004B006500730069006D": an ASCII bookmark title in UTF-16BE hex.
 std::string utf16Hex(const std::string& ascii)
@@ -84,7 +69,7 @@ TEST_CASE("PDF structure: header, pages, sizes, end", "[export][pdf]")
     CHECK(pdf.starts_with("%PDF-1."));
     CHECK(pdf.find("%%EOF") != std::string::npos);
     CHECK(pdf.find("%%EOF") > pdf.size() - 8);
-    CHECK(pageCount(pdf) == 2);
+    CHECK(rc::test::pdfPageCount(pdf) == 2);
 
     // Page sizes in points (1 mm = 72 / 25.4 pt): A4 landscape and A3 portrait.
     const std::regex mediaBox(R"(/MediaBox \[ ?0 0 ([0-9.]+) ([0-9.]+) ?\])");
@@ -123,7 +108,7 @@ TEST_CASE("PDF with an embedded TrueType font", "[export][pdf]")
         SKIP("no TrueType font with Turkish letters on this machine");
     }
     const std::string pdf = toPdf(samplePages(), fonts);
-    CHECK(pageCount(pdf) == 2);
+    CHECK(rc::test::pdfPageCount(pdf) == 2);
     CHECK(pdf.find("/FontFile2") != std::string::npos);  // the font travels with the file
     CHECK(pdf.find("/ToUnicode") != std::string::npos);  // text can be searched and copied
     CHECK(pdf.find("/CIDFontType2") != std::string::npos);
@@ -163,7 +148,7 @@ TEST_CASE("Documentation saved as PDF", "[export][pdf]")
     REQUIRE(std::filesystem::exists(file));
     const std::string pdf = test::readFile(file);
     const PageSet pages = buildDocumentation(input, options, PdfFontMetrics(PdfFonts{}));
-    CHECK(pageCount(pdf) == pages.pages.size());
+    CHECK(rc::test::pdfPageCount(pdf) == pages.pages.size());
     CHECK(pdf.find("(Kesim listesi) Tj") != std::string::npos);
 
     // A folder where the file should be: a clear error instead of a broken file.

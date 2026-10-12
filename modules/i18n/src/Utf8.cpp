@@ -72,6 +72,17 @@ std::string asciiFold(std::string_view text)
     return out;
 }
 
+std::string safeFileName(std::string_view text)
+{
+    std::string name;
+    for (const char c : asciiFold(text)) {
+        const bool safe = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
+                       || c == '-';
+        name += safe ? c : '_';
+    }
+    return name;
+}
+
 std::string pathToUtf8(const std::filesystem::path& path)
 {
     const std::u8string u8 = path.u8string();

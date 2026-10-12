@@ -238,12 +238,14 @@ struct Application::Impl {
         if (config.pdfDialog) {
             exportPdf(state);
         }
+        state.productCount = std::clamp(config.productCount, 1, 100);
         if (config.nesting >= 0) {
             state.nestingSettings.machine = config.nesting == 0 ? nesting::Machine::PanelSaw
                                                                 : nesting::Machine::NestingCenter;
             startNesting(state);
         }
         state.focusStock = config.stockWindow ? 3 : 0;
+        state.focusCutList = config.cutListWindow ? 3 : 0;
         state.openNestingSettings = config.cuttingSettings;
         state.openCncSettings = config.cncSettings;
         state.showToolpath = config.toolpath;
@@ -403,8 +405,16 @@ void Application::Impl::drawMainMenu()
         ImGui::EndMenu();
     }
     if (ImGui::BeginMenu(tr(TextId::MenuExport))) {
+        if (ImGui::MenuItem(tr(TextId::MenuExportPackage), "Ctrl+E", false,
+                            !state.pendingPackage)) {
+            exportPackage(state);
+        }
+        ImGui::Separator();
         if (ImGui::MenuItem(tr(TextId::MenuExportPdf), "Ctrl+P")) {
             exportPdf(state);
+        }
+        if (ImGui::MenuItem(tr(TextId::MenuExportCutListCsv))) {
+            exportCutListCsv(state);
         }
         ImGui::Separator();
         if (ImGui::MenuItem(tr(TextId::MenuExportDxfAll))) {
@@ -491,6 +501,9 @@ void Application::Impl::handleShortcuts()
     }
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_P, route)) {
         exportPdf(state);
+    }
+    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_E, route) && !state.pendingPackage) {
+        exportPackage(state);
     }
     if (ImGui::Shortcut(ImGuiKey_F5, route)) {
         startNesting(state);

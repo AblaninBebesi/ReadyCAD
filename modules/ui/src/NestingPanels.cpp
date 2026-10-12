@@ -8,6 +8,7 @@
 #include "readycad/export/PartDrawing.hpp"
 #include "readycad/export/SheetDrawing.hpp"
 #include "readycad/i18n/Labels.hpp"
+#include "readycad/i18n/Utf8.hpp"
 #include "readycad/storage/Storage.hpp"
 
 #include <imgui.h>
@@ -15,7 +16,6 @@
 
 #include <algorithm>
 #include <cfloat>
-#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <string>
@@ -43,16 +43,6 @@ std::string percent(Real fraction)
 {
     char buffer[16];
     std::snprintf(buffer, sizeof buffer, "%%%.0f", fraction * 100.0);
-    return buffer;
-}
-
-std::string today()
-{
-    const auto days = std::chrono::floor<std::chrono::days>(std::chrono::system_clock::now());
-    const std::chrono::year_month_day ymd(days);
-    char buffer[16];
-    std::snprintf(buffer, sizeof buffer, "%02u.%02u.%04d", static_cast<unsigned>(ymd.day()),
-                  static_cast<unsigned>(ymd.month()), static_cast<int>(ymd.year()));
     return buffer;
 }
 
@@ -106,10 +96,7 @@ void saveStockFile(UiState& state)
     if (state.stockFile.empty()) {
         return;
     }
-    run(state, [&] {
-        std::filesystem::create_directories(state.stockFile.parent_path());
-        storage::writeTextFile(state.stockFile, storage::saveStock(state.stock));
-    });
+    run(state, [&] { storage::saveStockFile(state.stock, state.stockFile); });
 }
 
 void saveSettingsFile(UiState& state)
@@ -118,19 +105,8 @@ void saveSettingsFile(UiState& state)
         return;
     }
     run(state, [&] {
-        std::filesystem::create_directories(state.settingsFile.parent_path());
-        storage::writeTextFile(state.settingsFile,
-                               storage::saveSettings({state.nestingSettings, state.cnc}));
+        storage::saveSettingsFile({state.nestingSettings, state.cnc}, state.settingsFile);
     });
-}
-
-/// Name for exported files: the project file's name, else the product's.
-std::string baseName(const ed::Document& doc)
-{
-    if (!doc.path().empty()) {
-        return toUtf8(doc.path().stem());
-    }
-    return doc.product().name().empty() ? tr(TextId::Untitled) : doc.product().name();
 }
 
 /// Materials the stock window offers: those of the product, then those already on stock.
@@ -511,7 +487,8 @@ void drawConsumePopup(UiState& state)
     ImGui::Spacing();
     if (ImGui::Button(tr(TextId::MenuConsumeStock))) {
         if (nestingIsFresh(state) && state.nesting && !state.nestingConsumed) {
-            const std::string note = baseName(*state.document) + " · " + today();
+            const std::string note =
+                production::orderName(*state.document) + " · " + exporting::todayText();
             if (run(state, [&] { state.stock.consume(*state.nesting, note); })) {
                 saveStockFile(state);
                 state.nestingFor.stock = state.stockRevision; // the plan was made for this stock
@@ -534,23 +511,18 @@ void drawConsumePopup(UiState& state)
 // Actions
 // ---------------------------------------------------------------------------------------------
 
-void loadWorkshopFiles(UiState& state, const std::filesystem::path& where)
+void loadWorkshopFiles(UiState& state, const std::filesystem::path& folder)
 {
-    const std::filesystem::path folder = where.empty() ? storage::userDataFolder() : where;
-    state.stockFile = folder / "stock.rcstock";
-    state.settingsFile = folder / "settings.json";
-    std::error_code ec;
-    if (std::filesystem::exists(state.stockFile, ec)) {
-        run(state, [&] { state.stock = storage::loadStock(storage::readTextFile(state.stockFile)); });
-    }
-    if (std::filesystem::exists(state.settingsFile, ec)) {
-        run(state, [&] {
-            const storage::AppSettings settings =
-                storage::loadSettings(storage::readTextFile(state.settingsFile));
-            state.nestingSettings = settings.nesting;
-            state.cnc = settings.cnc;
-        });
-    }
+    const storage::WorkshopFiles files = storage::WorkshopFiles::in(folder);
+    state.stockFile = files.stock;
+    state.settingsFile = files.settings;
+    // Each file on its own: a broken settings file must not cost the stock, and the other way.
+    run(state, [&] { state.stock = storage::loadStockFile(files.stock); });
+    run(state, [&] {
+        const storage::AppSettings settings = storage::loadSettingsFile(files.settings);
+        state.nestingSettings = settings.nesting;
+        state.cnc = settings.cnc;
+    });
     ++state.stockRevision;
 }
 
@@ -573,7 +545,7 @@ void startNesting(UiState& state)
     run(state, [&] {
         nesting::validate(state.nestingSettings);
         std::vector<nesting::NestingPart> parts =
-            nesting::partsFromCutList(doc.product(), doc.cutList(), state.productCount);
+            production::cuttingParts({doc, state.productCount});
         state.nestingRun = std::make_unique<nesting::NestingRun>(std::move(parts), state.stock,
                                                                  state.nestingSettings);
         state.nestingVersion = 0;
@@ -593,6 +565,7 @@ void stopNesting(UiState& state)
     if (state.nestingRun) {
         state.nestingRun->cancel();
     }
+    state.pendingPackage.reset(); // stopped by hand: no package from a plan cut short
 }
 
 void updateNesting(UiState& state)
@@ -613,6 +586,14 @@ void updateNesting(UiState& state)
             state.openErrorPopup = true;
         }
         state.nestingRun.reset(); // joins the finished thread
+        // A production package was asked for before the plan existed.
+        if (state.pendingPackage) {
+            const std::filesystem::path parent = *state.pendingPackage;
+            state.pendingPackage.reset();
+            if (nestingIsFresh(state) && writePackageInto(state, parent)) {
+                state.openExportedPopup = true;
+            }
+        }
     }
     if (state.nesting && state.selectedSheet >= state.nesting->layouts.size()) {
         state.selectedSheet = 0;
@@ -639,10 +620,12 @@ void exportSheetsDxf(UiState& state)
     }
     const ed::Document& doc = *state.document;
     const std::filesystem::path target =
-        *folder / (exporting::asciiFold(baseName(doc)) + "_KESIM");
-    const exporting::PartSource source{doc.product(), doc.cutList()};
+        *folder / (safeFileName(production::orderName(doc)) + "_KESIM");
     std::size_t count = 0;
-    if (run(state, [&] { count = exporting::saveSheetDxfs(*state.nesting, &source, target).size(); })) {
+    if (run(state, [&] {
+            count = production::writeSheetDxfs({doc, state.productCount}, *state.nesting, target)
+                        .size();
+        })) {
         state.exportMessage = std::string(tr(TextId::ExportDoneFiles)) + " " + std::to_string(count);
         state.exportedFile = target;
         state.openExportedPopup = true;
@@ -729,6 +712,9 @@ void drawNestingWindow(UiState& state)
         ImGui::ProgressBar(fraction, ImVec2(-FLT_MIN, 0.0f), overlay);
     } else if (state.nesting && !nestingIsFresh(state)) {
         ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.3f, 1.0f), "%s", tr(TextId::NestingStale));
+    }
+    if (state.pendingPackage) {
+        ImGui::TextDisabled("%s", tr(TextId::PackageWaiting));
     }
 
     if (!state.nesting) {

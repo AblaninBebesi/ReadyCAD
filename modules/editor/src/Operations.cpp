@@ -151,6 +151,15 @@ void setMaterialOverride(Document& doc, ComponentId part, std::optional<core::Ma
     });
 }
 
+void setInCuttingPlan(Document& doc, const std::vector<ComponentId>& parts, bool inPlan)
+{
+    doc.edit("Cutting plan", [&](Product& p) {
+        for (const ComponentId id : parts) {
+            require<core::PanelComponent>(p, id).setInCuttingPlan(inPlan);
+        }
+    });
+}
+
 void removeComponent(Document& doc, ComponentId component)
 {
     doc.edit("Remove", [&](Product& p) {

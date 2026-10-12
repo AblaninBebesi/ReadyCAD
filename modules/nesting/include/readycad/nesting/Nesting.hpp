@@ -101,9 +101,12 @@ struct NestingPart {
     int quantity = 1;
     bool keepGrain = false; ///< decor with a direction: turned by 0° or 180° only
     std::optional<std::size_t> cutListRow; ///< the cut list row it comes from
+
+    friend bool operator==(const NestingPart&, const NestingPart&) = default;
 };
 
-/// One part per cut list row, `productCount` times its quantity. The outline is the sawn blank
+/// One part per cut list row, `productCount` times its quantity; rows left out of the cutting
+/// plan (CutListRow::inCuttingPlan) are skipped, the others keep their row number. The outline is the sawn blank
 /// (cut size) in FlatPart coordinates: origin at the lower-left corner of the finished part, seen
 /// from the face with more machining. A CNC drilling from above can then take the holes of the
 /// FlatPart straight onto the sheet with the same transform.

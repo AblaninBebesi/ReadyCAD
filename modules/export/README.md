@@ -10,4 +10,6 @@ Namespace `rc::exporting` (`export` is a C++ keyword).
 * `Pdf` — PDF writer on libHaru (private dependency), TrueType embedding, font metrics.
 * `SheetDrawing` — sheet layouts of the cutting plan (stage 7): parts turned and moved to their place with their machining, remnants, saw cuts; one DXF per layout and the "Kesim planı" pages of the PDF.
 
-**Stages:** 6, 7
+Stage 9: cut list rows left out of the cutting plan are marked with "*" and a footnote; `todayText()`.
+
+**Stages:** 6, 7, 9

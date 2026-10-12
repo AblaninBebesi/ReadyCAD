@@ -32,12 +32,15 @@ constexpr std::string_view kProfileFormat = "readycad-profile";
 // Writing
 // ---------------------------------------------------------------------------------------------
 
-/// Per-part choices of a panel: name, material and edge overrides. Only what differs from
-/// the defaults is written.
+/// Per-part choices of a panel: name, material and edge overrides, left out of the cutting
+/// plan. Only what differs from the defaults is written.
 void writePanelChoices(const PanelComponent& part, json& out)
 {
     if (!part.name().empty()) {
         out["name"] = part.name();
+    }
+    if (!part.inCuttingPlan()) {
+        out["cutting"] = false;
     }
     if (part.materialOverride()) {
         out["material"] = *part.materialOverride();
@@ -52,6 +55,23 @@ void writePanelChoices(const PanelComponent& part, json& out)
     }
     if (!edges.empty()) {
         out["edges"] = edges;
+    }
+}
+
+/// Key of a drawer box part in the file; nullptr for the front (saved on its own).
+const char* drawerPartKey(const FurnitureComponent& part)
+{
+    switch (part.kind()) {
+    case ComponentKind::DrawerBoxSide:
+        return static_cast<const DrawerBoxSide&>(part).side() == Side::Left ? "leftSide"
+                                                                             : "rightSide";
+    case ComponentKind::DrawerBoxEnd:
+        return static_cast<const DrawerBoxEnd&>(part).end() == DrawerEnd::Front ? "frontEnd"
+                                                                                : "backEnd";
+    case ComponentKind::DrawerBottom:
+        return "bottom";
+    default:
+        return nullptr;
     }
 }
 
@@ -97,7 +117,21 @@ json writeChild(const FurnitureComponent& child)
             json front;
             front["handle"] = writeHandle(drawer->front());
             writePanelChoices(drawer->front(), front);
-            drawers.push_back({{"front", front}});
+            json item{{"front", front}};
+            json box = json::object();
+            for (const auto& part : drawer->children()) {
+                if (const char* key = drawerPartKey(*part)) {
+                    json choices = json::object();
+                    writePanelChoices(static_cast<const PanelComponent&>(*part), choices);
+                    if (!choices.empty()) {
+                        box[key] = choices;
+                    }
+                }
+            }
+            if (!box.empty()) {
+                item["box"] = box;
+            }
+            drawers.push_back(item);
         }
         out["drawers"] = drawers;
         return out;
@@ -164,6 +198,7 @@ void readPanelChoices(const json& in, PanelComponent& part)
     if (in.contains("material")) {
         part.setMaterialOverride(in.at("material").get<Material>());
     }
+    part.setInCuttingPlan(in.value("cutting", true));
     if (in.contains("edges")) {
         const json& edges = in.at("edges");
         const std::pair<EdgeSide, const char*> sides[] = {
@@ -227,6 +262,13 @@ void readChild(const json& in, Section& parent)
             const json& front = drawers.at(i).at("front");
             created[i]->front().setHandle(readHandle(front));
             readPanelChoices(front, created[i]->front());
+            const json box = drawers.at(i).value("box", json::object());
+            for (const auto& part : created[i]->children()) {
+                const char* key = drawerPartKey(*part);
+                if (key != nullptr && box.contains(key)) {
+                    readPanelChoices(box.at(key), static_cast<PanelComponent&>(*part));
+                }
+            }
         }
         parent.add(stack);
     } else {

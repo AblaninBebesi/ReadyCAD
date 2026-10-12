@@ -91,6 +91,13 @@ enum class TextId : std::size_t {
     FeedRate, PlungeFeed, StepDown, AddTool, ShowToolpath, EstimatedTime, ToolChangesLabel,
     HolesLabel, MilledHolesLabel, LeftoverTitle, LeftoverEdge, LeftoverBottom, LeftoverNoTool,
     CncNeedsRouter, CncProgramsDone, Minutes, SecondsShort, Preset,
+    // Production pipeline (stage 9): parts left out of the cutting plan, the production package
+    InCuttingPlan, ColCuttingPlan, NotInCuttingPlanNote, Yes, No, PackageTitle, SummaryOrder,
+    SummaryDate, SummarySize, SummaryParts, InPlanShort, OutOfPlanShort, SummaryCutting,
+    NoCuttingPlan, SawProgramsNote, SummaryCnc, TotalTime, OutOfPlanTitle, FilesTitle, FilesWord,
+    PartDrawingsWord, SheetDrawingsWord, ProgramsWord, CutListCsvWord, MenuExportPackage,
+    MenuExportCutListCsv, PackageDone, PackageWaiting, ChangeRefused, PartsOverlap,
+    PartWithoutSize, OverlapWarning, SummaryAttention,
 
     Count // keep last
 };

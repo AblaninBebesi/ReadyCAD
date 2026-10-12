@@ -12,6 +12,8 @@ modül sınırlarını bir anlaşma değil, derleyici korur.
                                 │
                                ui ─────────────┐        ImGui, GLFW, nfd (diyaloglar)
                                 │              │
+                           production          │        üretim hattı: ürün → atölye dosyaları
+                                │              │
                              editor          render     OpenGL (glad)
             ┌──────┬──────┬─────┼──────┐       │
            cam   export   │     │   storage    │        nlohmann/json; export: libHaru (PDF)
@@ -29,16 +31,17 @@ Oklar sadeleştirilmiştir: her modülün tam bağımlılıkları tabloda listel
 | Modül       | Sorumluluk | Aşama | Bağımlılıklar |
 |-------------|------------|-------|---------------|
 | `core`      | Matematik (mm, double), `Aabb`, mobilya bileşen ağacı (Composite), `Panel`, parametrik yeniden hesaplama | 1–3 | glm |
-| `i18n`      | Metinler (`TextId` + Türkçe tablo), model öğelerinin adları (parça türleri, kenarlar, delikler, bağlantı elemanları), UTF-8 ve ASCII'ye çevirme | 1, 6, 8 | core |
-| `storage`   | JSON dosyaları: proje (`*.rcproj`), atölye profili (`*.rcprofile`), levha stoku (`stock.rcstock`), kesim ve CNC makinesi ayarları | 5, 7, 8 | core, nesting, cam |
+| `i18n`      | Metinler (`TextId` + Türkçe tablo), model öğelerinin adları (parça türleri, kenarlar, delikler, bağlantı elemanları), UTF-8, ASCII'ye çevirme, dosya adları | 1, 6, 8, 9 | core |
+| `storage`   | JSON dosyaları: proje (`*.rcproj`), atölye profili (`*.rcprofile`), levha stoku (`stock.rcstock`), kesim ve CNC makinesi ayarları; atölye dosyaları tek klasörde | 5, 7, 8, 9 | core, nesting, cam |
 | `detailing` | Kesim ve net ölçüler, kenar bantları, «Sistem 32» delme, bağlantı elemanları, düzlemdeki parça (`FlatPart`), bağlantı elemanları listesi | 4, 6 | core |
 | `nesting`   | Levha ve artık stoku (`StockManager`), panel ebatlamada kesim planı (giyotin), CNC'de nesting (No-Fit Polygon), genetik algoritma, arka planda hesap | 7 | core, detailing; Clipper2 (modülün içinde gizli) |
 | `export`    | 2D çizimler (`Drawing`), DXF R12, PDF: listeler, kesim planı, montaj çizimi, parça çizimleri | 6, 7 | core, detailing, nesting, i18n; libHaru (modülün içinde gizli) |
 | `cam`       | İşleme operasyonları (makineden bağımsız), CNC nesting planlaması (takımlar, sıra, rotalar), lehçesi ayarlanabilen G-code son işlemcisi | 8 | core, detailing, nesting, i18n; Clipper2 (modülün içinde gizli) |
-| `editor`    | Belge, seçim, geri al/yinele, arayüz için işlemler, otomatik detaylandırma. **OpenGL yok**, bu yüzden pencere olmadan test edilir | 5, 9 | yukarıdakilerin hepsi |
+| `editor`    | Belge, seçim, geri al/yinele, arayüz için işlemler, otomatik detaylandırma, ürünü birleştirilemez yapan değişikliklerin reddi. **OpenGL yok**, bu yüzden pencere olmadan test edilir | 5, 9 | yukarıdakilerin hepsi |
+| `production`| Üretim hattı: sipariş → kesilecek parçalar → kesim planı → PDF, DXF, CNC programları, CSV → özetli atölye paketi; pencere olmadan komut satırı | 9 | editor, i18n |
 | `render`    | OpenGL 3.3 core: sahne, kamera, fareyle seçim, GPU nesneleri için RAII sarmalayıcılar | 5 | core, detailing, glad |
-| `ui`        | ImGui pencereleri, diyaloglar, dışa aktarma menüsü, kesim planı ve stok pencereleri | 1, 5, 6, 7 | editor, i18n, render, ImGui |
-| `app`       | `main()` | 1 | ui |
+| `ui`        | ImGui pencereleri, diyaloglar, dışa aktarma menüsü, kesim planı ve stok pencereleri | 1, 5–9 | editor, production, i18n, render, ImGui |
+| `app`       | `main()`: pencere veya pencere olmadan toplu işlem | 1, 9 | ui, production |
 
 GUI modülleri (`render`, `ui`, `app`) yalnızca `READYCAD_BUILD_APP=ON` olduğunda derlenir.
 `headless` ön ayarı (preset) geri kalan her şeyi GLFW ve OpenGL olmadan derler ve test eder
@@ -156,7 +159,9 @@ Tüm sayılar `ConstructionRules` içinde toplanmıştır. Atölye bunları koda
 
 `findOverlaps(root)` tüm panel çiftlerini `Aabb::intersects` ile kontrol eder. Temas kesişim
 sayılmaz. Meşru kesişimleri (kanaldaki arkalık) parça kendisi `allowsOverlapWith()` ile bildirir.
-Aşama 3 testleri bu kontrolü her boyut değişikliğinden sonra çalıştırır.
+Aşama 3 testleri bu kontrolü her boyut değişikliğinden sonra çalıştırır. Aşama 9'dan beri
+düzenleyici de her değişiklikten sonra onu yapar: çakışma ekleyen bir değişiklik reddedilir
+(bkz. «Rastgele kullanıcının bulduğu hatalar»).
 
 ## Detaylandırma ve delme (Aşama 4, `detailing` modülü)
 
@@ -860,3 +865,228 @@ Henüz yapılmadı:
 * dalma doğrudan kontur üzerinde (aralık zaten kesiliyor), rampa yok;
 * KDT hazır ayarı gerçek makinede denenmedi;
 * takım yolu yalnızca üstten (2B) gösteriliyor.
+
+## Uçtan uca üretim hattı (Aşama 9, `production` modülü)
+
+![Kesim listesi: «Kesim» sütunu, arkalık kesim planına girmiyor](images/stage9-cutlist.png)
+
+### Üründen dosyalara tek yol
+
+Aşama 9'dan önce modülleri birbirine bağlayan her şey `ui` içindeydi: kesime hangi parçaların
+gideceği, kesim planının eskiyip eskimediği, klasör adları, kesim planıyla birlikte PDF'in
+hazırlanması. Testler bu kodu görmüyordu, komut satırı seçenekleri de ancak pencere açıkken
+çalışıyordu. Artık bunların hepsi OpenGL'siz `production` modülünde ve üç giriş de onu
+kullanıyor:
+
+```
+                 menü (ui)    komut satırı (app)    testler
+                      └──────────────┬──────────────┘
+                                     ▼
+Order {Document, adet}  ──►  cuttingParts()   kesilecek parçalar: liste satırları × N,
+                                     │          kesim planı dışındakiler hariç
+                                     ▼
+                                planCutting()       stok ve ayarlarla nesting::optimize
+                                     │
+                                     ▼
+       writeDocumentation / writePartDxfs / writeSheetDxfs / writeCncPrograms / writeCutListCsv
+                                     │
+                                     ▼
+                                writePackage()      hepsi tek klasörde + OZET.txt
+```
+
+Böylece test, kullanıcının aldığı dosyaların tam olarak aynısını denetler.
+
+* **`Order`**: belge ve kaç ürün yapılacağı. Belge, detaylandırmayı ve kesim listesini zaten
+  güncel tutar (bunu `editor` yapar).
+* **`planMatches(order, plan)`**: kesim planı ürünün şimdiki hâline mi ait (aynı parçalar, aynı
+  adet). Dosya yazan her fonksiyon eskimiş bir planı reddeder (`ProductionError`). Eski plana
+  göre yazılmış bir CNC programı projede artık olmayan parçaları keser; bu da boşa giden levha
+  demektir.
+* **`orderName`**: dosyaların adı. Önce proje dosyasının adı, yoksa ürünün adı, o da yoksa
+  «Adsız». Dosya ve klasör adlarında yalnızca ASCII kullanılır (`i18n::safeFileName`):
+  makine kontrolörleri ve USB bellekler Türkçe harfleri her zaman tanımaz.
+
+### Atölye için paket
+
+«Dışa aktar → Üretim paketi (hepsi bir klasörde)...» (Ctrl+E) her şeyi yeni bir klasöre yazar:
+
+```
+Musteri_Yilmaz_URETIM/
+├── Musteri_Yilmaz.pdf                 dokümantasyon (kesim planıyla)
+├── Musteri_Yilmaz_kesim_listesi.csv   testere optimizasyon yazılımı veya Excel için liste
+├── Musteri_Yilmaz.rcproj              dosyaların üretildiği projenin kendisi
+├── DXF/      her parça için bir dosya
+├── KESIM/    her levha için bir dosya
+├── CNC/      her levha için bir program (kesim planı CNC nesting için ise)
+└── OZET.txt  özet
+```
+
+* **Yalnızca boş ya da yeni bir klasöre.** Yeni planda olmayan bir levhanın eski programı yeni
+  programların yanında durmamalı. Menü yeni adı kendisi seçer: `_URETIM`, `_URETIM_2`, ...
+* **Ya hepsi ya hiçbiri.** Önce bütün CNC programları planlanır: freze kesim planına uymuyorsa
+  paket ilk dosyadan önce durur. Herhangi bir hatada o ana kadar yazılanlar silinir. Bu
+  güvenlidir: klasör boştu, içindekileri biz yazdık.
+* **Kesim planı hesaplanmamışsa veya eskimişse**, menü önce onu hesaplar (F5 gibi), paket de
+  hesap bitince yazılır. «Durdur» paketi de iptal eder.
+* **CSV** panel ebatlamaya köprüdür. Testere için program yazmıyoruz (Aşama 8'de böyle karar
+  verildi), ama testerenin kendi optimizasyon yazılımı var ve parça listesini kabul ediyor.
+  Ayırıcı «;», ondalık virgül, BOM'lu UTF-8: Türkçe Excel dosyayı soru sormadan açar.
+* **Paketteki `.rcproj`**, dosyaların tam olarak hangi hâline göre üretildiği projedir.
+  Sonradan «bu parça neden böyle» sorusu çıkarsa cevap yanında durur.
+* **`OZET.txt`** insanlar için bir özettir. Sütunlar baytlara göre değil harflere göre
+  hizalanır («ş» tek harftir ama UTF-8'de iki bayttır). BOM ve Windows satır sonları sayesinde
+  eski Not Defteri de onu doğru okur:
+
+```
+ReadyCAD — Üretim paketi
+========================
+
+Sipariş   :  Çekmeceli gardırop × 2
+Tarih     :  12.10.2026
+Ölçüler   :  1600 × 2200 × 618 mm
+Parçalar  :  84 (82 kesim planında, 2 kesim dışı)
+
+Kesim planı — CNC nesting (freze)
+---------------------------------
+Malzeme      Toplam levha  Stoktan  Artıktan  Satın alınacak  Doluluk  Yeni artık
+Suntalam 18             5        0         0               5      %63           5
+...
+CNC programları
+---------------
+CNC/01_Suntalam_18_2800x2100.nc  × 1  5 dk 45 sn  Delik: 42  Takım değişimi: 3
+...
+Toplam süre: 32 dk 20 sn
+
+CNC'de yapılmayan işlemler
+--------------------------
+124 kenar deliği (yatay delme makinesinde)
+78 alt yüz işlemi (parça çevrilerek)
+```
+
+  Aynı levhaların süresi sayılarıyla çarpılır: iki aynı levhadan oluşan bir istif, aynı
+  programın iki kez çalışması demektir.
+
+### Kesim planı dışındaki parçalar
+
+Her panelin «Kesim planına dahil» onay kutusu vardır (`PanelComponent::inCuttingPlan`,
+varsayılan olarak açık). Kapalı bir parça kesim listesinde, belgelerde ve kenar bandı
+tüketiminde kalır, ama ne kesim planına ne de CNC programlarına girer. Örnekler: hazır kesilmiş
+sipariş edilen arkalık veya HDF çekmece tabanı; başka bir atölyenin kestiği parça; ileride
+tezgâh.
+
+* Onay kutusu parçanın özelliklerinde ve kesim listesinde «Kesim» sütunu olarak var. Tek
+  tıklama satırdaki bütün parçaları tek bir geri alma adımında değiştirir
+  (`editor::setInCuttingPlan`).
+* Kesim planı dışındaki bir parça, planda olan aynı parçayla aynı liste satırında
+  birleşmez. Satır numarası değişmez, böylece yerleşim üzerindeki etiketler PDF ile aynı kalır.
+* PDF'te böyle bir satır «*» ve dipnotla işaretlenir, CSV'de «Hayır» yazar, `OZET.txt`'te
+  ayrı bir «Kesim planı dışındaki parçalar» bölümü vardır.
+* Onay kutusu projede saklanır (`"cutting": false`, yalnızca kapalı olanlar için yazılır).
+
+### Pencere olmadan komut satırı
+
+```
+ReadyCAD.exe --open proje.rcproj --count 2 --nesting router --package D:\is\proje
+```
+
+Pencere açılmaz, OpenGL gerekmez. Program projeyi (veya bir katalog modelini) açar, atölyenin
+stoku ve ayarlarıyla (`--data-dir` veya kullanıcı klasörü) kesim planını hesaplar, paketi
+yazar, özeti basar ve çıkar: kod 0 — tamam, 1 — hata (nedeni stderr'de). Stok yalnızca okunur:
+levhaları stoktan düşmek pencerede insanın kararıdır.
+
+Release derlemesi kendi konsolu olmayan bir GUI programıdır. Bu yüzden toplu işlem kipinde
+kendisini başlatan konsola bağlanır (`AttachConsole`) ve orada UTF-8'i açar. Çıktı bir
+dosyaya yönlendirilmişse oraya gider. Kabuk pencereli bir programı beklemez; bu yüzden
+betiklerde çıktı bir boru hattına verilir (`ReadyCAD.exe ... | Out-Host`): o zaman PowerShell
+programın bitmesini bekler ve çıkış kodunu alır.
+
+### Uçtan uca testler
+
+1. **Kullanıcı yolculuğu** (`tests/integration/UserJourneyTests.cpp`): görev tanımındaki
+   senaryo, pencerenin çağırdığı fonksiyonların aynısıyla:
+   1. atölye dosyaları (levhalar ve bir artıktan oluşan stok, CNC nesting ayarları) programın
+      açılışındaki gibi yazılır ve okunur;
+   2. katalogdan çekmeceli gardırop: ölçüler, ad, dört raf (biri konfirmatlı), topuz kulplar,
+      üçüncü çekmece (geri al, yinele), kesim planı dışında arkalık;
+   3. detaylandırma: çakışma ve uyarı yok, delikler yerinde, çekmece kapakları 3 + 2;
+   4. Türkçe adlı bir dosyaya kaydetme ve açma: aynı kesim listesi, aynı delikler;
+   5. iki ürünün kesim planı: bütün parçalar yerleşti, arkalıklar yok, satın almadan önce stok
+      kullanılıyor;
+   6. paket: PDF tam, her DXF okunuyor, her CNC programı yeniden oynatılıyor — yalnızca levhanın
+      içinde, kurban tablasından derin değil, yalnızca makinenin takımlarıyla; CSV, özet ve
+      paketteki proje ürünle aynı;
+   7. stoktan düşme: levhalar stoktan çıktı, yeni artıklar siparişin notuyla geldi.
+2. **Her katalog modeli iki makinede**: dosyalara kadar bütün hat.
+3. **Rastgele kullanıcı.** Sabit seed'li bir üreteç arka arkaya 40 değişiklik yapar: ölçüler,
+   bölme ayırma, raflar, kapaklar, çekmeceler, yükseklikler, malzemeler, kulplar, silmeler
+   (imkânsız olanlar dahil: yan panel silinemez), «kesim dışı», konstrüksiyon, geri al,
+   yinele. Her değişiklikten sonra:
+   * reddedilen değişiklik ürünü bir bayt bile değiştirmedi (proje JSON'u karşılaştırılır);
+   * bütün panellerin ölçüleri sonlu ve pozitif;
+   * kesim listesi bütün panelleri sayıyor;
+   * **hiçbir parça çifti çakışmıyor**;
+   * proje kaydedilip aynı hâliyle açılıyor.
+
+   Her 20 değişiklikte bir, bütün hat pakete kadar çalıştırılır, sırayla testerede ve CNC'de.
+   Uzun çalıştırma (`[soak]`, gizli): 40 seed × 80 değişiklik, yaklaşık 20 saniye.
+4. **Gerçek program** (`app_batch_package`, CTest): `ReadyCAD.exe --catalog 1 --count 2
+   --nesting router --package ...`, ardından özette DXF, KESIM ve CNC klasörlerinin olduğu
+   denetlenir.
+
+### Rastgele kullanıcının bulduğu hatalar
+
+İlk uzun çalıştırma yaklaşık iki bin parça çakışması verdi. Bunlar beş tür hataydı ve
+hepsi testte değil, modeldeydi:
+
+| Ne | Neden | Düzeltme |
+|----|-------|----------|
+| 18 mm yan panellerin üstündeki 25 mm üst tabla onların içine 7 mm giriyor | `CarcassFrame` bütün gövde için tek bir kalınlık biliyordu | çerçevede dört kalınlık var (sol, sağ yan panel, üst tabla, alt tabla); her formül karşılaştığı parçanınkini alır |
+| Çekmece ön-arkaları 18 mm yan panele, yanlar 6 mm tabana giriyor | kutu parçaları kalınlıkları gerçek parçalardan değil `ConstructionRules`'tan alıyordu | `Drawer`, parçalarına gerçek kalınlıklarıyla bir `DrawerBoxFrame` verir |
+| Bir bölmenin kapakları alt bölmesindeki çekmece kapaklarını örtüyor | «ön yüzler üst üste binmez» kuralı yoktu | düzenleyicinin genel denetimi (aşağıda) |
+| Aynı yükseklikte raflar ya da sığabileceğinden fazla raf | — | düzenleyicinin genel denetimi |
+| Birkaç santimetrelik bir bölmedeki çekmecelerin kutusu yüksekliksiz kalıyor | — | düzenleyicinin genel denetimi |
+
+**Düzenleyicinin genel denetimi.** `Document::edit`, değişiklikten sonra ürünün
+birleştirilebildiğini denetler: hiçbir panel ölçüsünü kaybetmedi, çakışan parça çifti
+artmadı. Aksi hâlde değişiklik reddedilir (`ConstructionError`, Türkçe metinle: «Bu değişiklik
+yapılamaz: parçalar çakışır (Kapak — Çekmece kapağı)») ve başarısız her düzenleme gibi geri
+alınır. Kural her şey için tektir; yeni parça türleri (mutfak) onu bedavaya alır. Eski bir
+sürümden gelen, çakışma içeren proje yine açılır: çakışmalar «Uyarılar» penceresinde (tıklama
+parçayı seçer), `OZET.txt`'in başında («DİKKAT») ve komut satırı çıktısında görünür.
+
+Düzeltmelerden sonra: 3200 rastgele değişiklik, 2770'i kabul edildi, hiç çakışma yok.
+
+Kaydetme sırasında yolda bulunan hata: çekmece kutusu parçalarında seçilen malzeme ve kenar
+bandı projeye kaydedilmiyordu. Artık dosyada çekmecenin bir `"box"` alanı var (yalnızca
+değiştirilmiş parçalar için).
+
+### Bu aşamadaki diğer değişiklikler
+
+* `storage::WorkshopFiles`: atölyenin stoku ve ayarları tek klasörde; `loadStockFile` ve
+  `loadSettingsFile` (dosya yoksa boş stok ve varsayılan ayarlar; bozuk dosya sessizce boş stok
+  değil, hatadır), `saveStockFile` ve `saveSettingsFile`.
+* `exporting::todayText()`, `i18n::safeFileName()`.
+* `DxfReader.hpp` ve `PdfReader.hpp` test yardımcıları `tests/support`'a taşındı: onları birkaç
+  modülün testleri kullanıyor.
+* «Dışa aktar → Kesim listesi (CSV)...»: paketten ayrı olarak CSV.
+* Başlatma seçenekleri: `--package <klasör>`, `--count <n>`, `--cut-list`.
+
+### Aşama 9 testleri
+
+| Ne | Dosya |
+|----|-------|
+| Kesilecek parçalar: adet, kesim planı dışındakiler; kesim planı bir değişiklikten sonra eskir ve geri almadan sonra yeniden geçerli olur; CNC nesting için paket (PDF, DXF, programlar, CSV, proje, özet), testere için (CNC'siz), kesim planı olmadan; yalnızca boş klasör; ya hepsi ya hiçbiri; yeni klasör adları; siparişin adı; Türkçe Excel için CSV | `production/tests/PipelineTests.cpp` |
+| «4 dk 12 sn» süresi; bütün levhalarda diğer makinelere kalan işler; levha istifinin süresi; harflere göre hizalama; özetin başında çakışmalar; paketten sonraki mesaj | `production/tests/SummaryTests.cpp` |
+| Komut satırı: pencere olmadan paket, makine dosyadan ve seçenekten, Türkçe adlı proje, stok değişmiyor; nedeni ve 1 koduyla hatalar | `production/tests/BatchTests.cpp` |
+| «Kesim dışı» onay kutusu: kesim listesinde ayrı satır, nesting'e girmiyor, çekmece kutusu parçalarının seçimiyle birlikte kaydediliyor, satır başına tek geri alma, PDF'te işaret | `detailing`, `nesting`, `storage`, `editor`, `export` |
+| Bütün birleşim ve arkalık türlerinde kalın üst tabla, alt tabla veya yan panel; farklı kalınlıklarda kutu parçaları; birleştirilemeyen bir değişikliğin reddedilmesi | `core/tests/CarcassTests.cpp`, `core/tests/SectionTests.cpp`, `editor/tests/OperationsTests.cpp` |
+| Klasördeki atölye dosyaları | `storage/tests/WorkshopFilesTests.cpp` |
+| **Kullanıcı yolculuğu**; her model iki makinede; rastgele değişiklikler | `tests/integration/UserJourneyTests.cpp`, `tests/integration/RobustnessTests.cpp` |
+| Gerçek `ReadyCAD.exe` pencere olmadan paket yazıyor | `app/CMakeLists.txt` (`app_batch_*`) |
+
+Henüz yapılmadı:
+* bir kesim planında tek bir ürünün birkaç kopyası olabilir, ama farklı ürünler olamaz (mutfak
+  ve dolap birlikte);
+* sığmayan raflar ve çekmeceler reddedilir, ama program nasıl düzeltileceğini önermez;
+* PDF eski projelerdeki çakışmaları göstermez (onları «Uyarılar» penceresi ve `OZET.txt`
+  gösterir).

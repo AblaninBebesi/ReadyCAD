@@ -4,4 +4,6 @@ Geometric kernel: numeric conventions (mm, double), `Aabb`, materials and `Const
 
 See docs/ARCHITECTURE.md, section "Ядро".
 
-**Stages:** 1 (math), 2 (component tree), 3 (parametrics)
+Stage 9: each structural panel and each drawer box part meets its neighbours with its own thickness (`CarcassFrame`, `DrawerBoxFrame`); panels can be left out of the cutting plan (`PanelComponent::inCuttingPlan`).
+
+**Stages:** 1 (math), 2 (component tree), 3 (parametrics), 9 (per-part thickness, cutting plan flag)

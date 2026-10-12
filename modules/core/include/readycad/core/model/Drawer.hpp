@@ -31,6 +31,7 @@ protected:
 
 private:
     std::shared_ptr<DrawerFront> front_;
+    DrawerBoxFrame boxFrame_; // thicknesses of the box parts, for their neighbours' formulas
     Aabb body_;
     Real slideLength_ = 0.0;
 };

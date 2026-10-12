@@ -33,8 +33,8 @@ Vec3 SideWall::updateSize(const LayoutSlot& slot)
 {
     const CarcassFrame& f = requireFrame(slot, kind());
     const Vec3 outer = f.outer.size();
-    const Real height = outer.y - overlayAmount(f.topJoint, f.thickness)
-                      - overlayAmount(f.bottomJoint, f.thickness);
+    const Real height = outer.y - overlayAmount(f.topJoint, f.topThickness)
+                      - overlayAmount(f.bottomJoint, f.bottomThickness);
     return {thickness(slot), height, outer.z - f.rearOffset()};
 }
 
@@ -43,7 +43,7 @@ Vec3 SideWall::updatePosition(const LayoutSlot& slot, const Vec3& size)
     const CarcassFrame& f = requireFrame(slot, kind());
     const Vec3& lo = f.outer.min();
     const Real x = side_ == Side::Left ? lo.x : f.outer.max().x - size.x;
-    return {x, lo.y + overlayAmount(f.bottomJoint, f.thickness), lo.z + f.rearOffset()};
+    return {x, lo.y + overlayAmount(f.bottomJoint, f.bottomThickness), lo.z + f.rearOffset()};
 }
 
 const Material& SideWall::defaultMaterial(const ConstructionRules& r) const
@@ -66,13 +66,14 @@ namespace {
 Vec3 horizontalCarcassPanelSize(const CarcassFrame& f, JointType joint, Real ownThickness)
 {
     const Vec3 outer = f.outer.size();
-    const Real width = joint == JointType::Overlay ? outer.x : outer.x - 2.0 * f.thickness;
+    const Real width =
+        joint == JointType::Overlay ? outer.x : outer.x - f.leftThickness - f.rightThickness;
     return {width, ownThickness, outer.z - f.rearOffset()};
 }
 
 Real horizontalCarcassPanelX(const CarcassFrame& f, JointType joint)
 {
-    return f.outer.min().x + (joint == JointType::Inset ? f.thickness : 0.0);
+    return f.outer.min().x + (joint == JointType::Inset ? f.leftThickness : 0.0);
 }
 
 EdgeBand horizontalCarcassPanelEdge(EdgeSide side, JointType joint, const ConstructionRules& r)
@@ -439,19 +440,34 @@ const std::string& DrawerFront::defaultHandleId(const ConstructionRules& r) cons
 // Drawer box
 // ---------------------------------------------------------------------------------------------
 
+namespace {
+
+/// The drawer's own box parts, or the workshop's materials for a part laid out on its own.
+DrawerBoxFrame boxFrame(const LayoutSlot& slot)
+{
+    if (slot.drawerBox != nullptr) {
+        return *slot.drawerBox;
+    }
+    const ConstructionRules& r = slot.r();
+    return {r.drawerBoxMaterial.thickness, r.drawerBoxMaterial.thickness,
+            r.drawerBottomMaterial.thickness};
+}
+
+} // namespace
+
 DrawerBoxSide::DrawerBoxSide(Side side) : PanelComponent(Axis::X, Axis::Z), side_(side) {}
 
 Vec3 DrawerBoxSide::updateSize(const LayoutSlot& slot)
 {
     const Vec3 body = slot.box.size();
-    return {thickness(slot), body.y - slot.r().drawerBottomMaterial.thickness, body.z};
+    return {thickness(slot), body.y - boxFrame(slot).bottom, body.z};
 }
 
 Vec3 DrawerBoxSide::updatePosition(const LayoutSlot& slot, const Vec3& size)
 {
     const Vec3& lo = slot.box.min();
     const Real x = side_ == Side::Left ? lo.x : slot.box.max().x - size.x;
-    return {x, lo.y + slot.r().drawerBottomMaterial.thickness, lo.z};
+    return {x, lo.y + boxFrame(slot).bottom, lo.z};
 }
 
 const Material& DrawerBoxSide::defaultMaterial(const ConstructionRules& r) const
@@ -469,18 +485,17 @@ DrawerBoxEnd::DrawerBoxEnd(DrawerEnd end) : PanelComponent(Axis::Z, Axis::X), en
 
 Vec3 DrawerBoxEnd::updateSize(const LayoutSlot& slot)
 {
-    const ConstructionRules& r = slot.r();
+    const DrawerBoxFrame f = boxFrame(slot);
     const Vec3 body = slot.box.size();
-    return {body.x - 2.0 * r.drawerBoxMaterial.thickness,
-            body.y - r.drawerBottomMaterial.thickness, thickness(slot)};
+    return {body.x - f.leftSide - f.rightSide, body.y - f.bottom, thickness(slot)};
 }
 
 Vec3 DrawerBoxEnd::updatePosition(const LayoutSlot& slot, const Vec3& size)
 {
-    const ConstructionRules& r = slot.r();
+    const DrawerBoxFrame f = boxFrame(slot);
     const Vec3& lo = slot.box.min();
     const Real z = end_ == DrawerEnd::Back ? lo.z : slot.box.max().z - size.z;
-    return {lo.x + r.drawerBoxMaterial.thickness, lo.y + r.drawerBottomMaterial.thickness, z};
+    return {lo.x + f.leftSide, lo.y + f.bottom, z};
 }
 
 const Material& DrawerBoxEnd::defaultMaterial(const ConstructionRules& r) const

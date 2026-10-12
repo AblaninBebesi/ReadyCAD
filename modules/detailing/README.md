@@ -4,4 +4,6 @@ Turns the geometric model into manufacturable parts: cut sizes (finish - edge + 
 
 See docs/ARCHITECTURE.md, section "Деталировка и присадка".
 
-**Stages:** 4, 6
+Stage 9: a part left out of the cutting plan gets a cut list row of its own (`CutListRow::inCuttingPlan`).
+
+**Stages:** 4, 6, 9

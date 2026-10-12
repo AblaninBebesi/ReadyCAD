@@ -16,6 +16,10 @@ namespace rc::i18n {
 /// non-ASCII character to '_': for file names, DXF layer names and CNC program comments.
 [[nodiscard]] std::string asciiFold(std::string_view text);
 
+/// A name that works as a file or folder name everywhere (CNC controllers, USB sticks): asciiFold,
+/// then everything but letters, digits and '-' becomes '_' ("Dolap 1/2" -> "Dolap_1_2").
+[[nodiscard]] std::string safeFileName(std::string_view text);
+
 /// A path as UTF-8 (std::filesystem::path::string() uses the ANSI code page on Windows).
 [[nodiscard]] std::string pathToUtf8(const std::filesystem::path& path);
 

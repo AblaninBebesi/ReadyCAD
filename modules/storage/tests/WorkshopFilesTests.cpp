@@ -138,6 +138,35 @@ TEST_CASE("Files are replaced in one step", "[storage][file]")
     CHECK_THROWS_AS(writeTextFile(folder.path() / "missing" / "x.json", "{}"), StorageError);
 }
 
+TEST_CASE("A workshop folder without files gives an empty stock and default settings",
+          "[storage][file]")
+{
+    const rc::test::TempFolder folder("workshop_files");
+    const WorkshopFiles files = WorkshopFiles::in(folder.path() / "atolye");
+    CHECK(files.stock.filename() == "stock.rcstock");
+    CHECK(files.settings.filename() == "settings.json");
+    CHECK(loadStockFile(files.stock).sheets().empty());
+    CHECK(loadSettingsFile(files.settings).nesting == NestingSettings{});
+
+    // Saving creates the folder; loading gives back what was saved.
+    StockManager stock;
+    stock.add(Sheet{0, Material{"Suntalam 18", MaterialType::Chipboard, 18.0, true}, 2800, 2100,
+                    5, false, {}});
+    AppSettings settings;
+    settings.nesting.machine = Machine::NestingCenter;
+    saveStockFile(stock, files.stock);
+    saveSettingsFile(settings, files.settings);
+    CHECK(loadStockFile(files.stock).sheets().size() == 1);
+    CHECK(loadSettingsFile(files.settings).nesting.machine == Machine::NestingCenter);
+
+    // The default folder is the user's.
+    CHECK(WorkshopFiles::in().stock.parent_path() == userDataFolder());
+
+    // A broken file is an error, not an empty stock: the stock must never be lost silently.
+    writeTextFile(files.stock, "{ not json");
+    CHECK_THROWS_AS(loadStockFile(files.stock), StorageError);
+}
+
 TEST_CASE("User files live in a ReadyCAD folder", "[storage][file]")
 {
     const std::filesystem::path folder = userDataFolder();

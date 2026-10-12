@@ -5,6 +5,7 @@
 #include "FileDialogs.hpp"
 #include "readycad/i18n/Labels.hpp"
 #include "readycad/i18n/Utf8.hpp"
+#include "readycad/production/Summary.hpp"
 #include "readycad/storage/Storage.hpp"
 
 #include <imgui.h>
@@ -22,42 +23,10 @@ using core::Real;
 
 namespace {
 
-/// Name for exported files: the project file's name, else the product's.
-std::string baseName(const editor::Document& doc)
-{
-    if (!doc.path().empty()) {
-        return toUtf8(doc.path().stem());
-    }
-    return doc.product().name().empty() ? tr(TextId::Untitled) : doc.product().name();
-}
-
 bool cncResultReady(const UiState& state)
 {
     return nestingIsFresh(state) && !state.nesting->layouts.empty()
         && state.nesting->settings.machine == nesting::Machine::NestingCenter;
-}
-
-/// "24 kenar deliği (...) · 2 alt yüz işlemi (...)" of all sheets of a result.
-std::string leftoverText(const std::vector<cam::SheetProgram>& programs)
-{
-    cam::Leftover sum;
-    for (const cam::SheetProgram& p : programs) {
-        for (const cam::Leftover& l : p.leftovers) {
-            sum.edgeHoles += l.edgeHoles;
-            sum.bottomHoles += l.bottomHoles + l.bottomGrooves;
-            sum.noTool += l.noTool;
-        }
-    }
-    std::string text;
-    const auto add = [&](int n, TextId what) {
-        if (n > 0) {
-            text += (text.empty() ? "" : "\n") + std::to_string(n) + " " + tr(what);
-        }
-    };
-    add(sum.edgeHoles, TextId::LeftoverEdge);
-    add(sum.bottomHoles, TextId::LeftoverBottom);
-    add(sum.noTool, TextId::LeftoverNoTool);
-    return text;
 }
 
 bool dragMm(const char* id, Real& value, Real min, Real max, const char* format = "%.1f mm")
@@ -270,19 +239,17 @@ bool writeCncPrograms(UiState& state, const std::filesystem::path& folder)
         state.openErrorPopup = true;
         return false;
     }
-    const editor::Document& doc = *state.document;
-    const detailing::PartSource source{doc.product(), doc.cutList()};
-    const cam::GCodePostprocessor post(state.cnc.dialect);
     std::vector<cam::SheetProgram> programs;
     std::size_t count = 0;
     if (!run(state, [&] {
-            count = cam::saveSheetPrograms(*state.nesting, &source, state.cnc, post, folder, &programs)
+            count = production::writeCncPrograms({*state.document, state.productCount},
+                                                 *state.nesting, state.cnc, folder, &programs)
                         .size();
         })) {
         return false;
     }
     std::string message = std::string(tr(TextId::CncProgramsDone)) + " " + std::to_string(count);
-    if (const std::string left = leftoverText(programs); !left.empty()) {
+    if (const std::string left = production::leftoverText(programs); !left.empty()) {
         message += "\n\n" + std::string(tr(TextId::LeftoverTitle)) + ":\n" + left;
     }
     state.exportMessage = message;
@@ -302,7 +269,7 @@ void exportCncPrograms(UiState& state)
         return;
     }
     const std::filesystem::path target =
-        *folder / (asciiFold(baseName(*state.document)) + "_CNC");
+        *folder / (safeFileName(production::orderName(*state.document)) + "_CNC");
     if (writeCncPrograms(state, target)) {
         state.openExportedPopup = true;
     }
@@ -333,11 +300,8 @@ const cam::SheetProgram* sheetToolpath(UiState& state)
 
 std::string toolpathSummary(const cam::SheetProgram& program)
 {
-    const auto seconds = static_cast<long>(std::lround(program.stats.seconds));
-    char time[48];
-    std::snprintf(time, sizeof time, "%ld %s %02ld %s", seconds / 60, tr(TextId::Minutes),
-                  seconds % 60, tr(TextId::SecondsShort));
-    std::string text = std::string(tr(TextId::EstimatedTime)) + ": " + time + "   "
+    std::string text = std::string(tr(TextId::EstimatedTime)) + ": "
+                     + production::durationText(program.stats.seconds) + "   "
                      + tr(TextId::HolesLabel) + ": " + std::to_string(program.stats.holes) + "   "
                      + tr(TextId::ToolChangesLabel) + ": "
                      + std::to_string(program.stats.toolChanges);
@@ -345,7 +309,7 @@ std::string toolpathSummary(const cam::SheetProgram& program)
         text += "   " + std::string(tr(TextId::MilledHolesLabel)) + ": "
               + std::to_string(program.milledHoles);
     }
-    if (const std::string left = leftoverText({program}); !left.empty()) {
+    if (const std::string left = production::leftoverText({program}); !left.empty()) {
         std::string oneLine;
         for (const char c : left) {
             oneLine += c == '\n' ? std::string("; ") : std::string(1, c);

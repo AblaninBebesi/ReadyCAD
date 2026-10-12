@@ -244,13 +244,7 @@ std::string partFileName(std::size_t number, const detailing::CutListRow& row)
 {
     char prefix[16];
     std::snprintf(prefix, sizeof prefix, "%02zu_", number);
-    std::string name;
-    for (const char c : asciiFold(partName(row))) {
-        const bool safe = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
-                       || c == '-';
-        name += safe ? c : '_';
-    }
-    return prefix + name + "_" + i18n::mm(row.cut.length) + "x" + i18n::mm(row.cut.width) + ".dxf";
+    return prefix + i18n::safeFileName(partName(row)) + "_" + i18n::mm(row.cut.length) + "x" + i18n::mm(row.cut.width) + ".dxf";
 }
 
 std::vector<std::filesystem::path> savePartDxfs(const core::Product& product,

@@ -139,6 +139,48 @@ TEST_CASE("Drawer front handles survive save and load", "[storage][project]")
     CHECK(loadedDrawers[0]->front().handle()->modelId.empty()); // workshop default
 }
 
+TEST_CASE("Parts left out of the cutting plan and drawer box choices survive save and load",
+          "[storage][project]")
+{
+    auto chest = createProduct(CatalogItem::ChestOfDrawers);
+    chest->carcass()->back().setInCuttingPlan(false);
+    const auto drawers = chest->carcass()->interior().drawerStack()->drawers();
+    for (const auto& part : drawers[1]->children()) {
+        if (part->kind() == ComponentKind::DrawerBottom) {
+            auto& bottom = static_cast<PanelComponent&>(*part);
+            bottom.setInCuttingPlan(false);
+            bottom.setName("Hazır dip");
+        } else if (part->kind() == ComponentKind::DrawerBoxSide) {
+            static_cast<PanelComponent&>(*part).setMaterialOverride(
+                Material{"Suntalam 18", MaterialType::Chipboard, 18.0, true});
+        }
+    }
+    chest->update();
+
+    const auto loaded = loadProduct(saveProduct(*chest));
+    requireSameGeometry(*chest, *loaded);
+    CHECK_FALSE(loaded->carcass()->back().inCuttingPlan());
+    CHECK(loaded->carcass()->leftSide().inCuttingPlan());
+    const auto loadedDrawers = loaded->carcass()->interior().drawerStack()->drawers();
+    int boxSides = 0;
+    for (const auto& part : loadedDrawers[1]->children()) {
+        const auto& panel = static_cast<const PanelComponent&>(*part);
+        if (part->kind() == ComponentKind::DrawerBottom) {
+            CHECK_FALSE(panel.inCuttingPlan());
+            CHECK(panel.name() == "Hazır dip");
+        } else if (part->kind() == ComponentKind::DrawerBoxSide) {
+            CHECK(panel.material().thickness == 18.0);
+            ++boxSides;
+        } else {
+            CHECK(panel.inCuttingPlan());
+        }
+    }
+    CHECK(boxSides == 2);
+    for (const auto& part : loadedDrawers[0]->children()) {
+        CHECK(static_cast<const PanelComponent&>(*part).inCuttingPlan()); // the other drawers
+    }
+}
+
 TEST_CASE("Broken files are rejected with a clear error", "[storage][errors]")
 {
     using Catch::Matchers::ContainsSubstring;

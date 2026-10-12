@@ -20,6 +20,7 @@ nfdu8filteritem_t filterFor(FileKind kind)
     case FileKind::Profile: return {"Atölye profili", "rcprofile"};
     case FileKind::Pdf:     return {"PDF belgesi", "pdf"};
     case FileKind::Dxf:     return {"DXF çizimi", "dxf"};
+    case FileKind::Csv:     return {"CSV tablosu", "csv"};
     }
     return {"ReadyCAD projesi", "rcproj"};
 }
@@ -31,6 +32,7 @@ const char* extensionFor(FileKind kind)
     case FileKind::Profile: return ".rcprofile";
     case FileKind::Pdf:     return ".pdf";
     case FileKind::Dxf:     return ".dxf";
+    case FileKind::Csv:     return ".csv";
     }
     return ".rcproj";
 }

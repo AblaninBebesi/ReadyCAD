@@ -117,6 +117,27 @@ TEST_CASE("Cut list merges identical parts", "[detailing][cutlist]")
     CHECK(back.thickness == Approx(3.0));
 }
 
+TEST_CASE("A part left out of the cutting plan gets a row of its own", "[detailing][cutlist]")
+{
+    const auto wardrobe = WardrobeBuilder().shelvesPerSection(4).doorsPerSection(2).build();
+    const auto shelves = wardrobe->carcass()->interior().shelves();
+    shelves[1]->setInCuttingPlan(false); // e.g. a glass shelf ordered cut to size
+    const auto rows = buildCutList(*wardrobe, wardrobe->rules());
+
+    REQUIRE(rows.size() == 7);
+    int inPlan = 0;
+    int outOfPlan = 0;
+    for (const CutListRow& r : rows) {
+        if (r.kind == ComponentKind::Shelf) {
+            (r.inCuttingPlan ? inPlan : outOfPlan) += r.quantity;
+        } else {
+            CHECK(r.inCuttingPlan);
+        }
+    }
+    CHECK(inPlan == 3);
+    CHECK(outOfPlan == 1);
+}
+
 TEST_CASE("Edge banding consumption", "[detailing][edges]")
 {
     const auto wardrobe = WardrobeBuilder().shelvesPerSection(4).doorsPerSection(2).build();

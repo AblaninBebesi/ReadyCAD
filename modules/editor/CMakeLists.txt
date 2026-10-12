@@ -10,6 +10,7 @@ rc_add_module(editor
         readycad::nesting
         readycad::export
         readycad::cam
+        readycad::i18n
     TESTS
         tests/DocumentTests.cpp
         tests/OperationsTests.cpp)

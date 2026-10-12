@@ -44,11 +44,29 @@ void Drawer::layoutChildren(const LayoutSlot& slot)
                   zone.max().z - depth);
     body_ = Aabb::fromOriginAndSize(lo, Vec3(width, height, depth));
 
+    // The box parts meet each other: tell them the materials their neighbours really have.
+    boxFrame_ = DrawerBoxFrame{r.drawerBoxMaterial.thickness, r.drawerBoxMaterial.thickness,
+                               r.drawerBottomMaterial.thickness};
+    for (const Ptr& child : children()) {
+        const auto* part = dynamic_cast<const PanelComponent*>(child.get());
+        if (part == nullptr) {
+            continue;
+        }
+        if (child->kind() == ComponentKind::DrawerBoxSide) {
+            const bool left = static_cast<const DrawerBoxSide*>(part)->side() == Side::Left;
+            (left ? boxFrame_.leftSide : boxFrame_.rightSide) = part->thickness(slot);
+        } else if (child->kind() == ComponentKind::DrawerBottom) {
+            boxFrame_.bottom = part->thickness(slot);
+        }
+    }
+    LayoutSlot boxSlot = slot.withBox(body_);
+    boxSlot.drawerBox = &boxFrame_;
+
     for (const Ptr& child : children()) {
         if (child.get() == front_.get()) {
             front_->layout(slot); // same zone and overlays: the front covers them
         } else {
-            child->layout(slot.withBox(body_));
+            child->layout(boxSlot);
         }
     }
 }

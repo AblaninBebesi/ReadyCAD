@@ -46,6 +46,7 @@ add_subdirectory(modules/cam)        # machining operations + CNC postprocessors
 add_subdirectory(modules/storage)    # project, workshop profile, stock, settings files (JSON)
 add_subdirectory(modules/export)     # DXF export, PDF documentation
 add_subdirectory(modules/editor)     # document, commands, view models (GL-free)
+add_subdirectory(modules/production) # pipeline: product -> cutting plan -> files for the workshop
 
 if(READYCAD_BUILD_APP)
     add_subdirectory(third_party/glad)

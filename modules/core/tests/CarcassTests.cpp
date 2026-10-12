@@ -153,6 +153,43 @@ TEST_CASE("No combination of joints and back mounts produces overlapping parts",
     }
 }
 
+TEST_CASE("A thicker top, bottom or side: its neighbours use its real thickness",
+          "[core][carcass][material]")
+{
+    // Stage 9: found by the random-edit test — the neighbours used the carcass material's
+    // thickness and overlapped a 25 mm top by 7 mm.
+    const Material thick{"Suntalam 25", MaterialType::Chipboard, 25.0, true};
+    const auto mount =
+        GENERATE(BackMountType::Groove, BackMountType::Overlay, BackMountType::Inset);
+    const auto top = GENERATE(JointType::Overlay, JointType::Inset);
+    const auto bottom = GENERATE(JointType::Overlay, JointType::Inset);
+    CAPTURE(static_cast<int>(mount), static_cast<int>(top), static_cast<int>(bottom));
+
+    const auto product = makeCarcass(mount, top, bottom);
+    Carcass& c = *product->carcass();
+    c.top().setMaterialOverride(thick);
+    c.bottom().setMaterialOverride(thick);
+    c.leftSide().setMaterialOverride(thick);
+    CHECK(findOverlaps(*product).empty());
+
+    // The parts close the carcass without gaps: they still touch where they meet.
+    if (top == JointType::Overlay) {
+        CHECK(c.leftSide().box().max().y == c.top().box().min().y);
+    } else {
+        CHECK(c.top().box().min().x == c.leftSide().box().max().x);
+        CHECK(c.top().box().max().x == c.rightSide().box().min().x);
+    }
+    if (bottom == JointType::Overlay) {
+        CHECK(c.leftSide().box().min().y == c.bottom().box().max().y);
+    } else {
+        CHECK(c.bottom().box().size().x == 800.0 - 25.0 - 18.0);
+    }
+    // The opening is what the parts leave free.
+    CHECK(c.interiorBox().min().x == 25.0);
+    CHECK(c.interiorBox().max().y == 2000.0 - 25.0);
+    CHECK(c.interiorBox().min().y == 25.0);
+}
+
 TEST_CASE("Carcass parts refuse to be laid out outside a carcass", "[core][carcass]")
 {
     SideWall side(Side::Left);

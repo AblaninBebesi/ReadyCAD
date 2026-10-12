@@ -8,6 +8,7 @@ rc_add_module(ui
         src/NestingPanels.cpp
     DEPENDS
         readycad::editor
+        readycad::production
         readycad::i18n
         readycad::render
         imgui::imgui

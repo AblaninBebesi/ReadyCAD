@@ -36,7 +36,12 @@ struct FrontOverlay {
 /// need for their own formulas.
 struct CarcassFrame {
     Aabb outer;                       // overall carcass box, product coordinates
-    Real thickness = 18.0;            // carcass material thickness
+    // Thickness of each structural panel: its own material, which the user may change per part
+    // (a 25 mm top on 18 mm sides). Every neighbour's formula uses the one it meets.
+    Real leftThickness = 18.0;
+    Real rightThickness = 18.0;
+    Real topThickness = 18.0;
+    Real bottomThickness = 18.0;
     JointType topJoint = JointType::Overlay;
     JointType bottomJoint = JointType::Inset;
     const BackMount* backMount = nullptr;
@@ -45,6 +50,14 @@ struct CarcassFrame {
     /// Where sides/top/bottom start in Z, measured from the carcass rear (non-zero when the
     /// back panel is nailed onto the rear edges).
     [[nodiscard]] Real rearOffset() const noexcept;
+};
+
+/// Thicknesses of the panels of one drawer box (set by a Drawer for its box parts): the parts
+/// meet each other, so each formula needs the material its neighbours really have.
+struct DrawerBoxFrame {
+    Real leftSide = 16.0;
+    Real rightSide = 16.0;
+    Real bottom = 3.0;
 };
 
 /// What a parent offers to a child during layout — "constraints go down".
@@ -58,6 +71,7 @@ struct LayoutSlot {
     Real frontZ = 0.0;            // Z of the carcass front plane: fronts start here
     const ConstructionRules* rules = &ConstructionRules::defaults();
     const CarcassFrame* frame = nullptr; // set by a Carcass for its own structural parts
+    const DrawerBoxFrame* drawerBox = nullptr; // set by a Drawer for its box parts
     /// Y of a hole of the enclosing carcass's System 32 grid (set by the Carcass for its
     /// interior); shelves on supports snap to it.
     std::optional<Real> holeGridOriginY;

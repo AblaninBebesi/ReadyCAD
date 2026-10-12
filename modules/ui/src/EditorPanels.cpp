@@ -6,8 +6,10 @@
 #include "readycad/editor/PartInfo.hpp"
 #include "readycad/export/Dxf.hpp"
 #include "readycad/export/PartDrawing.hpp"
-#include "readycad/storage/Storage.hpp"
 #include "readycad/i18n/Labels.hpp"
+#include "readycad/i18n/Utf8.hpp"
+#include "readycad/production/Summary.hpp"
+#include "readycad/storage/Storage.hpp"
 
 #include <imgui.h>
 #include <imgui_stdlib.h>
@@ -672,6 +674,14 @@ void drawProperties(UiState& s)
     if (drawEditor(s, *selected)) {
         return; // the model changed: draw the fresh state next frame
     }
+    if (const auto* panel = dynamic_cast<const core::PanelComponent*>(selected)) {
+        bool inPlan = panel->inCuttingPlan();
+        if (ImGui::Checkbox(tr(TextId::InCuttingPlan), &inPlan)) {
+            const core::ComponentId id = panel->id();
+            run(s, [&] { ed::setInCuttingPlan(doc, {id}, inPlan); });
+            return;
+        }
+    }
     drawInfo(doc, *selected);
 }
 
@@ -842,15 +852,6 @@ void saveProfile(UiState& state)
 
 namespace {
 
-/// Name for exported files: the project file's name, else the product's.
-std::string exportBaseName(const ed::Document& doc)
-{
-    if (!doc.path().empty()) {
-        return toUtf8(doc.path().stem());
-    }
-    return doc.product().name().empty() ? tr(TextId::Untitled) : doc.product().name();
-}
-
 /// After a successful export: open the result right away or say where it is.
 void exported(UiState& state, std::string message, const std::filesystem::path& file, bool openNow)
 {
@@ -862,9 +863,29 @@ void exported(UiState& state, std::string message, const std::filesystem::path& 
     state.openExportedPopup = true;
 }
 
+/// The order of the open document: as many copies as the cutting plan is made for.
+production::Order orderOf(const UiState& state)
+{
+    return {*state.document, state.productCount};
+}
+
+/// The cutting plan if it belongs to the product as it is now, else null.
+const nesting::NestingResult* freshPlan(const UiState& state)
+{
+    return nestingIsFresh(state) ? &*state.nesting : nullptr;
+}
+
+const exporting::PdfFonts& pdfFonts(UiState& state)
+{
+    if (!state.pdfFonts) {
+        state.pdfFonts = exporting::findPdfFonts(); // looked up once
+    }
+    return *state.pdfFonts;
+}
+
 void writePdf(UiState& state)
 {
-    const auto path = showSaveDialog(FileKind::Pdf, exportBaseName(*state.document) + ".pdf");
+    const auto path = showSaveDialog(FileKind::Pdf, production::orderName(*state.document) + ".pdf");
     if (path && writePdfFile(state, *path)) {
         exported(state, tr(TextId::ExportDoneFile), *path, state.openAfterExport);
     }
@@ -874,20 +895,12 @@ void writePdf(UiState& state)
 
 bool writePdfFile(UiState& state, const std::filesystem::path& path)
 {
-    const ed::Document& doc = *state.document;
-    if (!state.pdfFonts) {
-        state.pdfFonts = exporting::findPdfFonts();
-    }
-    exporting::DocumentationOptions options = state.pdfOptions;
-    if (doc.product().name().empty() && !doc.path().empty()) {
-        options.productName = toUtf8(doc.path().stem());
-    }
-    exporting::DocumentationInput input{doc.product(), doc.cutList(), doc.edgeUsage(),
-                                        doc.detailingReport()};
-    if (nestingIsFresh(state)) {
-        input.cutting = &*state.nesting; // only a plan that belongs to this product as it is now
-    }
-    return run(state, [&] { exporting::saveDocumentationPdf(input, options, path, *state.pdfFonts); });
+    // Only a plan that belongs to this product as it is now goes into the documents.
+    const exporting::PdfFonts& fonts = pdfFonts(state);
+    return run(state, [&] {
+        production::writeDocumentation(orderOf(state), freshPlan(state), state.pdfOptions, fonts,
+                                       path);
+    });
 }
 
 void exportPdf(UiState& state)
@@ -897,14 +910,8 @@ void exportPdf(UiState& state)
 
 void exportPartsDxf(UiState& state)
 {
-    const ed::Document& doc = *state.document;
-    const auto path = showSaveDialog(FileKind::Dxf, exportBaseName(doc) + ".dxf");
-    if (!path) {
-        return;
-    }
-    if (run(state, [&] {
-            exporting::saveDxf(exporting::drawAllParts(doc.product(), doc.cutList()), *path);
-        })) {
+    const auto path = showSaveDialog(FileKind::Dxf, production::orderName(*state.document) + ".dxf");
+    if (path && run(state, [&] { production::writePartsDxf(orderOf(state), *path); })) {
         exported(state, tr(TextId::ExportDoneFile), *path, false);
     }
 }
@@ -915,17 +922,63 @@ void exportPartsDxfFolder(UiState& state)
     if (!folder) {
         return;
     }
-    const ed::Document& doc = *state.document;
     // A folder of its own, ASCII-named like the files: CNC software and USB sticks cope with it.
     const std::filesystem::path target =
-        *folder / (exporting::asciiFold(exportBaseName(doc)) + "_DXF");
+        *folder / (safeFileName(production::orderName(*state.document)) + "_DXF");
     std::size_t count = 0;
-    if (run(state, [&] {
-            count = exporting::savePartDxfs(doc.product(), doc.cutList(), target).size();
-        })) {
+    if (run(state, [&] { count = production::writePartDxfs(orderOf(state), target).size(); })) {
         exported(state, std::string(tr(TextId::ExportDoneFiles)) + " " + std::to_string(count),
                  target, false);
     }
+}
+
+void exportCutListCsv(UiState& state)
+{
+    const auto path = showSaveDialog(
+        FileKind::Csv, production::orderName(*state.document) + "_kesim_listesi.csv");
+    if (path && run(state, [&] { production::writeCutListCsv(orderOf(state), *path); })) {
+        exported(state, tr(TextId::ExportDoneFile), *path, false);
+    }
+}
+
+void exportPackage(UiState& state)
+{
+    const auto folder = showFolderDialog();
+    if (!folder) {
+        return;
+    }
+    if (nestingIsFresh(state)) {
+        if (writePackageInto(state, *folder)) {
+            state.openExportedPopup = true;
+        }
+        return;
+    }
+    // No plan for the product as it is now: compute it, the package follows (updateNesting).
+    startNesting(state);
+    if (state.nestingRun) {
+        state.pendingPackage = *folder;
+    }
+}
+
+bool writePackageInto(UiState& state, const std::filesystem::path& parent)
+{
+    const nesting::NestingResult* plan = freshPlan(state);
+    const exporting::PdfFonts& fonts = pdfFonts(state);
+    production::PackageOptions options;
+    options.documentation = state.pdfOptions;
+    std::optional<production::Package> package;
+    if (!run(state, [&] {
+            const auto folder =
+                production::newPackageFolder(parent, production::orderName(*state.document));
+            package = production::writePackage(orderOf(state), plan, state.cnc, options, fonts,
+                                               folder);
+        })) {
+        return false;
+    }
+    state.exportMessage = std::string(tr(TextId::PackageDone)) + "\n"
+                        + production::packageMessage(orderOf(state), plan, *package);
+    state.exportedFile = package->folder;
+    return true;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1037,6 +1090,10 @@ void drawViewportWindow(UiState& state, render::Renderer& renderer)
 
 void drawCutListWindow(UiState& state)
 {
+    if (state.focusCutList > 0) {
+        ImGui::SetNextWindowFocus();
+        --state.focusCutList;
+    }
     if (!ImGui::Begin(tr(TextId::WindowCutList))) {
         ImGui::End();
         return;
@@ -1048,13 +1105,17 @@ void drawCutListWindow(UiState& state)
     const float height = ImGui::GetContentRegionAvail().y * 0.68f;
     int total = 0;
     std::optional<core::ComponentId> clicked;
-    if (ImGui::BeginTable("cutlist", 7, flags, ImVec2(0.0f, height))) {
+    /// A "Kesim" box clicked: the parts of that row and their new state, applied after the
+    /// table (the change rebuilds the cut list this loop is reading).
+    std::optional<std::pair<std::vector<core::ComponentId>, bool>> toggled;
+    if (ImGui::BeginTable("cutlist", 8, flags, ImVec2(0.0f, height))) {
         ImGui::TableSetupScrollFreeze(0, 1);
         for (const TextId column : {TextId::ColPart, TextId::ColMaterial, TextId::ColQuantity,
                                     TextId::ColFinish, TextId::ColCut, TextId::ColEdges,
                                     TextId::ColGrain}) {
             ImGui::TableSetupColumn(tr(column));
         }
+        ImGui::TableSetupColumn(tr(TextId::ColCuttingPlan), ImGuiTableColumnFlags_WidthFixed);
         ImGui::TableHeadersRow();
 
         for (std::size_t i = 0; i < doc.cutList().size(); ++i) {
@@ -1064,10 +1125,15 @@ void drawCutListWindow(UiState& state)
             ImGui::TableNextColumn();
             const std::string name = row.name.empty() ? tr(kindText(row.kind)) : row.name;
             ImGui::PushID(static_cast<int>(i));
-            if (ImGui::Selectable(name.c_str(), false, ImGuiSelectableFlags_SpanAllColumns)) {
+            // Parts the workshop does not cut are greyed out.
+            if (!row.inCuttingPlan) {
+                ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+            }
+            if (ImGui::Selectable(name.c_str(), false,
+                                  ImGuiSelectableFlags_SpanAllColumns
+                                      | ImGuiSelectableFlags_AllowOverlap)) {
                 clicked = row.components.front();
             }
-            ImGui::PopID();
             ImGui::TableNextColumn();
             ImGui::TextUnformatted(row.material.name.c_str());
             ImGui::TableNextColumn();
@@ -1087,10 +1153,24 @@ void drawCutListWindow(UiState& state)
             ImGui::TableNextColumn();
             ImGui::TextUnformatted(
                 tr(row.keepGrainDirection ? TextId::GrainKept : TextId::GrainFree));
+            if (!row.inCuttingPlan) {
+                ImGui::PopStyleColor();
+            }
+            ImGui::TableNextColumn();
+            bool inPlan = row.inCuttingPlan;
+            if (ImGui::Checkbox("##cut", &inPlan)) {
+                toggled.emplace(row.components, inPlan);
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("%s", tr(TextId::InCuttingPlan));
+            }
+            ImGui::PopID();
         }
         ImGui::EndTable();
     }
-    if (clicked) {
+    if (toggled) {
+        run(state, [&] { ed::setInCuttingPlan(doc, toggled->first, toggled->second); });
+    } else if (clicked) {
         doc.select(*clicked);
         state.scrollTreeToSelection = true;
     }
@@ -1137,12 +1217,30 @@ void drawCutListWindow(UiState& state)
 void drawWarningsWindow(UiState& state)
 {
     if (ImGui::Begin(tr(TextId::WindowWarnings))) {
-        const auto& warnings = state.document->detailingReport().warnings;
-        if (warnings.empty()) {
+        ed::Document& doc = *state.document;
+        const auto& warnings = doc.detailingReport().warnings;
+        if (warnings.empty() && doc.overlaps().empty()) {
             ImGui::TextColored(ImVec4(0.45f, 0.85f, 0.45f, 1.0f), "%s", tr(TextId::NoWarnings));
+        }
+        // Parts in each other's space (a project of an older version): a click selects one.
+        std::optional<core::ComponentId> clicked;
+        for (std::size_t i = 0; i < doc.overlaps().size(); ++i) {
+            const core::Overlap& o = doc.overlaps()[i];
+            const std::string text = std::string(tr(TextId::OverlapWarning)) + ": "
+                                   + displayName(*o.first) + " — " + displayName(*o.second);
+            ImGui::PushID(static_cast<int>(i));
+            ImGui::Bullet();
+            if (ImGui::Selectable(text.c_str())) {
+                clicked = o.first->id();
+            }
+            ImGui::PopID();
         }
         for (const std::string& warning : warnings) {
             ImGui::BulletText("%s", warning.c_str());
+        }
+        if (clicked) {
+            doc.select(*clicked);
+            state.scrollTreeToSelection = true;
         }
     }
     ImGui::End();

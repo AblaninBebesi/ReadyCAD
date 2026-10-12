@@ -149,6 +149,26 @@ TEST_CASE("The cut list reaches the pages row by row", "[export][docs]")
     CHECK(has(texts, std::to_string(total)));
 }
 
+TEST_CASE("Parts left out of the cutting plan are marked in the cut list", "[export][docs]")
+{
+    auto product = core::createProduct(core::CatalogItem::Wardrobe);
+    {
+        const Fixture plain(product);
+        const PageSet pages =
+            buildDocumentation(plain.input(), only(false, true, false, false, false), kMetrics);
+        CHECK_FALSE(has(textsOf(pages.pages[0]), txt(i18n::TextId::NotInCuttingPlanNote)));
+    }
+    product->carcass()->back().setInCuttingPlan(false);
+    const Fixture f(product);
+    const PageSet pages = buildDocumentation(f.input(), only(false, true, false, false, false), kMetrics);
+    REQUIRE(pages.pages.size() == 1);
+    const auto texts = textsOf(pages.pages[0]);
+    for (const detailing::CutListRow& row : f.cutList) {
+        CHECK(has(texts, partName(row) + (row.inCuttingPlan ? "" : " *")));
+    }
+    CHECK(has(texts, txt(i18n::TextId::NotInCuttingPlanNote)));
+}
+
 TEST_CASE("A long table continues on the next pages with its header", "[export][docs]")
 {
     Fixture f(core::createProduct(core::CatalogItem::Wardrobe));

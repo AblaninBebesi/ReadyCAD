@@ -61,6 +61,26 @@ struct AppSettings {
 /// Missing fields keep their defaults; throws StorageError for broken files or invalid values.
 [[nodiscard]] AppSettings loadSettings(std::string_view json);
 
+// --- The workshop's files ---------------------------------------------------------------------
+
+/// The stock and the settings of a workshop, two files in one folder.
+struct WorkshopFiles {
+    std::filesystem::path stock;    ///< stock.rcstock
+    std::filesystem::path settings; ///< settings.json
+
+    /// The files in `folder`; empty: in userDataFolder(). Another folder serves a demo, a test
+    /// or a second workshop without touching the user's own stock.
+    [[nodiscard]] static WorkshopFiles in(const std::filesystem::path& folder = {});
+};
+
+/// No file yet: an empty stock. Throws StorageError for a file that cannot be read.
+[[nodiscard]] nesting::StockManager loadStockFile(const std::filesystem::path& file);
+/// No file yet: the default settings. Throws StorageError for a file that cannot be read.
+[[nodiscard]] AppSettings loadSettingsFile(const std::filesystem::path& file);
+/// Create the folder if needed and replace the file in one step (writeTextFile).
+void saveStockFile(const nesting::StockManager& stock, const std::filesystem::path& file);
+void saveSettingsFile(const AppSettings& settings, const std::filesystem::path& file);
+
 // --- Files (UTF-8 paths) ----------------------------------------------------------------------
 
 /// Writes to "<path>.tmp" and then renames it over `path`: a crash or a full disk while writing

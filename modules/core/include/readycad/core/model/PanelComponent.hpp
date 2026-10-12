@@ -30,6 +30,12 @@ public:
         return edgeOverrides_[static_cast<std::size_t>(side)];
     }
 
+    /// Whether the workshop cuts this part from its own sheets (the default). Off, the part stays
+    /// in the cut list and the documents but not in the cutting plan and the CNC programs: a
+    /// worktop or a drawer bottom ordered cut to size, a part cut by another workshop.
+    [[nodiscard]] bool inCuttingPlan() const noexcept { return inCuttingPlan_; }
+    void setInCuttingPlan(bool value) noexcept { inCuttingPlan_ = value; }
+
     /// Thickness used in the formulas: that of the effective material under the slot's rules.
     /// Public because parents need it BEFORE laying the part out (to reserve its band).
     [[nodiscard]] Real thickness(const LayoutSlot& slot) const;
@@ -47,6 +53,7 @@ protected:
 private:
     std::optional<Material> materialOverride_;
     std::array<std::optional<EdgeBand>, 4> edgeOverrides_{};
+    bool inCuttingPlan_ = true;
 };
 
 } // namespace rc::core

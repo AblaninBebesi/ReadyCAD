@@ -1,5 +1,6 @@
 #include "readycad/detailing/CutList.hpp"
 
+#include "readycad/core/model/PanelComponent.hpp"
 #include "readycad/core/model/Queries.hpp"
 
 #include <algorithm>
@@ -46,7 +47,7 @@ bool samePart(const CutListRow& row, const CutListRow& candidate)
         && core::nearlyEqual(row.thickness, candidate.thickness, kTol)
         && core::nearlyEqual(row.finishLength, candidate.finishLength, kTol)
         && core::nearlyEqual(row.finishWidth, candidate.finishWidth, kTol)
-        && sameEdges(row.edges, candidate.edges);
+        && sameEdges(row.edges, candidate.edges) && row.inCuttingPlan == candidate.inCuttingPlan;
 }
 
 } // namespace
@@ -78,6 +79,8 @@ std::vector<CutListRow> buildCutList(const core::FurnitureComponent& root,
         candidate.cut = cutSize(panel, rules);
         candidate.edges = panel.edges();
         candidate.keepGrainDirection = panel.material().hasGrain;
+        const auto* part = dynamic_cast<const core::PanelComponent*>(component);
+        candidate.inCuttingPlan = part == nullptr || part->inCuttingPlan();
 
         const auto existing = std::find_if(rows.begin(), rows.end(), [&](const CutListRow& row) {
             return samePart(row, candidate);

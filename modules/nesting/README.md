@@ -12,4 +12,6 @@ Cutting sheets into parts (stage 7):
 
 Depends on `core`, `detailing`; Clipper2 is a private dependency. See docs/ARCHITECTURE.md, section "Раскрой и нестинг".
 
-**Stage:** 7
+Stage 9: `partsFromCutList` skips the rows left out of the cutting plan (the others keep their row number); `NestingPart` compares with `==`, so a plan can be checked against the current parts.
+
+**Stages:** 7, 9

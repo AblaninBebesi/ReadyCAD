@@ -1,7 +1,7 @@
 // Stage 7: sheet layouts as drawings and DXF files — every part where the optimiser put it,
 // turned with its holes, remnants and saw cuts on their own layers.
 
-#include "DxfReader.hpp"
+#include "readycad/test/DxfReader.hpp"
 #include "readycad/test/TempFolder.hpp"
 
 #include "readycad/core/builders/Catalog.hpp"
