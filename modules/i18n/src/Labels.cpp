@@ -104,6 +104,20 @@ std::string displayName(const core::FurnitureComponent& component)
     return total > 1 ? kind + " " + std::to_string(number) : kind;
 }
 
+std::string partName(ComponentKind kind, const std::string& name, std::optional<core::Side> hand)
+{
+    if (!name.empty()) {
+        return name;
+    }
+    std::string result(text(kindText(kind)));
+    if (hand) {
+        result += " (";
+        result += text(*hand == core::Side::Left ? TextId::HandLeft : TextId::HandRight);
+        result += ")";
+    }
+    return result;
+}
+
 std::string mm(core::Real value)
 {
     char buffer[32];

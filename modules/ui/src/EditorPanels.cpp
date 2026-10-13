@@ -1123,7 +1123,7 @@ void drawCutListWindow(UiState& state)
             total += row.quantity;
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
-            const std::string name = row.name.empty() ? tr(kindText(row.kind)) : row.name;
+            const std::string name = i18n::partName(row.kind, row.name, row.hand);
             ImGui::PushID(static_cast<int>(i));
             // Parts the workshop does not cut are greyed out.
             if (!row.inCuttingPlan) {

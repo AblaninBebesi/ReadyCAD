@@ -1,7 +1,9 @@
 #include "readycad/detailing/CutList.hpp"
 
 #include "readycad/core/model/PanelComponent.hpp"
+#include "readycad/core/model/Parts.hpp"
 #include "readycad/core/model/Queries.hpp"
+#include "readycad/detailing/FlatPart.hpp"
 
 #include <algorithm>
 
@@ -39,15 +41,83 @@ bool sameEdges(const std::array<EdgeBand, 4>& a, const std::array<EdgeBand, 4>& 
     return true;
 }
 
+constexpr Real kTol = 0.01;
+
 bool samePart(const CutListRow& row, const CutListRow& candidate)
 {
-    constexpr Real kTol = 0.01;
-    return row.kind == candidate.kind && row.name == candidate.name
+    return row.kind == candidate.kind && row.name == candidate.name && row.hand == candidate.hand
         && row.material.name == candidate.material.name
         && core::nearlyEqual(row.thickness, candidate.thickness, kTol)
         && core::nearlyEqual(row.finishLength, candidate.finishLength, kTol)
         && core::nearlyEqual(row.finishWidth, candidate.finishWidth, kTol)
         && sameEdges(row.edges, candidate.edges) && row.inCuttingPlan == candidate.inCuttingPlan;
+}
+
+std::optional<core::Side> handOf(const core::FurnitureComponent& component)
+{
+    switch (component.kind()) {
+    case core::ComponentKind::SideWall:
+        return static_cast<const core::SideWall&>(component).side();
+    case core::ComponentKind::DrawerBoxSide:
+        return static_cast<const core::DrawerBoxSide&>(component).side();
+    case core::ComponentKind::Door:
+        return static_cast<const core::Door&>(component).hinge() == core::HingeSide::Left
+                   ? core::Side::Left
+                   : core::Side::Right;
+    default:
+        return std::nullopt;
+    }
+}
+
+bool near(core::Vec2 a, core::Vec2 b)
+{
+    return core::nearlyEqual(a.x, b.x, kTol) && core::nearlyEqual(a.y, b.y, kTol);
+}
+
+bool sameHole(const FlatHole& a, const FlatHole& b)
+{
+    return a.fastener == b.fastener && a.side == b.side
+        && (a.side != FlatSide::Edge || a.edge == b.edge) && near(a.center, b.center)
+        && core::nearlyEqual(a.diameter, b.diameter, kTol)
+        && core::nearlyEqual(a.depth, b.depth, kTol) && core::nearlyEqual(a.height, b.height, kTol);
+}
+
+bool sameGroove(const FlatGroove& a, const FlatGroove& b)
+{
+    const bool sameLine = (near(a.start, b.start) && near(a.end, b.end))
+                       || (near(a.start, b.end) && near(a.end, b.start));
+    return a.side == b.side && sameLine && core::nearlyEqual(a.width, b.width, kTol)
+        && core::nearlyEqual(a.depth, b.depth, kTol);
+}
+
+/// Every element of `a` has its own equal element in `b` (order-free: the sort order of holes
+/// may differ by rounding noise).
+template <typename T, typename Equal>
+bool sameSet(const std::vector<T>& a, const std::vector<T>& b, Equal equal)
+{
+    if (a.size() != b.size()) {
+        return false;
+    }
+    std::vector<char> used(b.size(), 0);
+    for (const T& item : a) {
+        bool found = false;
+        for (std::size_t i = 0; i < b.size() && !found; ++i) {
+            if (used[i] == 0 && equal(item, b[i])) {
+                used[i] = 1;
+                found = true;
+            }
+        }
+        if (!found) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// The same holes and grooves as seen in the drawing of the part.
+bool sameMachining(const FlatPart& a, const FlatPart& b)
+{
+    return sameSet(a.holes, b.holes, sameHole) && sameSet(a.grooves, b.grooves, sameGroove);
 }
 
 } // namespace
@@ -66,12 +136,14 @@ std::vector<CutListRow> buildCutList(const core::FurnitureComponent& root,
                                      const core::ConstructionRules& rules)
 {
     std::vector<CutListRow> rows;
+    std::vector<FlatPart> machining; // of each row's first part: what its drawing shows
     for (const core::FurnitureComponent* component : core::collectPanels(root)) {
         const core::Panel& panel = *component->panel();
 
         CutListRow candidate;
         candidate.kind = component->kind();
         candidate.name = component->name();
+        candidate.hand = handOf(*component);
         candidate.material = panel.material();
         candidate.finishLength = panel.finishLength();
         candidate.finishWidth = panel.finishWidth();
@@ -82,10 +154,17 @@ std::vector<CutListRow> buildCutList(const core::FurnitureComponent& root,
         const auto* part = dynamic_cast<const core::PanelComponent*>(component);
         candidate.inCuttingPlan = part == nullptr || part->inCuttingPlan();
 
-        const auto existing = std::find_if(rows.begin(), rows.end(), [&](const CutListRow& row) {
-            return samePart(row, candidate);
-        });
-        CutListRow& row = existing != rows.end() ? *existing : rows.emplace_back(candidate);
+        FlatPart flat = flatten(panel, rules);
+        std::size_t index = 0;
+        while (index < rows.size()
+               && !(samePart(rows[index], candidate) && sameMachining(machining[index], flat))) {
+            ++index;
+        }
+        if (index == rows.size()) {
+            rows.push_back(candidate);
+            machining.push_back(std::move(flat));
+        }
+        CutListRow& row = rows[index];
         ++row.quantity;
         row.components.push_back(component->id());
     }

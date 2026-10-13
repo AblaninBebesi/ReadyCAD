@@ -413,6 +413,9 @@ constexpr std::pair<TextId, std::string_view> kTurkish[] = {
     {T::PartWithoutSize, "parçaya yer kalmaz"},
     {T::OverlapWarning, "Çakışan parçalar"},
     {T::SummaryAttention, "DİKKAT"},
+
+    {T::HandLeft, "sol"},
+    {T::HandRight, "sağ"},
 };
 
 Table buildTable(const auto& entries) noexcept

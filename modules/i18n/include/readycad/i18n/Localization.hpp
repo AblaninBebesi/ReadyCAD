@@ -98,6 +98,8 @@ enum class TextId : std::size_t {
     PartDrawingsWord, SheetDrawingsWord, ProgramsWord, CutListCsvWord, MenuExportPackage,
     MenuExportCutListCsv, PackageDone, PackageWaiting, ChangeRefused, PartsOverlap,
     PartWithoutSize, OverlapWarning, SummaryAttention,
+    // Cut list: the hand of a mirror part
+    HandLeft, HandRight,
 
     Count // keep last
 };

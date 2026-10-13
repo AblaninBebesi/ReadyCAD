@@ -2,9 +2,12 @@
 
 #include "readycad/core/builders/WardrobeBuilder.hpp"
 #include "readycad/detailing/CutList.hpp"
+#include "readycad/detailing/Detailing.hpp"
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
+
+#include <vector>
 
 using namespace rc::core;
 using namespace rc::detailing;
@@ -89,18 +92,23 @@ TEST_CASE("Cut list merges identical parts", "[detailing][cutlist]")
         return rows.front();
     };
 
-    CHECK(rows.size() == 6);
-    CHECK(row(ComponentKind::SideWall).quantity == 2);
+    // Side walls and doors are mirror pairs (left / right): a row each.
+    CHECK(rows.size() == 8);
+    CHECK(row(ComponentKind::SideWall).quantity == 1);
     CHECK(row(ComponentKind::Shelf).quantity == 4);
-    CHECK(row(ComponentKind::Door).quantity == 2);
+    CHECK(row(ComponentKind::Door).quantity == 1);
     CHECK(row(ComponentKind::BackPanel).quantity == 1);
 
     const CutListRow& side = row(ComponentKind::SideWall);
+    CHECK(side.hand == Side::Left);
     CHECK(side.finishLength == Approx(1982.0));
     CHECK(side.cut.length == Approx(1982.0));
     CHECK(side.cut.width == Approx(559.0)); // 560 - 2 + 1
     CHECK(side.keepGrainDirection);
-    CHECK(side.components.size() == 2);
+    CHECK(side.components.size() == 1);
+    CHECK(rows[1].kind == ComponentKind::SideWall);
+    CHECK(rows[1].hand == Side::Right);
+    CHECK_FALSE(row(ComponentKind::Shelf).hand.has_value());
 
     const CutListRow& top = row(ComponentKind::TopPanel);
     CHECK(top.cut.length == Approx(798.0)); // overlay top: both ends banded
@@ -124,7 +132,7 @@ TEST_CASE("A part left out of the cutting plan gets a row of its own", "[detaili
     shelves[1]->setInCuttingPlan(false); // e.g. a glass shelf ordered cut to size
     const auto rows = buildCutList(*wardrobe, wardrobe->rules());
 
-    REQUIRE(rows.size() == 7);
+    REQUIRE(rows.size() == 9);
     int inPlan = 0;
     int outOfPlan = 0;
     for (const CutListRow& r : rows) {
@@ -148,4 +156,39 @@ TEST_CASE("Edge banding consumption", "[detailing][edges]")
     // sides 2 x 2012 + top 830 + 2 x 590 + bottom 794 + shelves 4 x 792 + doors 2 x 4908
     CHECK(usage.front().totalLength == Approx(19812.0));
     CHECK(usage.front().pieces == 18);
+}
+
+TEST_CASE("Parts of one size are one row only if their holes are the same", "[detailing][cutlist]")
+{
+    // Three equal columns, one door each (hinged left): each partition carries the hinge plates
+    // of the door to its right and shelf supports on both faces — the two partitions are alike.
+    const auto wardrobe = WardrobeBuilder()
+                              .dimensions({1800, 2000, 560})
+                              .sections(3)
+                              .shelvesPerSection(2)
+                              .doorsPerSection(1)
+                              .build();
+    applyDetailing(*wardrobe);
+    auto partitionRows = [&wardrobe] {
+        std::vector<int> quantities;
+        for (const CutListRow& r : buildCutList(*wardrobe, wardrobe->rules())) {
+            if (r.kind == ComponentKind::Partition) {
+                quantities.push_back(r.quantity);
+            }
+        }
+        return quantities;
+    };
+    CHECK(partitionRows() == std::vector<int>{2});
+
+    // Shelves on supports carry no holes: all six are one row.
+    for (const CutListRow& r : buildCutList(*wardrobe, wardrobe->rules())) {
+        if (r.kind == ComponentKind::Shelf) {
+            CHECK(r.quantity == 6);
+        }
+    }
+
+    // Without the third door the second partition has no hinge plates: same board, other part.
+    wardrobe->carcass()->interior().subsections()[2]->setDoors(0);
+    applyDetailing(*wardrobe);
+    CHECK(partitionRows() == std::vector<int>{1, 1});
 }

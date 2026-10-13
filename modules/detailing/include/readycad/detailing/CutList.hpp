@@ -3,8 +3,10 @@
 #include "readycad/core/ConstructionRules.hpp"
 #include "readycad/core/Panel.hpp"
 #include "readycad/core/model/FurnitureComponent.hpp"
+#include "readycad/core/model/Parts.hpp"
 
 #include <array>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -27,6 +29,9 @@ struct CutSize {
 struct CutListRow {
     core::ComponentKind kind = core::ComponentKind::Shelf;
     std::string name; // the component's own name; empty -> the UI shows the localised kind
+    /// Left or right part of a mirror pair: side walls, drawer box sides, doors (the hinge
+    /// side). They look alike, but their holes are mirror images: never the same row.
+    std::optional<core::Side> hand;
     core::Material material;
     core::Real finishLength = 0.0;
     core::Real finishWidth = 0.0;
@@ -39,8 +44,10 @@ struct CutListRow {
     std::vector<core::ComponentId> components;
 };
 
-/// Cut list of all panels in the subtree, in tree order (carcass first), identical parts merged
-/// (a part left out of the cutting plan never merges with one that is in it).
+/// Cut list of all panels in the subtree, in tree order (carcass first), identical parts merged.
+/// Identical means the same board AND the same machining: one drawing and one CNC program serve
+/// every part of a row, so two walls of one size with different holes get two rows. A part left
+/// out of the cutting plan never merges with one that is in it.
 [[nodiscard]] std::vector<CutListRow> buildCutList(const core::FurnitureComponent& root,
                                                    const core::ConstructionRules& rules);
 

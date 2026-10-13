@@ -207,7 +207,7 @@ Drawing drawPart(const FlatPart& part, const PartDrawingOptions& options)
 
 std::string partName(const detailing::CutListRow& row)
 {
-    return row.name.empty() ? std::string(i18n::text(i18n::kindText(row.kind))) : row.name;
+    return i18n::partName(row.kind, row.name, row.hand);
 }
 
 Drawing drawAllParts(const core::Product& product,

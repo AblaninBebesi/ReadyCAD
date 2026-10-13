@@ -117,7 +117,7 @@ std::string safeName(std::string_view text)
 
 std::string rowName(const detailing::CutListRow& row)
 {
-    return row.name.empty() ? std::string(i18n::text(i18n::kindText(row.kind))) : row.name;
+    return i18n::partName(row.kind, row.name, row.hand);
 }
 
 } // namespace
