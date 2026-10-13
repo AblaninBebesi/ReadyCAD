@@ -9,4 +9,6 @@ CNC programs (stage 8), in three layers:
 
 New controllers are new dialects (data) or new postprocessors; new machine types (horizontal drilling, panel saw, edgebander) are new planners over the same operations. See docs/ARCHITECTURE.md, section "Программы для ЧПУ".
 
-**Stage:** 8
+Kitchen: `Contour::inner` — openings (a sink in a worktop) are cut from the inside, before any part's outline, climb milling counter-clockwise; an opening narrower than the router is left for other machines.
+
+**Stages:** 8, kitchen

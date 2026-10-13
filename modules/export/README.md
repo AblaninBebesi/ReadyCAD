@@ -12,4 +12,6 @@ Namespace `rc::exporting` (`export` is a C++ keyword).
 
 Stage 9: cut list rows left out of the cutting plan are marked with "*" and a footnote; `todayText()`.
 
-**Stages:** 6, 7, 9
+Kitchen: cut-outs on the `CUTOUT` layer, dimensioned as a chain along the part.
+
+**Stages:** 6, 7, 9, kitchen

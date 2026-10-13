@@ -135,6 +135,14 @@ Drawing drawPart(const FlatPart& part, const PartDrawingOptions& options)
         const std::size_t layer = drawing.addLayer(grooveLayer(groove.side, groove.width, groove.depth));
         drawing.add(layer, Polyline{band(groove.start, groove.end, groove.width), true, false});
     }
+    // Openings through the part (a sink, a hob): cut out like the outline, from the inside.
+    if (!part.cutouts.empty()) {
+        const std::size_t layer = drawing.addLayer(
+            {std::string(layers::kCutout), 7, {0, 0, 0}, LineType::Continuous, LineWeight::Thick});
+        for (const detailing::FlatCutout& c : part.cutouts) {
+            drawing.add(layer, Polyline{detailing::cutoutOutline(c), true, false});
+        }
+    }
 
     const std::size_t text = drawing.addLayer(
         {std::string(layers::kText), 7, {0, 0, 0}, LineType::Continuous, LineWeight::Thin});
@@ -187,7 +195,28 @@ Drawing drawPart(const FlatPart& part, const PartDrawingOptions& options)
                                                    {40, 40, 40}, LineType::Continuous,
                                                    LineWeight::Thin});
         const Real offset = labelSpace + 2.0 * h;
-        drawing.dimension(dims, {Vec2(0.0, 0.0), Vec2(l, 0.0), -offset, "", h, h});
+        // Cut-outs along the length: one chain under the part (end, cut-out, bridge, cut-out,
+        // end), the overall length below it. Across: each one's depth on its right side and its
+        // distance from the lower edge on its centre line.
+        std::vector<Real> chain{0.0, l};
+        for (const detailing::FlatCutout& c : part.cutouts) {
+            chain.push_back(c.center.x - c.length / 2.0);
+            chain.push_back(c.center.x + c.length / 2.0);
+            const Vec2 lo = c.center - Vec2(c.length, c.width) * 0.5;
+            const Vec2 hi = c.center + Vec2(c.length, c.width) * 0.5;
+            drawing.dimension(dims, {Vec2(hi.x, lo.y), hi, -1.5 * h, "", h, h});
+            drawing.dimension(dims, {Vec2(c.center.x, 0.0), Vec2(c.center.x, lo.y), 0.0, "", h, h});
+        }
+        std::sort(chain.begin(), chain.end());
+        const bool chained = chain.size() > 2;
+        for (std::size_t i = 0; chained && i + 1 < chain.size(); ++i) {
+            if (chain[i + 1] - chain[i] > core::kEpsilon) {
+                drawing.dimension(dims, {Vec2(chain[i], 0.0), Vec2(chain[i + 1], 0.0), -offset,
+                                         "", h, h});
+            }
+        }
+        drawing.dimension(dims, {Vec2(0.0, 0.0), Vec2(l, 0.0),
+                                 -(offset + (chained ? 2.5 * h : 0.0)), "", h, h});
         drawing.dimension(dims, {Vec2(0.0, 0.0), Vec2(0.0, w), offset, "", h, h});
     }
 

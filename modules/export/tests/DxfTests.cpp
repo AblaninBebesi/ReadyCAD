@@ -4,6 +4,7 @@
 #include "readycad/test/TempFolder.hpp"
 
 #include "readycad/core/builders/WardrobeBuilder.hpp"
+#include "readycad/core/builders/Catalog.hpp"
 #include "readycad/core/model/Carcass.hpp"
 #include "readycad/core/model/Section.hpp"
 #include "readycad/detailing/CutList.hpp"
@@ -327,4 +328,24 @@ TEST_CASE("Writing to an impossible path reports an error", "[export][dxf]")
     const TempFolder folder("bad_path");
     std::filesystem::create_directories(folder.path() / "file.dxf"); // a folder with that name
     CHECK_THROWS_AS(saveDxf(d, folder.path() / "file.dxf"), ExportError);
+}
+
+TEST_CASE("A worktop in DXF: its cut-outs on their own layer, dimensioned", "[export][dxf][kitchen]")
+{
+    const auto kitchen = core::createProduct(core::CatalogItem::Kitchen);
+    const detailing::FlatPart flat =
+        detailing::flatten(*kitchen->kitchen()->worktop().panel(), kitchen->rules());
+    const Drawing drawing = drawPart(flat, PartDrawingOptions{});
+
+    CHECK(drawing.count<Polyline>(layers::kContour) == 1);
+    CHECK(drawing.count<Polyline>(layers::kCutout) == 2);
+    const auto entities = dxfObjects(parseDxf(toDxf(drawing)), "ENTITIES");
+    std::size_t cutouts = 0;
+    for (const DxfObject& e : entities) {
+        cutouts += e.type == "POLYLINE" && e.get(8) == "CUTOUT" ? 1 : 0;
+    }
+    CHECK(cutouts == 2);
+    // Overall size; the chain along the length (end, sink, bridge, hob, end); per cut-out its
+    // depth and its distance from the front edge.
+    CHECK(drawing.count<Dimension>(layers::kDimensions) == 2 + 5 + 2 * 2);
 }

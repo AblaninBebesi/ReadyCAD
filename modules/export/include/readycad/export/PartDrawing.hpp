@@ -22,6 +22,7 @@ namespace rc::exporting {
 namespace layers {
 inline constexpr std::string_view kContour = "CONTOUR";        ///< finished part, closed
 inline constexpr std::string_view kCutContour = "CUT_CONTOUR"; ///< sawn blank, closed
+inline constexpr std::string_view kCutout = "CUTOUT"; ///< opening through the part, closed
 inline constexpr std::string_view kEdgeBand = "EDGE_BAND";     ///< marks along banded edges
 inline constexpr std::string_view kText = "TEXT";
 inline constexpr std::string_view kDimensions = "DIMENSIONS";

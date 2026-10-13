@@ -216,3 +216,48 @@ TEST_CASE("Flat views are never mirrored and the blank matches the cut size", "[
         }
     }
 }
+
+TEST_CASE("A worktop unfolds with its cut-outs, seen from above", "[detailing][flat][kitchen]")
+{
+    const auto kitchen = createProduct(CatalogItem::Kitchen);
+    const Worktop& worktop = kitchen->kitchen()->worktop();
+    const FlatPart flat = flatten(*worktop.panel(), kitchen->rules());
+
+    // Seen from above the front edge (z = 600) is at the bottom of the drawing: v = 600 - z.
+    REQUIRE(flat.cutouts.size() == 2);
+    CHECK(flat.viewFace == PanelFace::Top);
+    CHECK(flat.cutouts[0].center == Vec2(700.0, 300.0)); // the sink: z = 300
+    CHECK(flat.cutouts[1].center == Vec2(1700.0, 305.0)); // the hob: z = 295
+    CHECK(flat.cutouts[1].length == Approx(560.0));
+    CHECK(flat.cutouts[1].width == Approx(490.0));
+    CHECK(flat.cutouts[0].radius == Approx(15.0));
+    CHECK(flat.edge(EdgeSide::L2).start.y == Approx(0.0)); // the front edge, banded
+}
+
+TEST_CASE("The outline of a cut-out: counter-clockwise, rounded corners", "[detailing][flat]")
+{
+    const FlatCutout sink{Vec2(700.0, 300.0), 560.0, 480.0, 15.0};
+    const std::vector<Vec2> outline = cutoutOutline(sink, 16);
+    REQUIRE(outline.size() == 4 * 17);
+    Real twice = 0.0;
+    Vec2 lo(1e9);
+    Vec2 hi(-1e9);
+    for (std::size_t i = 0; i < outline.size(); ++i) {
+        const Vec2 a = outline[i];
+        const Vec2 b = outline[(i + 1) % outline.size()];
+        twice += a.x * b.y - b.x * a.y;
+        lo = glm::min(lo, a);
+        hi = glm::max(hi, a);
+    }
+    CHECK(twice > 0.0); // counter-clockwise
+    CHECK(lo.x == Approx(420.0));
+    CHECK(hi.x == Approx(980.0));
+    CHECK(lo.y == Approx(60.0));
+    CHECK(hi.y == Approx(540.0));
+    // Area of the rectangle less the four corners rounded off: (4 - pi) r^2.
+    CHECK(twice / 2.0 == Approx(560.0 * 480.0 - (4.0 - 3.14159265358979) * 15.0 * 15.0).epsilon(1e-4));
+
+    // Square corners: just the rectangle.
+    CHECK(cutoutOutline({Vec2(0.0), 100.0, 50.0, 0.0}) ==
+          std::vector<Vec2>{{50, -25}, {50, 25}, {-50, 25}, {-50, -25}});
+}

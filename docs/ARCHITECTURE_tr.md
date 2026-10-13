@@ -30,13 +30,13 @@ Oklar sadeleştirilmiştir: her modülün tam bağımlılıkları tabloda listel
 
 | Modül       | Sorumluluk | Aşama | Bağımlılıklar |
 |-------------|------------|-------|---------------|
-| `core`      | Matematik (mm, double), `Aabb`, mobilya bileşen ağacı (Composite), `Panel`, parametrik yeniden hesaplama | 1–3 | glm |
+| `core`      | Matematik (mm, double), `Aabb`, mobilya bileşen ağacı (Composite), `Panel`, parametrik yeniden hesaplama; mutfak: modül dizileri, kuşaklar, baza, kesimli tezgah | 1–3, mutfak | glm |
 | `i18n`      | Metinler (`TextId` + Türkçe tablo), model öğelerinin adları (parça türleri, kenarlar, delikler, bağlantı elemanları), UTF-8, ASCII'ye çevirme, dosya adları | 1, 6, 8, 9 | core |
 | `storage`   | JSON dosyaları: proje (`*.rcproj`), atölye profili (`*.rcprofile`), levha stoku (`stock.rcstock`), kesim ve CNC makinesi ayarları; atölye dosyaları tek klasörde | 5, 7, 8, 9 | core, nesting, cam |
-| `detailing` | Kesim ve net ölçüler, kenar bantları, «Sistem 32» delme, bağlantı elemanları, düzlemdeki parça (`FlatPart`), bağlantı elemanları listesi | 4, 6 | core |
+| `detailing` | Kesim ve net ölçüler, kenar bantları, «Sistem 32» delme, bağlantı elemanları, düzlemdeki parça (`FlatPart`, kesimleriyle), bağlantı elemanları listesi | 4, 6, mutfak | core |
 | `nesting`   | Levha ve artık stoku (`StockManager`), panel ebatlamada kesim planı (giyotin), CNC'de nesting (No-Fit Polygon), genetik algoritma, arka planda hesap | 7 | core, detailing; Clipper2 (modülün içinde gizli) |
 | `export`    | 2D çizimler (`Drawing`), DXF R12, PDF: listeler, kesim planı, montaj çizimi, parça çizimleri | 6, 7 | core, detailing, nesting, i18n; libHaru (modülün içinde gizli) |
-| `cam`       | İşleme operasyonları (makineden bağımsız), CNC nesting planlaması (takımlar, sıra, rotalar), lehçesi ayarlanabilen G-code son işlemcisi | 8 | core, detailing, nesting, i18n; Clipper2 (modülün içinde gizli) |
+| `cam`       | İşleme operasyonları (makineden bağımsız), CNC nesting planlaması (takımlar, sıra, rotalar, içeriden kesimler), lehçesi ayarlanabilen G-code son işlemcisi | 8, mutfak | core, detailing, nesting, i18n; Clipper2 (modülün içinde gizli) |
 | `editor`    | Belge, seçim, geri al/yinele, arayüz için işlemler, otomatik detaylandırma, ürünü birleştirilemez yapan değişikliklerin reddi. **OpenGL yok**, bu yüzden pencere olmadan test edilir | 5, 9 | yukarıdakilerin hepsi |
 | `production`| Üretim hattı: sipariş → kesilecek parçalar → kesim planı → PDF, DXF, CNC programları, CSV → özetli atölye paketi; pencere olmadan komut satırı | 9 | editor, i18n |
 | `render`    | OpenGL 3.3 core: sahne, kamera, fareyle seçim, GPU nesneleri için RAII sarmalayıcılar | 5 | core, detailing, glad |
@@ -374,6 +374,7 @@ taraftan işleme) de kullanacak.
 |--------|---------|
 | `CONTOUR` | net parçanın konturu (kapalı çoklu çizgi) |
 | `CUT_CONTOUR` | testereden çıkan ham parça |
+| `CUTOUT` | boydan boya kesim (tezgahta evye, ocak), içeriden frezelenir; mutfakla geldi |
 | `EDGE_BAND` | bantlı kenarların işaretleri |
 | `DRILL_D5_Z13` | görünen yüzde Ø5, 13 derinliğinde delikler (üstten delinir) |
 | `DRILL_BACK_D7_Z18` | karşı yüzdeki delikler (parçanın çevrilmesi gerekir) |
@@ -1090,3 +1091,196 @@ Henüz yapılmadı:
 * sığmayan raflar ve çekmeceler reddedilir, ama program nasıl düzeltileceğini önermez;
 * PDF eski projelerdeki çakışmaları göstermez (onları «Uyarılar» penceresi ve `OZET.txt`
   gösterir).
+
+## Mutfak takımı (Aşama 9'dan sonra)
+
+On aşamalık planda olmayan bir genişletme. Birlikte alınan kararlar:
+* çekmeceler dolaplardakiyle aynı (aynı `Drawer` ve `DrawerStack`);
+* mutfakta baza gerekir;
+* sunta veya MDF tezgah kesim planına alınabilir ya da dışında kalabilir; bunu kullanıcı seçer;
+* kuşakların nasıl olacağına ben karar veriyorum; kararım aşağıda;
+* köşe modülleri ve köşe kapağı kuralı bir sonraki adım («Henüz yapılmadı» bölümüne bakın).
+
+### Bir üründe birden çok gövde
+
+Mutfaktan önce `Product`'ın tam olarak bir `Carcass`'ı vardı. Artık ürünün tek bir çocuğu
+var: `Carcass` (dolap, şifonyer, kitaplık) veya `Kitchen`:
+
+```
+Ürün                        Product
+└── Mutfak                  Kitchen: kendi ölçüleri, tezgah kesimleri
+    ├── Alt dolaplar        CabinetRow (Base): soldan sağa modüller
+    │   ├── Alt dolap 1     Carcass: üst tabla yerine kuşaklar, baza, dizideki genişlik
+    │   │   ├── Yan panel, Ön kuşak, Arka kuşak, Alt tabla, Arkalık, Bölme, Baza
+    │   └── ...
+    ├── Tezgah              Worktop
+    └── Üst dolaplar        CabinetRow (Wall)
+        └── Üst dolap 1 ... Carcass
+```
+
+Bir mutfakta ürün ölçülerinin anlamı: genişlik dizinin uzunluğu (duvar), yükseklik üst
+dolapların üst hizası, derinlik alt gövdelerin derinliği. Geri kalanı mutfağın kendi ölçüleri
+(`Kitchen::Sizes`): alt dolap gövdesi 720, üst dolap 720, derinliği 320, tezgah derinliği 600.
+Baza yüksekliği bir atölye kuralıdır (`rules.kitchen.plinthHeight = 100`): onu atölyenin satın
+aldığı ayaklar belirler. `Kitchen::layoutChildren` yerleşimi buradan çıkar:
+
+```
+ ┌──────── üst dolaplar ────────┐  ← üst hiza = ürünün yüksekliği
+ └──────────────────────────────┘    wallHeight, derinliği wallDepth
+ ════════════ tezgah ═════════════   Tezgah 38 malzemesinin kalınlığı, derinliği worktopDepth
+ ┌──────── alt dolaplar ────────┐
+ │                              │    baseHeight (gövde)
+ └──────────────────────────────┘
+   ▔▔▔▔▔▔▔▔▔ baza ▔▔▔▔▔▔▔▔▔▔▔▔▔     plinthHeight (atölye kuralı)
+```
+
+Kurallar yine yukarıdan aşağıya: mutfak diziye bir şerit verir, dizi modüle bir sütun verir,
+modül kendi parçalarını kendisi hesaplar. Dizideki genişlikler bir bölmenin sütunları gibi
+hesaplanır: sabit genişlikli modül genişliğini korur, otomatik olanlar kalanı eşit paylaşır. Bu
+formül `LayoutSlot.hpp`'deki ortak `distributeSizes()` fonksiyonuna taşındı; onu hem `Section`
+hem `CabinetRow` kullanır. Bu yüzden mutfak 2400'den 2600'e uzayınca yalnızca «otomatik» modül
+büyür, evye dolabı 600 kalır.
+
+Her modül kendi kapaklarıyla tam bir `Carcass`'tır. Kapaklar kendi gövdesinin kenarlarından
+`frontEdgeGap` (1,5 mm) kadar içeride durur; bu yüzden komşu modüllerin kapakları arasında ayrı
+bir kural olmadan `frontGap` (3 mm) oluşur.
+
+Kodun tek gövde varsaydığı yerler ve şimdi ne olduğu:
+
+| Yer | Şimdi |
+|-----|-------|
+| Delik delme (`applyDetailing`) | gövde gövde: bir birleşim, raf pimi ya da menteşe tabanı asla komşu modüle geçmez. Test, bir modülün üst tabla ucunun komşunun yan paneline değdiği durumu kurar: geometri olarak bir birleşimdir, ama orada konfirmat yoktur |
+| Gövde ile ilgili düzenleyici işlemleri | «ürünün gövdesi» değil, gövdenin `ComponentId`'si ile (`setTopJoint(doc, carcass, ...)`) |
+| Proje dosyası | `"carcass"` yerine `"kitchen"`, sürüm 2 |
+| Arayüz | tek gövdenin değil, seçilen gövdenin özellikleri |
+
+### Yeni konstrüksiyon kuralları
+
+| Parça | Kural | Neden |
+|-------|-------|-------|
+| **Kuşaklar** (`Rail`, «Ön/Arka kuşak») | üst tabla yerine yan paneller arasında iki şerit, genişlik 100 (`rules.kitchen.railWidth`). Sıradan alt dolaplarda **yatay**: arka kuşak arka kenarlara oturur, arkalık onun kanalına girer. Evye ve ocak dolaplarında **dikey** (kenarı üzerinde): ön kuşak kapağın hemen arkasında, arka kuşak arkalığın hemen önünde; arkalık o zaman kanalsız olarak üste kadar çıkar | tezgah yan panellerin üstüne oturur ve alttan kuşaklardan vidalanır; altında üst tablaya gerek yok. Evyenin veya ocağın altında yatay bir kuşak tam teknenin ya da ocak gövdesinin altına gelirdi |
+| **Baza** (`Plinth`) | her alt modülün kendi bazası: gövdenin altında 100 yüksekliğinde bir şerit, ön kenarından 40 geride (ayak ucu payı). Gövdenin kutusu baza bölgesini içerir, gövdenin kendisi daha yukarıdan başlar | bütün mutfak boyunca tek bir şerit 2800'lük levhaya sığmaz ve yine de ek ister. Modül sınırındaki ek görünmez, model basit kalır: baza yalnızca kendi gövdesine bağlıdır |
+| Alt dolap | yan paneller alt tablanın üstünde (`bottomJoint = Overlay`) | ayaklar alt tablaya vidalanır, yük ondan geçer |
+| Üst dolap | üst tabla yan panellerin arasında, yan paneller alt tablanın üstünde | askılar yan panellerin üst köşelerine takılır; aşağıdan alt tablanın ucu görünür ve o bantlıdır (yan panellerin uçları görünmez) |
+| Kulplar | alt kapaklarda üstte, üst kapaklarda altta | elin bulduğu yer |
+| **Tezgah** (`Worktop`) | `rules.worktopMaterial` (Tezgah 38), derinlik 600, uzunluk alt dolaplar kadar; önde ve uçlarda bant; **varsayılan olarak kesim planı dışında** | genellikle 4100 mm'lik plaka olarak alınır ve ayrıca kesilir. «Kesim» onay kutusu onu kesim planına alır (o zaman stokta ne gerektiği aşağıda) |
+| **Tezgah kesimi** (evye, ocak) | alt modülün özelliği (`Carcass::cutout()`): modülün ortasında, kesimin ön kenarı tezgahın ön kenarından 60 mm geride. Standart: evye 560 × 480 R15, ocak 560 × 490 R5 | cihazların montaj talimatları böyle söyler. Kesim modüle aittir: modülü taşırsanız kesim de taşınır |
+
+60 cm'lik evye modülü için sayılar: yan paneller arası açıklık 564, kesim 560, her yandan 2 mm;
+derinlikte kesim 60…540'ı kaplar, dikey ön kuşak 542…560'tadır.
+
+**Kesim sığmalı.** `Kitchen::misplacedCutouts()` yapılamayacak kesimleri bulur:
+* tezgahın kenarına veya komşu kesime 50 mm'den az kalıyorsa (`cutoutMargin`);
+* kesim kendi modülünün açıklığına düşmüyorsa: planda yan panellerin, arkalığın dışına ya da
+  tezgahın altındaki bir kuşağın veya üst tablanın üstüne taşıyorsa (evye teknesi veya ocak
+  gövdesi bir parçaya dayanırdı).
+
+Düzenleyici bu kesimleri parça çakışmaları gibi sayar: sayılarını artıran bir değişiklik
+«Bu değişiklik yapılamaz: tezgah kesimi yerine sığmaz (Alt dolap 2)» metniyle reddedilir. Böylece
+400'lük modüle 560'lık evye, en uçtaki modüle evye (tezgah ucuna 20 mm kalırdı) konamaz, evye
+dolabının kuşakları yatay yapılamaz. Kural ilk sürümümdeki bir hatayı hemen yakaladı:
+tezgahın derinliğinde ortalanan 490'lık ocak ön kuşağa 3 mm değiyordu. Bu yüzden kesim,
+talimatlardaki gibi ön kenara bağlıdır.
+
+### Çizimlerde ve CNC programlarında kesimler
+
+* **Model.** `Panel::cutouts()`: parçayı boydan boya geçen, köşeleri yuvarlatılmış
+  dikdörtgenler, parça koordinatlarında. Bunlar delik delme değil, parçanın şeklidir:
+  `clearMachining()` onlara dokunmaz. Tezgah bunları mutfaktan `LayoutSlot::kitchen` üzerinden
+  alır (gövde parçalarının `CarcassFrame` alması gibi).
+* **`FlatPart::cutouts`**: deliklerle aynı açınımda kesimler (üstten görünüş, aynasız).
+  `cutoutOutline()` bir kesimi saat yönünün tersine bir çokgene çevirir, her yuvarlatma 8 parça
+  (R15'te yaydan sapma 0,1 mm).
+* **DXF ve PDF.** `CUTOUT` katmanı: kesimin kapalı konturu (CAM ile sözleşme: `CUTOUT`
+  üzerindeki her şey içeriden boydan boya kesilir). Ölçüler parçanın altında zincir hâlinde:
+  uç, kesim, ara köprü, kesim, uç; her kesimin derinliği ve ön kenara uzaklığı.
+
+  ![Tezgah çizimi](images/kitchen-worktop.png)
+* **Nesting merkezi programı.** `Contour`'a `inner` bayrağı eklendi. Freze kesimin içinden
+  gider (kontur yarıçap kadar küçültülür: kesim ölçüsünü korur). Bütün kesimler, parçalar
+  henüz levhada tutunurken, her dış konturdan önce frezelenir. Saat yönünde dönen iş milinde
+  tırmanma frezeleme: parçanın dışında saat yönünde, kesimin içinde tersine. Freze kesime
+  sığmıyorsa kesim «diğer makinelere kalan işler»e gider.
+* **Kesim planı** parçanın dış dikdörtgenini kullanır; kesimin içine başka parça konmaz.
+* **3B.** Tezgah kesimlerin çevresinde parçalar hâlinde çizilir (kesim kenarlarına göre bir
+  ızgara), yuvarlatmalar 3B'de düzdür. Kesime tıklamak altındaki dolabı seçer.
+
+Kesim planında tezgah: 2400 mm standart 2800 × 2100 levhaya sığar. 3 m için stokta tezgah
+plakaları gerekir, örneğin 4100 × 620: frezenin 10 mm'lik payları ile 600 kalır. Mutfak uçtan
+uca testi böyle kurulmuştur.
+
+### Yolda: kesim listesinde bir satır = aynı işleme
+
+Mutfağı incelerken 6–9. aşamalardan kalan bir hata buldum. Kesim listesinin bir satırı
+parçaları yalnızca türüne, ölçüsüne, malzemesine ve kenar bantlarına göre birleştiriyordu. Ama
+çizim ve CNC programı satırın ilk parçasına göre yapılır. Sağ yan panel (delikleri soldakinin
+aynadaki görüntüsü) sol panelin programını alıyordu; mutfakta da aynı ölçüdeki kapaklı ve
+çekmeceli modüllerin yan panelleri «aynı parça» olurdu.
+
+Artık `buildCutList` işlemeyi de, parçanın çiziminde göründüğü gibi karşılaştırır (`FlatPart`:
+delikler, kanallar, kesimler; sıradan bağımsız, 0,01 mm tolerans), ayrıca ayna parçaların
+«elini»: yan paneller, çekmece yanları, kapaklar (menteşe tarafına göre). Böyle bir satırın
+adında el yazar: «Yan panel (sol)», «Kapak (sağ)». Bu yüzden gardıropta yan paneller ve
+kapaklar artık birer parçalık iki satırda. Parça sayısı aynı, ama her satır tek bir parçayı
+tanımlar.
+
+### Arayüz
+
+![Düzenleyicide mutfak](images/kitchen-editor.png)
+
+* Katalog: «Mutfak (düz)»: 2400'lük düz mutfak; 400'lük kapaklı modül, 600'lük evye,
+  400'lük çekmeceler, 600'lük ocak ve 400'lük otomatik modül; üstlerinde beş üst dolap.
+* Ağaç: «Alt dolaplar», «Tezgah», «Üst dolaplar», «Alt dolap 2» modülleri, «Ön kuşak».
+* «Parametreler»: mutfak uzunluğu, toplam yükseklik, alt dolap derinliği, mutfak ölçüleri,
+  tezgah yüksekliği (hesaplanır), «Dolap ekle» (modül ve genişlik). Atölye profilinde baza
+  yüksekliği ve girintisi, kuşak genişliği.
+* Modül özellikleri: üst kısım (üst tabla, yatay veya dikey kuşaklar), birleşimler, arkalık,
+  baza, sabit genişlik, tezgah kesimi ve ölçüleri, «Sola taşı», «Sağa taşı», «Sil». Dizide
+  «Dolap ekle» yalnızca o dizinin modüllerini önerir.
+* `--catalog 4`: mutfak; `--select Carcass:2`: ikinci gövdeyi seç.
+
+### Proje dosyası, sürüm 2
+
+```json
+"kitchen": {
+  "sizes": {"baseHeight": 720, "wallHeight": 720, "wallDepth": 320, "worktopDepth": 600},
+  "worktop": {"cutting": false},
+  "base": [ {"topStyle": "uprightRails", "plinth": true, "width": 600,
+             "cutout": {"kind": "sink", "width": 560, "depth": 480, "radius": 15,
+                        "frontOffset": 60},
+             "parts": {"frontRail": {...}}, "interior": {...}, ...} ],
+  "wall": [ ... ]
+}
+```
+
+Sürüm 1 dosyaları eskisi gibi açılır: gövdelerinde `topStyle` yoktur, demek ki üst tablaları
+vardır.
+
+### Bağlantı elemanları
+
+Listeye ayaklar (bazalı her modüle 4, genişliğin her ek metresi için 2 daha), baza klipsleri
+(her ön ayağa bir tane) ve askı aparatları (her üst dolaba 2) eklendi.
+
+### Mutfak testleri
+
+| Ne | Dosya |
+|----|-------|
+| Katalogdaki mutfağın geometrisi: baza, alt tabla, yan paneller, kuşaklar, kuşağın kanalındaki arkalık, kapaklar, tezgah, üst dolaplar; evyenin dikey kuşakları; bütün arkalık türleriyle kuşaklar; kuşak değişince malzeme korunur; mutfağın uzaması; kesimlerin yeri; kesim kuralları; modüllerin yer değiştirmesi; her gövdede baza; mutfak kurucusu | `core/tests/KitchenTests.cpp` |
+| Konfirmatlı kuşaklar, kanal yalnızca arkadaki yatay kuşakta; modüller birbirine bağlanmaz; ayaklar, klipsler, askılar; tezgah kesim planı dışında tek satır | `detailing/tests/KitchenDetailingTests.cpp` |
+| Bir satır = aynı işleme; ayna çiftleri | `detailing/tests/CutListTests.cpp` |
+| Kesimleriyle tezgahın açınımı; kesimin konturu | `detailing/tests/FlatPartTests.cpp` |
+| DXF'te `CUTOUT` katmanı ve ölçüler | `export/tests/DxfTests.cpp` |
+| Kesimler önce, içeriden, doğru yönde frezelenir; dar kesim diğer makinelere kalır | `cam/tests/NestingCenterTests.cpp`, `cam/tests/OperationsTests.cpp` |
+| Modül ekleme, genişliğini değiştirme, taşıma ve silme; yapılamayacak mutfak değişiklikleri reddedilir; konstrüksiyon gövdeye göre | `editor/tests/OperationsTests.cpp` |
+| Mutfak bütün seçimleriyle kaydedilir; sürüm 1 projesi açılır | `storage/tests/StorageTests.cpp` |
+| 3B'de kesimli tezgah | `render/tests/SceneTests.cpp` |
+| **Mutfak yolculuğu**: 3 m, ek modüller, başka bir evye, 4100 × 620 plakadan CNC'de kesilen tezgah; projeler, kesimli çizim, programda tezgah konturundan önce kesimler; rastgele kullanıcı mutfak kurar | `tests/integration/KitchenJourneyTests.cpp`, `tests/integration/RobustnessTests.cpp` |
+
+Henüz yapılmadı:
+* köşe modülleri ve köşe kapağı kuralı. Köşedeki kapak, komşusunun kapak kalınlığı artı aralık
+  kadar eksik kalır (kullanıcının kendi mutfağındaki gözlemi). Bizim modelde bu, ebeveynin
+  hesapladığı negatif bir `FrontOverlay` bindirmesidir;
+* boy dolapları (fırın, buzdolabı), aspiratör üstü dolap, ankastre cihaz nişleri;
+* plakadan uzun tezgah: ek modellenmez, elle kesilir;
+* çekmece raylarının delikleri delinmez (dolaplarda da);
+* tezgah arası paneli, kornişler.

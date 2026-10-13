@@ -17,7 +17,8 @@ namespace rc::i18n {
 [[nodiscard]] std::string asciiFold(std::string_view text);
 
 /// A name that works as a file or folder name everywhere (CNC controllers, USB sticks): asciiFold,
-/// then everything but letters, digits and '-' becomes '_' ("Dolap 1/2" -> "Dolap_1_2").
+/// then every run of characters other than letters, digits and '-' becomes one '_', none at the
+/// ends ("Dolap 1/2" -> "Dolap_1_2", "Mutfak (düz)" -> "Mutfak_duz").
 [[nodiscard]] std::string safeFileName(std::string_view text);
 
 /// A path as UTF-8 (std::filesystem::path::string() uses the ANSI code page on Windows).

@@ -45,6 +45,17 @@ struct FlatGroove {
     core::Real depth = 0.0;
 };
 
+/// An opening through the part (the sink or the hob in a worktop): a rectangle with rounded
+/// corners, as seen from the view face.
+struct FlatCutout {
+    core::Vec2 center{0.0};
+    core::Real length = 0.0; ///< along u
+    core::Real width = 0.0;  ///< along v
+    core::Real radius = 0.0; ///< of the corners
+
+    friend bool operator==(const FlatCutout&, const FlatCutout&) = default;
+};
+
 /// One side of the finished outline: which edge of the panel it is, its band, and where it lies.
 struct FlatEdge {
     core::EdgeSide side = core::EdgeSide::L1;
@@ -72,6 +83,7 @@ struct FlatPart {
     std::array<FlatEdge, 4> outline{}; ///< bottom, right, top, left
     std::vector<FlatHole> holes;       ///< sorted: near, far, edge; then by v and u
     std::vector<FlatGroove> grooves;
+    std::vector<FlatCutout> cutouts;   ///< openings through the whole part
 
     [[nodiscard]] std::size_t count(FlatSide side) const noexcept;
     /// The edge at a side of the outline: 0 bottom, 1 right, 2 top, 3 left.
@@ -87,6 +99,11 @@ enum class ViewFace {
     Top,
     Bottom,
 };
+
+/// The outline of a cut-out, counter-clockwise, starting at the lower end of its right side. A
+/// rounded corner becomes `segments` straight pieces (0.1 mm off the arc for a 15 mm radius at
+/// 8 pieces: finer than the edge of the laminate); square corners give four points.
+[[nodiscard]] std::vector<core::Vec2> cutoutOutline(const FlatCutout& cutout, int segments = 8);
 
 /// Unfolds a panel. Its drillings and grooves must be up to date (detailing applied).
 [[nodiscard]] FlatPart flatten(const core::Panel& panel, const core::ConstructionRules& rules,

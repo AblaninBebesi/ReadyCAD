@@ -75,6 +75,9 @@ PartMachining partMachining(const detailing::FlatPart& part, const nesting::Poly
         out.operations.emplace_back(Groove{g.side == FlatSide::Near ? Face::Top : Face::Bottom,
                                            g.start, g.end, g.width, g.depth});
     }
+    for (const detailing::FlatCutout& c : part.cutouts) {
+        out.operations.emplace_back(Contour{nesting::normalized(detailing::cutoutOutline(c)), true});
+    }
     out.operations.emplace_back(Contour{nesting::normalized(blank)});
     return out;
 }

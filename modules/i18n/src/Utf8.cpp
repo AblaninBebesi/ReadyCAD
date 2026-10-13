@@ -78,7 +78,14 @@ std::string safeFileName(std::string_view text)
     for (const char c : asciiFold(text)) {
         const bool safe = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
                        || c == '-';
-        name += safe ? c : '_';
+        if (safe) {
+            name += c;
+        } else if (!name.empty() && name.back() != '_') {
+            name += '_'; // a run of other characters becomes one underscore
+        }
+    }
+    while (!name.empty() && name.back() == '_') {
+        name.pop_back();
     }
     return name;
 }

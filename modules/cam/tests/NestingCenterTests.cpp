@@ -3,6 +3,7 @@
 #include "TestJob.hpp"
 #include "readycad/cam/NestingCenter.hpp"
 #include "readycad/cam/Route.hpp"
+#include "readycad/detailing/FlatPart.hpp"
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -216,4 +217,87 @@ TEST_CASE("Holes are drilled along a short route", "[cam][planner]")
     CHECK(routeLength(drilled, asDrilled, Vec2(0.0)) < 0.5 * routeLength(given, asGiven, Vec2(0.0)));
     CHECK(sp.stats.seconds > 0.0);
     CHECK(sp.stats.cutLength > 0.0);
+}
+
+namespace {
+
+/// A worktop 2400 x 600 x 38 with a sink opening, and a small part beside it.
+SheetJob worktopJob(Real openingLength = 560.0)
+{
+    SheetJob job;
+    job.name = "worktop";
+    job.material = "Tezgah 38";
+    job.length = 3000.0;
+    job.width = 700.0;
+    job.thickness = 38.0;
+    job.partSpacing = 12.0;
+    PartMachining worktop;
+    worktop.label = "1";
+    worktop.name = "Tezgah";
+    worktop.thickness = 38.0;
+    const detailing::FlatCutout sink{Vec2(720.0, 320.0), openingLength, 480.0, 15.0};
+    worktop.operations = {
+        Contour{nesting::normalized(detailing::cutoutOutline(sink)), true},
+        Contour{nesting::rectangle(nesting::Rect{{20.0, 20.0}, {2420.0, 620.0}})},
+    };
+    PartMachining small;
+    small.label = "2";
+    small.name = "Baza";
+    small.thickness = 38.0;
+    small.operations = {Contour{nesting::rectangle(nesting::Rect{{2440.0, 20.0}, {2640.0, 120.0}})}};
+    job.parts = {worktop, small};
+    return job;
+}
+
+} // namespace
+
+TEST_CASE("Openings are cut from the inside, before any part comes loose",
+          "[cam][planner][kitchen]")
+{
+    NestingCenterProfile profile = defaultProfile();
+    for (const bool climb : {true, false}) {
+        profile.climbMilling = climb;
+        const SheetProgram sp = planSheet(worktopJob(), profile);
+        const auto moves = cuts(sp.program, profile.contourTool);
+        REQUIRE_FALSE(moves.empty());
+
+        // The very first cut is in the opening, even though the small part is smaller.
+        const Vec3 first = moves.front().second;
+        CHECK(first.x > 440.0);
+        CHECK(first.x < 1000.0);
+
+        // At full depth the tool centre runs inside the opening, 6 mm (its radius) from the
+        // edge: the opening keeps its size.
+        std::vector<Vec2> loop;
+        for (const auto& [from, to] : moves) {
+            if (to.z == Approx(-0.3) && from.z == Approx(-0.3) && to.x < 1000.0 && to.y > 80.0
+                && to.y < 560.0) {
+                loop.push_back({to.x, to.y});
+            }
+        }
+        REQUIRE(loop.size() >= 8);
+        for (const Vec2& p : loop) {
+            CHECK(p.x >= 440.0 + 6.0 - 1e-3);
+            CHECK(p.x <= 1000.0 - 6.0 + 1e-3);
+            CHECK(p.y >= 80.0 + 6.0 - 1e-3);
+            CHECK(p.y <= 560.0 - 6.0 + 1e-3);
+        }
+        // Climb milling inside an opening runs counter-clockwise.
+        Real twice = 0.0;
+        for (std::size_t i = 0; i < loop.size(); ++i) {
+            const Vec2 a = loop[i];
+            const Vec2 b = loop[(i + 1) % loop.size()];
+            twice += a.x * b.y - b.x * a.y;
+        }
+        CHECK((climb ? twice > 0.0 : twice < 0.0));
+    }
+    CHECK(planSheet(worktopJob(), profile).leftovers.empty());
+}
+
+TEST_CASE("An opening narrower than the router is left for someone else", "[cam][planner][kitchen]")
+{
+    const SheetProgram sp = planSheet(worktopJob(10.0), defaultProfile());
+    REQUIRE(sp.leftovers.size() == 1);
+    CHECK(sp.leftovers.front().label == "1");
+    CHECK(sp.leftovers.front().noTool == 1);
 }

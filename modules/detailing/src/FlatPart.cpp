@@ -1,6 +1,10 @@
 #include "readycad/detailing/FlatPart.hpp"
 
+#include <glm/trigonometric.hpp>
+
 #include <algorithm>
+#include <array>
+#include <cmath>
 #include <stdexcept>
 #include <tuple>
 
@@ -112,6 +116,34 @@ const FlatEdge& FlatPart::edge(EdgeSide side) const
     throw std::logic_error("FlatPart: outline has no such edge");
 }
 
+std::vector<Vec2> cutoutOutline(const FlatCutout& cutout, int segments)
+{
+    const Real r = std::clamp(cutout.radius, 0.0, std::min(cutout.length, cutout.width) / 2.0);
+    const Real hx = cutout.length / 2.0 - r;
+    const Real hy = cutout.width / 2.0 - r;
+    // Centres of the corner arcs, counter-clockwise from the lower right, and where each arc
+    // starts (degrees).
+    const std::array<std::pair<Vec2, Real>, 4> corners{{{Vec2(hx, -hy), -90.0},
+                                                        {Vec2(hx, hy), 0.0},
+                                                        {Vec2(-hx, hy), 90.0},
+                                                        {Vec2(-hx, -hy), 180.0}}};
+    std::vector<Vec2> points;
+    for (const auto& [corner, start] : corners) {
+        if (r <= core::kEpsilon || segments < 1) {
+            // A square corner: the corner of the rectangle itself.
+            const Vec2 sharp(std::copysign(cutout.length / 2.0, corner.x),
+                             std::copysign(cutout.width / 2.0, corner.y));
+            points.push_back(cutout.center + sharp);
+            continue;
+        }
+        for (int i = 0; i <= segments; ++i) {
+            const Real angle = glm::radians(start + 90.0 * i / segments);
+            points.push_back(cutout.center + corner + r * Vec2(std::cos(angle), std::sin(angle)));
+        }
+    }
+    return points;
+}
+
 bool isRightHanded(const core::Panel& panel) noexcept
 {
     // (length, width, thickness) is an even permutation of (X, Y, Z) exactly when every axis is
@@ -176,6 +208,9 @@ FlatPart flatten(const core::Panel& panel, const core::ConstructionRules& rules,
         groove.width = g.width;
         groove.depth = g.depth;
         part.grooves.push_back(groove);
+    }
+    for (const core::PanelCutout& c : panel.cutouts()) {
+        part.cutouts.push_back({view.point(c.center.x, c.center.y), c.length, c.width, c.radius});
     }
     return part;
 }

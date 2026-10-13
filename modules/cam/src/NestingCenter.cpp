@@ -129,7 +129,9 @@ std::vector<Real> levels(Real top, Real bottom, Real step)
 }
 
 /// Path of the tool centre around a part: the outline grown by the tool radius, mitred corners
-/// (the tool never touches the part, the part keeps its sharp corners), counter-clockwise.
+/// (the tool never touches the part, the part keeps its sharp corners), counter-clockwise. A
+/// negative radius gives the path inside an opening: the outline shrunk (empty if the tool does
+/// not fit in).
 nesting::Polygon toolPath(const nesting::Polygon& outline, Real radius)
 {
     constexpr Real kScale = 1000.0; // micrometres, as in the nesting module
@@ -148,7 +150,7 @@ nesting::Polygon toolPath(const nesting::Polygon& outline, Real radius)
             out.push_back({static_cast<Real>(p.x) / kScale, static_cast<Real>(p.y) / kScale});
         }
     }
-    return nesting::normalized(out);
+    return out.size() < 3 ? nesting::Polygon{} : nesting::normalized(out);
 }
 
 /// Emits steps and keeps track of where the tool is.
@@ -252,6 +254,7 @@ struct Cutout {
     nesting::Polygon outline;
     Real area = 0.0;
     std::string title;
+    bool inner = false; ///< an opening in a part
 };
 
 /// Circular pocket: plunge in the middle, then rings outwards, at every depth level.
@@ -320,9 +323,12 @@ void millGroove(Builder& b, const Tool& tool, const GrooveCut& g, Real top)
 /// A part cut out: the tool centre path, starting at its corner nearest to the tool.
 void cutOut(Builder& b, const Tool& tool, const Cutout& part, Real top, Real bottom, bool climb)
 {
-    nesting::Polygon path = toolPath(part.outline, tool.diameter / 2.0);
-    if (climb) {
-        std::reverse(path.begin(), path.end()); // clockwise around the part
+    const Real r = tool.diameter / 2.0;
+    nesting::Polygon path = toolPath(part.outline, part.inner ? -r : r);
+    // Climb milling with a clockwise spindle: clockwise around a part, counter-clockwise inside
+    // an opening (the material is on the other side of the tool).
+    if (climb != part.inner) {
+        std::reverse(path.begin(), path.end());
     }
     std::size_t start = 0;
     for (std::size_t i = 1; i < path.size(); ++i) {
@@ -418,10 +424,15 @@ SheetProgram planSheet(const SheetJob& job, const NestingCenterProfile& profile)
                     ++left.noTool;
                 }
             } else if (const auto* c = std::get_if<Contour>(&op)) {
+                if (c->inner && toolPath(c->outline, -router->diameter / 2.0).size() < 3) {
+                    ++left.noTool; // the contour router does not fit into the opening
+                    continue;
+                }
                 const nesting::Rect box = nesting::bounds(c->outline);
                 cutouts.push_back({c->outline, nesting::area(c->outline),
                                    part.label + " " + part.name + " " + i18n::mm(box.width()) + "x"
-                                       + i18n::mm(box.height())});
+                                       + i18n::mm(box.height()),
+                                   c->inner});
             }
         }
         if (left.total() > 0) {
@@ -521,19 +532,26 @@ SheetProgram planSheet(const SheetJob& job, const NestingCenterProfile& profile)
         }
         if (contours) {
             b.comment(toolTitle(TextId::CamContours, *tool, cutouts.size()));
-            // Small parts first; among those of about the same size the nearest one.
+            // Openings first, while every part still hangs in the sheet; then small parts
+            // first; among those of about the same size the nearest one.
             std::vector<char> done(cutouts.size(), 0);
+            std::size_t openings = 0;
+            for (const Cutout& c : cutouts) {
+                openings += c.inner ? 1 : 0;
+            }
             for (std::size_t k = 0; k < cutouts.size(); ++k) {
+                const bool innerTurn = k < openings;
                 Real smallest = std::numeric_limits<Real>::max();
                 for (std::size_t i = 0; i < cutouts.size(); ++i) {
-                    if (done[i] == 0) {
+                    if (done[i] == 0 && cutouts[i].inner == innerTurn) {
                         smallest = std::min(smallest, cutouts[i].area);
                     }
                 }
                 std::size_t best = 0;
                 Real bestDistance = std::numeric_limits<Real>::max();
                 for (std::size_t i = 0; i < cutouts.size(); ++i) {
-                    if (done[i] != 0 || cutouts[i].area > smallest * 1.2 + kEps) {
+                    if (done[i] != 0 || cutouts[i].inner != innerTurn
+                        || cutouts[i].area > smallest * 1.2 + kEps) {
                         continue;
                     }
                     for (const Vec2& p : cutouts[i].outline) {

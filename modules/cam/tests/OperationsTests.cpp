@@ -139,3 +139,21 @@ TEST_CASE("A sheet of a cutting plan becomes a job with its parts in place", "[c
         CHECK(p.operations.size() == 1);
     }
 }
+
+TEST_CASE("The openings of a part come before its outline", "[cam][operations][kitchen]")
+{
+    detailing::FlatPart part;
+    part.length = 2400.0;
+    part.width = 600.0;
+    part.thickness = 38.0;
+    part.cut = {Vec2(0.0), Vec2(2400.0, 600.0)};
+    part.cutouts = {{Vec2(700.0, 300.0), 560.0, 480.0, 15.0}, {Vec2(1700.0, 305.0), 560.0, 490.0, 5.0}};
+    const nesting::Polygon blank = nesting::rectangle(nesting::Rect{part.cut.min, part.cut.max});
+    const PartMachining m = partMachining(part, blank, "1", "Tezgah");
+    REQUIRE(m.operations.size() == 3);
+    const auto& sink = std::get<Contour>(m.operations[0]);
+    CHECK(sink.inner);
+    CHECK(nesting::bounds(sink.outline).width() == Approx(560.0));
+    CHECK(std::get<Contour>(m.operations[1]).inner);
+    CHECK_FALSE(std::get<Contour>(m.operations[2]).inner);
+}

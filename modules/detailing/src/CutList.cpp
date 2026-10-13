@@ -114,10 +114,17 @@ bool sameSet(const std::vector<T>& a, const std::vector<T>& b, Equal equal)
     return true;
 }
 
-/// The same holes and grooves as seen in the drawing of the part.
+bool sameCutout(const FlatCutout& a, const FlatCutout& b)
+{
+    return near(a.center, b.center) && core::nearlyEqual(a.length, b.length, kTol)
+        && core::nearlyEqual(a.width, b.width, kTol) && core::nearlyEqual(a.radius, b.radius, kTol);
+}
+
+/// The same holes, grooves and cut-outs as seen in the drawing of the part.
 bool sameMachining(const FlatPart& a, const FlatPart& b)
 {
-    return sameSet(a.holes, b.holes, sameHole) && sameSet(a.grooves, b.grooves, sameGroove);
+    return sameSet(a.holes, b.holes, sameHole) && sameSet(a.grooves, b.grooves, sameGroove)
+        && sameSet(a.cutouts, b.cutouts, sameCutout);
 }
 
 } // namespace

@@ -9,4 +9,6 @@ Every file is written to `<name>.tmp` and then renamed over the old one, so a cr
 
 Stage 9: `WorkshopFiles` (stock and settings of a workshop in one folder, missing files give defaults, broken ones an error); parts left out of the cutting plan; the choices of drawer box parts are saved too.
 
-**Stages:** 5, 7, 8, 9
+Kitchen: project format 2 — `"kitchen"` with sizes, worktop and the cabinets of both rows; carcasses with `topStyle`, `plinth`, `width`, `cutout`. Version 1 files still open.
+
+**Stages:** 5, 7, 8, 9, kitchen

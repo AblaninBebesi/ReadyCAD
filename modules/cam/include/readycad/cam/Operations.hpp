@@ -62,9 +62,11 @@ struct Groove {
     Real depth = 0.0;
 };
 
-/// Cutting a part out along its outline, through the whole workpiece.
+/// Cutting along a closed outline, through the whole workpiece: a part out of the sheet, or an
+/// opening (a sink in a worktop) out of the part.
 struct Contour {
-    nesting::Polygon outline; ///< counter-clockwise, in plan; the tool stays outside
+    nesting::Polygon outline; ///< counter-clockwise, in plan
+    bool inner = false; ///< an opening: the tool stays inside it; cut before any part's outline
 };
 
 using Operation = std::variant<Drilling, Groove, Contour>;
@@ -80,7 +82,7 @@ struct PartMachining {
 };
 
 /// All machining of a part, machine-independent: holes in both faces and the edges, grooves,
-/// and the contour of `blank` (the sawn blank to cut out; usually FlatPart::cut).
+/// its openings, and the contour of `blank` (the sawn blank to cut out; usually FlatPart::cut).
 [[nodiscard]] PartMachining partMachining(const detailing::FlatPart& part,
                                           const nesting::Polygon& blank, std::string label,
                                           std::string name);
