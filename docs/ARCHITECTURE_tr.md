@@ -1099,7 +1099,7 @@ On aşamalık planda olmayan bir genişletme. Birlikte alınan kararlar:
 * mutfakta baza gerekir;
 * sunta veya MDF tezgah kesim planına alınabilir ya da dışında kalabilir; bunu kullanıcı seçer;
 * kuşakların nasıl olacağına ben karar veriyorum; kararım aşağıda;
-* köşe modülleri ve köşe kapağı kuralı bir sonraki adım («Henüz yapılmadı» bölümüne bakın).
+* köşe modülleri henüz yok («Henüz yapılmadı» bölümüne bakın).
 
 ### Bir üründe birden çok gövde
 
@@ -1277,9 +1277,7 @@ Listeye ayaklar (bazalı her modüle 4, genişliğin her ek metresi için 2 daha
 | **Mutfak yolculuğu**: 3 m, ek modüller, başka bir evye, 4100 × 620 plakadan CNC'de kesilen tezgah; projeler, kesimli çizim, programda tezgah konturundan önce kesimler; rastgele kullanıcı mutfak kurar | `tests/integration/KitchenJourneyTests.cpp`, `tests/integration/RobustnessTests.cpp` |
 
 Henüz yapılmadı:
-* köşe modülleri ve köşe kapağı kuralı. Köşedeki kapak, komşusunun kapak kalınlığı artı aralık
-  kadar eksik kalır (kullanıcının kendi mutfağındaki gözlemi). Bizim modelde bu, ebeveynin
-  hesapladığı negatif bir `FrontOverlay` bindirmesidir;
+* köşe modülleri (L mutfak);
 * boy dolapları (fırın, buzdolabı), aspiratör üstü dolap, ankastre cihaz nişleri;
 * plakadan uzun tezgah: ek modellenmez, elle kesilir;
 * çekmece raylarının delikleri delinmez (dolaplarda da);
