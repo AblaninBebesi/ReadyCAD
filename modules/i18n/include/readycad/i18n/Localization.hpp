@@ -100,6 +100,16 @@ enum class TextId : std::size_t {
     PartWithoutSize, OverlapWarning, SummaryAttention,
     // Cut list: the hand of a mirror part
     HandLeft, HandRight,
+    // Kitchens: kinds, tree names, catalogue, parameters, modules, hardware
+    KindKitchen, KindCabinetRow, KindRail, KindPlinth, KindWorktop, CatalogKitchen,
+    BaseCabinets, WallCabinets, BaseCabinet, WallCabinet, FrontRail, RearRail, KitchenLength,
+    TotalHeight, BaseDepth, KitchenSizes, BaseHeight, WallHeight, WallDepth, WorktopDepth,
+    WorktopHeight, TopStyle, TopStylePanel, TopStyleFlatRails, TopStyleUprightRails, PlinthLabel,
+    WorktopCutoutLabel, CutoutNone, CutoutSink, CutoutHob, CutoutWidth, CutoutDepth,
+    CutoutRadius, MoveLeft, MoveRight, AddCabinet, ModuleBaseDoors, ModuleBaseDrawers,
+    ModuleSink, ModuleHob, ModuleWallDoors, ModuleWallOpen, KitchenHeader, PlinthHeight,
+    PlinthSetback, RailWidth, HwLeg, HwPlinthClip, HwHanger, CabinetCount, CutoutDoesNotFit,
+    CutoutWarning,
 
     Count // keep last
 };

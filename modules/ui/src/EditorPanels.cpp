@@ -141,6 +141,19 @@ constexpr std::pair<core::HandleAnchor, TextId> kAnchors[] = {
     {core::HandleAnchor::Center, TextId::AnchorCenter},
     {core::HandleAnchor::Bottom, TextId::AnchorBottom},
 };
+constexpr std::pair<core::CarcassTop, TextId> kTopStyles[] = {
+    {core::CarcassTop::Panel, TextId::TopStylePanel},
+    {core::CarcassTop::FlatRails, TextId::TopStyleFlatRails},
+    {core::CarcassTop::UprightRails, TextId::TopStyleUprightRails},
+};
+constexpr std::pair<core::CabinetModule, TextId> kModules[] = {
+    {core::CabinetModule::BaseDoors, TextId::ModuleBaseDoors},
+    {core::CabinetModule::BaseDrawers, TextId::ModuleBaseDrawers},
+    {core::CabinetModule::Sink, TextId::ModuleSink},
+    {core::CabinetModule::Hob, TextId::ModuleHob},
+    {core::CabinetModule::WallDoors, TextId::ModuleWallDoors},
+    {core::CabinetModule::WallOpen, TextId::ModuleWallOpen},
+};
 
 std::string sizeText(Real a, Real b)
 {
@@ -174,9 +187,13 @@ bool drawProductRows(UiState& s)
     }
 
     core::Size3D d = doc.product().dimensions();
+    const bool kitchen = doc.product().kitchen() != nullptr;
     const std::pair<TextId, Real*> dims[] = {
-        {TextId::Width, &d.width}, {TextId::Height, &d.height}, {TextId::Depth, &d.depth}};
-    const std::pair<Real, Real> limits[] = {{300.0, 3000.0}, {300.0, 3000.0}, {200.0, 1000.0}};
+        {kitchen ? TextId::KitchenLength : TextId::Width, &d.width},
+        {kitchen ? TextId::TotalHeight : TextId::Height, &d.height},
+        {kitchen ? TextId::BaseDepth : TextId::Depth, &d.depth}};
+    const Real maxLength = kitchen ? 6000.0 : 3000.0;
+    const std::pair<Real, Real> limits[] = {{300.0, maxLength}, {300.0, 3000.0}, {200.0, 1000.0}};
     for (std::size_t i = 0; i < 3; ++i) {
         PropertyTable::row(tr(dims[i].first));
         ImGui::PushID(static_cast<int>(i));
@@ -194,35 +211,223 @@ bool drawProductRows(UiState& s)
     return false;
 }
 
-bool drawConstructionRows(UiState& s)
+bool drawConstructionRows(UiState& s, core::Carcass& carcass)
 {
     ed::Document& doc = *s.document;
-    core::Carcass* carcass = doc.product().carcass();
-    if (carcass == nullptr) {
-        return false;
-    }
+    const core::ComponentId id = carcass.id();
     PropertyTable table("construction");
     if (!table.isOpen()) {
         return false;
     }
 
-    core::JointType top = carcass->topJoint();
+    core::CarcassTop style = carcass.topStyle();
+    PropertyTable::row(tr(TextId::TopStyle));
+    if (enumCombo("##topStyle", style, kTopStyles)) {
+        run(s, [&] { ed::setTopStyle(doc, id, style); });
+        return true;
+    }
+    core::JointType top = carcass.topJoint();
+    ImGui::BeginDisabled(style != core::CarcassTop::Panel); // rails stand between the sides
     PropertyTable::row(tr(TextId::TopJoint));
     if (enumCombo("##top", top, kJoints)) {
-        run(s, [&] { ed::setTopJoint(doc, top); });
+        run(s, [&] { ed::setTopJoint(doc, id, top); });
+        ImGui::EndDisabled();
         return true;
     }
-    core::JointType bottom = carcass->bottomJoint();
+    ImGui::EndDisabled();
+    core::JointType bottom = carcass.bottomJoint();
     PropertyTable::row(tr(TextId::BottomJoint));
     if (enumCombo("##bottom", bottom, kJoints)) {
-        run(s, [&] { ed::setBottomJoint(doc, bottom); });
+        run(s, [&] { ed::setBottomJoint(doc, id, bottom); });
         return true;
     }
-    core::BackMountType back = carcass->backMountType();
+    core::BackMountType back = carcass.backMountType();
     PropertyTable::row(tr(TextId::BackMount));
     if (enumCombo("##back", back, kBackMounts)) {
-        run(s, [&] { ed::setBackMount(doc, back); });
+        run(s, [&] { ed::setBackMount(doc, id, back); });
         return true;
+    }
+    bool plinth = carcass.hasPlinth();
+    PropertyTable::row(tr(TextId::PlinthLabel));
+    if (ImGui::Checkbox("##plinth", &plinth)) {
+        run(s, [&] { ed::setPlinth(doc, id, plinth); });
+        return true;
+    }
+    return false;
+}
+
+/// Kitchen sizes and the worktop height that follows from them.
+bool drawKitchenRows(UiState& s)
+{
+    ed::Document& doc = *s.document;
+    const core::Kitchen* kitchen = doc.product().kitchen();
+    if (kitchen == nullptr) {
+        return false;
+    }
+    PropertyTable table("kitchen");
+    if (!table.isOpen()) {
+        return false;
+    }
+    core::Kitchen::Sizes sizes = kitchen->sizes();
+    const std::pair<TextId, Real*> rows[] = {{TextId::BaseHeight, &sizes.baseHeight},
+                                             {TextId::WorktopDepth, &sizes.worktopDepth},
+                                             {TextId::WallHeight, &sizes.wallHeight},
+                                             {TextId::WallDepth, &sizes.wallDepth}};
+    for (std::size_t i = 0; i < std::size(rows); ++i) {
+        PropertyTable::row(tr(rows[i].first));
+        ImGui::PushID(static_cast<int>(i));
+        const bool changed = dragMm("##size", *rows[i].second, 100.0, 2000.0);
+        const bool released = ImGui::IsItemDeactivatedAfterEdit();
+        ImGui::PopID();
+        if (changed) {
+            run(s, [&] { ed::setKitchenSizes(doc, sizes); });
+            return true;
+        }
+        if (released) {
+            doc.endMerge();
+        }
+    }
+    PropertyTable::textRow(tr(TextId::WorktopHeight),
+                           mm(kitchen->worktop().box().max().y) + " mm");
+    return false;
+}
+
+/// "Add a cabinet": a module of the given row level (both levels if nullopt), its width.
+bool drawAddCabinet(UiState& s, std::optional<core::RowLevel> level)
+{
+    if (level && core::levelOf(s.newCabinet) != *level) {
+        s.newCabinet = *level == core::RowLevel::Base ? core::CabinetModule::BaseDoors
+                                                      : core::CabinetModule::WallDoors;
+    }
+    PropertyTable table("addCabinet");
+    if (!table.isOpen()) {
+        return false;
+    }
+    PropertyTable::row(tr(TextId::AddCabinet));
+    const char* preview = "?";
+    for (const auto& [m, t] : kModules) {
+        preview = m == s.newCabinet ? tr(t) : preview;
+    }
+    if (ImGui::BeginCombo("##module", preview)) {
+        for (const auto& [m, t] : kModules) {
+            if (level && core::levelOf(m) != *level) {
+                continue; // a row offers only its own kind of cabinets
+            }
+            if (ImGui::Selectable(tr(t), m == s.newCabinet)) {
+                s.newCabinet = m;
+            }
+        }
+        ImGui::EndCombo();
+    }
+    PropertyTable::row(tr(TextId::Width));
+    dragMm("##newWidth", s.newCabinetWidth, 150.0, 1200.0);
+    PropertyTable::row("");
+    if (ImGui::Button(tr(TextId::AddCabinet))) {
+        const core::CabinetModule module = s.newCabinet;
+        const Real width = s.newCabinetWidth;
+        run(s, [&] { ed::addCabinet(*s.document, module, width); });
+        return true;
+    }
+    return false;
+}
+
+/// A cabinet of a kitchen row: its width in the row, its place, its worktop cut-out.
+bool drawCabinetRows(UiState& s, core::Carcass& cabinet)
+{
+    ed::Document& doc = *s.document;
+    const core::ComponentId id = cabinet.id();
+    const auto* row = static_cast<const core::CabinetRow*>(cabinet.parent());
+
+    ImGui::SeparatorText(tr(TextId::KitchenHeader));
+    {
+        PropertyTable table("cabinet");
+        if (!table.isOpen()) {
+            return false;
+        }
+        bool fixed = cabinet.fixedWidth().has_value();
+        PropertyTable::row(tr(TextId::FixedWidth));
+        if (ImGui::Checkbox("##fixed", &fixed)) {
+            const std::optional<Real> width =
+                fixed ? std::optional<Real>(cabinet.box().size().x) : std::nullopt;
+            run(s, [&] { ed::setCabinetWidth(doc, id, width); });
+            return true;
+        }
+        if (fixed) {
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            Real width = *cabinet.fixedWidth();
+            if (dragMm("##width", width, 100.0, 3000.0)) {
+                run(s, [&] { ed::setCabinetWidth(doc, id, width); });
+                return true;
+            }
+            if (ImGui::IsItemDeactivatedAfterEdit()) {
+                doc.endMerge();
+            }
+        }
+
+        if (row->level() == core::RowLevel::Base) {
+            const std::optional<core::WorktopCutout> current = cabinet.cutout();
+            int kind = current ? (current->kind == core::CutoutKind::Sink ? 1 : 2) : 0;
+            PropertyTable::row(tr(TextId::WorktopCutoutLabel));
+            const char* kinds[] = {tr(TextId::CutoutNone), tr(TextId::CutoutSink),
+                                   tr(TextId::CutoutHob)};
+            if (ImGui::Combo("##cutout", &kind, kinds, 3)) {
+                const std::optional<core::WorktopCutout> chosen =
+                    kind == 0 ? std::nullopt
+                              : std::optional(core::WorktopCutout::standard(
+                                    kind == 1 ? core::CutoutKind::Sink : core::CutoutKind::Hob));
+                run(s, [&] { ed::setCutout(doc, id, chosen); });
+                return true;
+            }
+            if (current) {
+                core::WorktopCutout c = *current;
+                const std::pair<TextId, Real*> sizes[] = {{TextId::CutoutWidth, &c.width},
+                                                          {TextId::CutoutDepth, &c.depth},
+                                                          {TextId::CutoutRadius, &c.radius},
+                                                          {TextId::EdgeOffset, &c.frontOffset}};
+                for (std::size_t i = 0; i < std::size(sizes); ++i) {
+                    PropertyTable::row(tr(sizes[i].first));
+                    ImGui::PushID(static_cast<int>(i));
+                    const bool changed = dragMm("##c", *sizes[i].second, 0.0, 1500.0);
+                    const bool released = ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::PopID();
+                    if (changed) {
+                        run(s, [&] { ed::setCutout(doc, id, c); });
+                        return true;
+                    }
+                    if (released) {
+                        doc.endMerge();
+                    }
+                }
+            }
+        }
+    }
+
+    ImGui::Spacing();
+    if (ImGui::Button(tr(TextId::MoveLeft))) {
+        run(s, [&] { ed::moveCabinet(doc, id, -1); });
+        return true;
+    }
+    ImGui::SameLine();
+    if (ImGui::Button(tr(TextId::MoveRight))) {
+        run(s, [&] { ed::moveCabinet(doc, id, 1); });
+        return true;
+    }
+    ImGui::SameLine();
+    if (ImGui::Button(tr(TextId::Delete))) {
+        run(s, [&] { ed::removeComponent(doc, id); });
+        return true;
+    }
+    return false;
+}
+
+bool drawCarcassEditor(UiState& s, core::Carcass& carcass)
+{
+    if (drawConstructionRows(s, carcass)) {
+        return true;
+    }
+    if (carcass.parent() != nullptr && carcass.parent()->kind() == ComponentKind::CabinetRow) {
+        return drawCabinetRows(s, carcass);
     }
     return false;
 }
@@ -243,6 +448,14 @@ bool drawProfileRows(UiState& s)
     changed |= ImGui::Checkbox("##dowels", &rules.joints.alignmentDowels);
     PropertyTable::row(tr(TextId::DrillHandlesOnMachine));
     changed |= ImGui::Checkbox("##handles", &rules.handles.drillOnMachine);
+    if (doc.product().kitchen() != nullptr) {
+        PropertyTable::row(tr(TextId::PlinthHeight));
+        changed |= dragMm("##plinth", rules.kitchen.plinthHeight, 50.0, 300.0);
+        PropertyTable::row(tr(TextId::PlinthSetback));
+        changed |= dragMm("##setback", rules.kitchen.plinthSetback, 0.0, 150.0);
+        PropertyTable::row(tr(TextId::RailWidth));
+        changed |= dragMm("##rail", rules.kitchen.railWidth, 50.0, 200.0);
+    }
 
     if (changed) {
         run(s, [&] { ed::setRules(doc, rules); });
@@ -562,7 +775,11 @@ bool drawEditor(UiState& s, core::FurnitureComponent& c)
     case ComponentKind::Product:
         return drawProductRows(s);
     case ComponentKind::Carcass:
-        return drawConstructionRows(s);
+        return drawCarcassEditor(s, static_cast<core::Carcass&>(c));
+    case ComponentKind::Kitchen:
+        return drawKitchenRows(s) || drawAddCabinet(s, std::nullopt);
+    case ComponentKind::CabinetRow:
+        return drawAddCabinet(s, static_cast<core::CabinetRow&>(c).level());
     case ComponentKind::Section:
         return drawSectionEditor(s, static_cast<core::Section&>(c));
     case ComponentKind::Shelf:
@@ -630,9 +847,15 @@ void drawTreeNode(UiState& s, core::FurnitureComponent& c)
     if (isSelected) {
         flags |= ImGuiTreeNodeFlags_Selected;
     }
-    const bool openByDefault = c.kind() == ComponentKind::Product
-                            || c.kind() == ComponentKind::Carcass
-                            || c.kind() == ComponentKind::Section;
+    // A wardrobe opens down to its sections; a kitchen down to its cabinets (dozens of them).
+    bool inKitchen = false;
+    for (const core::FurnitureComponent* p = c.parent(); p != nullptr; p = p->parent()) {
+        inKitchen = inKitchen || p->kind() == ComponentKind::Kitchen;
+    }
+    const bool openByDefault =
+        c.kind() == ComponentKind::Product || c.kind() == ComponentKind::Kitchen
+        || c.kind() == ComponentKind::CabinetRow
+        || (!inKitchen && (c.kind() == ComponentKind::Carcass || c.kind() == ComponentKind::Section));
     if (openByDefault) {
         ImGui::SetNextItemOpen(true, ImGuiCond_Once);
     }
@@ -1006,12 +1229,23 @@ void drawParametersWindow(UiState& state)
 {
     if (ImGui::Begin(tr(TextId::WindowParameters))) {
         ImGui::SeparatorText(tr(TextId::ProductHeader));
-        if (!drawProductRows(state)) {
+        if (drawProductRows(state)) {
+            ImGui::End();
+            return;
+        }
+        // A wardrobe: its carcass. A kitchen: its sizes; the cabinets are in the tree.
+        core::Product& product = state.document->product();
+        bool changed = false;
+        if (core::Carcass* carcass = product.carcass()) {
             ImGui::SeparatorText(tr(TextId::Construction));
-            if (!drawConstructionRows(state)) {
-                ImGui::SeparatorText(tr(TextId::ProfileHeader));
-                drawProfileRows(state);
-            }
+            changed = drawConstructionRows(state, *carcass);
+        } else if (product.kitchen() != nullptr) {
+            ImGui::SeparatorText(tr(TextId::KitchenSizes));
+            changed = drawKitchenRows(state) || drawAddCabinet(state, std::nullopt);
+        }
+        if (!changed) {
+            ImGui::SeparatorText(tr(TextId::ProfileHeader));
+            drawProfileRows(state);
         }
     }
     ImGui::End();

@@ -13,6 +13,7 @@ enum class CatalogItem {
     WardrobeWithDrawers, // 2 sections, drawers at the bottom, shelves and doors above
     ChestOfDrawers,      // 4 drawers
     Bookcase,            // open shelving, 2 sections, no doors
+    Kitchen,             // straight run: sink, drawers, hob, doors; wall cabinets above
 };
 
 /// All catalogue items, in display order.

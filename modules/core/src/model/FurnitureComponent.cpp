@@ -80,6 +80,25 @@ void FurnitureComponent::adopt(Ptr child)
     children_.push_back(std::move(child));
 }
 
+void FurnitureComponent::adoptAt(std::size_t index, Ptr child)
+{
+    child->parent_ = this;
+    const auto at = static_cast<std::ptrdiff_t>(std::min(index, children_.size()));
+    children_.insert(children_.begin() + at, std::move(child));
+}
+
+void FurnitureComponent::moveChild(std::size_t from, std::size_t to)
+{
+    if (children_.empty()) {
+        return;
+    }
+    from = std::min(from, children_.size() - 1);
+    to = std::min(to, children_.size() - 1);
+    Ptr child = children_[from];
+    children_.erase(children_.begin() + static_cast<std::ptrdiff_t>(from));
+    children_.insert(children_.begin() + static_cast<std::ptrdiff_t>(to), std::move(child));
+}
+
 std::vector<FurnitureComponent::Ptr> FurnitureComponent::detachChildren(
     const std::function<bool(const FurnitureComponent&)>& predicate)
 {

@@ -247,32 +247,18 @@ void Section::layoutSplit(const LayoutSlot& slot)
 
     // 1. Free space = extent along the axis minus all separators.
     Real separators = 0.0;
-    Real fixedTotal = 0.0;
-    int autoCount = 0;
+    std::vector<std::optional<Real>> fixed;
     for (const FurnitureComponent* item : items) {
         if (isSeparator(item->kind())) {
             separators += separatorThickness(item);
-        } else if (const auto& fixed = static_cast<const Section*>(item)->fixedSize()) {
-            fixedTotal += *fixed;
         } else {
-            ++autoCount;
+            fixed.push_back(static_cast<const Section*>(item)->fixedSize());
         }
     }
     const Real available = std::max(0.0, box().size()[ai] - separators);
 
-    // 2. Fixed sections keep their size; automatic ones share the rest equally. If the fixed
-    //    sizes do not fit (or nothing is automatic), fixed sizes are scaled to fill the space.
-    Real fixedScale = 1.0;
-    Real autoSize = 0.0;
-    if (autoCount > 0) {
-        if (fixedTotal > available) {
-            fixedScale = available / fixedTotal;
-        } else {
-            autoSize = (available - fixedTotal) / autoCount;
-        }
-    } else if (fixedTotal > 0.0) {
-        fixedScale = available / fixedTotal;
-    }
+    // 2. Fixed sections keep their size; automatic ones share the rest equally.
+    const std::vector<Real> extents = distributeSizes(available, fixed);
 
     // 3. Front overlay at a boundary: half of the shared separator minus half the gap.
     auto overlayTowards = [&](const FurnitureComponent* neighbour) {
@@ -281,6 +267,7 @@ void Section::layoutSplit(const LayoutSlot& slot)
     };
 
     Real cursor = box().min()[ai];
+    std::size_t section = 0;
     for (std::size_t i = 0; i < items.size(); ++i) {
         FurnitureComponent* item = items[i];
         if (isSeparator(item->kind())) {
@@ -289,8 +276,7 @@ void Section::layoutSplit(const LayoutSlot& slot)
             cursor += t;
             continue;
         }
-        const auto& fixed = static_cast<const Section*>(item)->fixedSize();
-        const Real extent = fixed ? *fixed * fixedScale : autoSize;
+        const Real extent = extents[section++];
 
         LayoutSlot childSlot = slot.withBox(sliceAlong(box(), axis, cursor, cursor + extent));
         childSlot.overlays = slot.overlays;

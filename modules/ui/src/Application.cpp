@@ -16,6 +16,7 @@
 #include <imgui_internal.h> // DockBuilder API for the default window layout
 
 #include <algorithm>
+#include <cstdlib>
 #include <cstdint>
 #include <cstdio>
 #include <fstream>
@@ -228,8 +229,14 @@ struct Application::Impl {
             });
         }
         if (config.selectKind) {
+            // "Kind" selects the first component of that kind, "Kind:3" the third.
+            const std::string& select = *config.selectKind;
+            const std::size_t colon = select.find(':');
+            const std::string kind = select.substr(0, colon);
+            int skip = colon == std::string::npos ? 0 : std::max(0, std::atoi(select.c_str() + colon + 1) - 1);
             state.document->product().visit([&](core::FurnitureComponent& c) {
-                if (state.document->selected() == nullptr && core::toString(c.kind()) == *config.selectKind) {
+                if (state.document->selected() == nullptr && core::toString(c.kind()) == kind
+                    && skip-- == 0) {
                     state.document->select(c.id());
                     state.scrollTreeToSelection = true;
                 }

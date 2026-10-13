@@ -15,6 +15,7 @@ rc_add_module(core
         src/model/ComponentKind.cpp
         src/model/Drawer.cpp
         src/model/FurnitureComponent.cpp
+        src/model/Kitchen.cpp
         src/model/LayoutSlot.cpp
         src/model/PanelComponent.cpp
         src/model/Parts.cpp
@@ -22,6 +23,7 @@ rc_add_module(core
         src/model/Queries.cpp
         src/model/Section.cpp
         src/builders/Catalog.cpp
+        src/builders/KitchenBuilder.cpp
         src/builders/WardrobeBuilder.cpp
     DEPENDS
         glm::glm
@@ -34,6 +36,7 @@ rc_add_module(core
         tests/CarcassTests.cpp
         tests/SectionTests.cpp
         tests/ParametricTests.cpp
-        tests/HandleTests.cpp)
+        tests/HandleTests.cpp
+        tests/KitchenTests.cpp)
 
 target_include_directories(readycad_core PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)

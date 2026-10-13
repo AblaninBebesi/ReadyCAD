@@ -15,10 +15,14 @@ TextId kindText(ComponentKind kind) noexcept
     case ComponentKind::Section:       return TextId::KindSection;
     case ComponentKind::DrawerStack:   return TextId::KindDrawerStack;
     case ComponentKind::Drawer:        return TextId::KindDrawer;
+    case ComponentKind::Kitchen:       return TextId::KindKitchen;
+    case ComponentKind::CabinetRow:    return TextId::KindCabinetRow;
     case ComponentKind::SideWall:      return TextId::KindSideWall;
     case ComponentKind::TopPanel:      return TextId::KindTopPanel;
     case ComponentKind::BottomPanel:   return TextId::KindBottomPanel;
     case ComponentKind::BackPanel:     return TextId::KindBackPanel;
+    case ComponentKind::Rail:          return TextId::KindRail;
+    case ComponentKind::Plinth:        return TextId::KindPlinth;
     case ComponentKind::Shelf:         return TextId::KindShelf;
     case ComponentKind::FixedShelf:    return TextId::KindFixedShelf;
     case ComponentKind::Partition:     return TextId::KindPartition;
@@ -27,6 +31,7 @@ TextId kindText(ComponentKind kind) noexcept
     case ComponentKind::DrawerBoxSide: return TextId::KindDrawerBoxSide;
     case ComponentKind::DrawerBoxEnd:  return TextId::KindDrawerBoxEnd;
     case ComponentKind::DrawerBottom:  return TextId::KindDrawerBottom;
+    case ComponentKind::Worktop:       return TextId::KindWorktop;
     }
     return TextId::KindProduct;
 }
@@ -38,6 +43,7 @@ TextId catalogText(core::CatalogItem item) noexcept
     case core::CatalogItem::WardrobeWithDrawers: return TextId::CatalogWardrobeWithDrawers;
     case core::CatalogItem::ChestOfDrawers:      return TextId::CatalogChestOfDrawers;
     case core::CatalogItem::Bookcase:            return TextId::CatalogBookcase;
+    case core::CatalogItem::Kitchen:             return TextId::CatalogKitchen;
     }
     return TextId::CatalogWardrobe;
 }
@@ -77,16 +83,49 @@ TextId hardwareText(core::HardwareKind kind) noexcept
     case core::HardwareKind::Hinge:        return TextId::HwHinge;
     case core::HardwareKind::Handle:       return TextId::HwHandle;
     case core::HardwareKind::DrawerSlide:  return TextId::HwDrawerSlide;
+    case core::HardwareKind::Leg:          return TextId::HwLeg;
+    case core::HardwareKind::PlinthClip:   return TextId::HwPlinthClip;
+    case core::HardwareKind::Hanger:       return TextId::HwHanger;
     }
     return TextId::HwConfirmat;
 }
+
+namespace {
+
+/// Kind-specific words of the tree: a kitchen's rows and cabinets, front and rear rails.
+TextId treeText(const core::FurnitureComponent& component) noexcept
+{
+    const core::FurnitureComponent* parent = component.parent();
+    switch (component.kind()) {
+    case ComponentKind::CabinetRow:
+        return static_cast<const core::CabinetRow&>(component).level() == core::RowLevel::Base
+                   ? TextId::BaseCabinets
+                   : TextId::WallCabinets;
+    case ComponentKind::Carcass:
+        if (parent != nullptr && parent->kind() == ComponentKind::CabinetRow) {
+            return static_cast<const core::CabinetRow*>(parent)->level() == core::RowLevel::Base
+                       ? TextId::BaseCabinet
+                       : TextId::WallCabinet;
+        }
+        break;
+    case ComponentKind::Rail:
+        return static_cast<const core::Rail&>(component).position() == core::RailPosition::Front
+                   ? TextId::FrontRail
+                   : TextId::RearRail;
+    default:
+        break;
+    }
+    return kindText(component.kind());
+}
+
+} // namespace
 
 std::string displayName(const core::FurnitureComponent& component)
 {
     if (!component.name().empty()) {
         return component.name();
     }
-    const std::string kind(text(kindText(component.kind())));
+    const std::string kind(text(treeText(component)));
     const core::FurnitureComponent* parent = component.parent();
     if (parent == nullptr) {
         return kind;
@@ -94,7 +133,7 @@ std::string displayName(const core::FurnitureComponent& component)
     int number = 0;
     int total = 0;
     for (const auto& sibling : parent->children()) {
-        if (sibling->kind() == component.kind()) {
+        if (treeText(*sibling) == treeText(component)) {
             ++total;
             if (sibling.get() == &component) {
                 number = total;

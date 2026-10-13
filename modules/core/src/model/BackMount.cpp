@@ -6,14 +6,22 @@ namespace rc::core {
 
 namespace {
 
+/// True if a part lies over the rear edges at the top (a top panel or a flat rear rail); upright
+/// rails stand in front of the back panel, which then reaches up to the top.
+bool closedAtTheRear(const CarcassFrame& frame) noexcept
+{
+    return frame.top != CarcassTop::UprightRails;
+}
+
 /// Rear opening of the carcass: between the side walls and between bottom and top panels.
 /// Bottom always stands on the floor and the top is always at the top, whatever the joints are.
 Aabb rearOpening(const CarcassFrame& frame)
 {
     const Vec3& lo = frame.outer.min();
     const Vec3& hi = frame.outer.max();
+    const Real top = closedAtTheRear(frame) ? frame.topThickness : 0.0;
     return Aabb(Vec3(lo.x + frame.leftThickness, lo.y + frame.bottomThickness, lo.z),
-                Vec3(hi.x - frame.rightThickness, hi.y - frame.topThickness, hi.z));
+                Vec3(hi.x - frame.rightThickness, hi.y - top, hi.z));
 }
 
 class GrooveMount final : public BackMount {
@@ -29,15 +37,16 @@ public:
         // swell with humidity without pushing the carcass apart.
         const Aabb opening = rearOpening(frame);
         const Real reach = rules.backGrooveDepth - rules.backExpansionGap;
+        const Real top = closedAtTheRear(frame) ? reach : 0.0; // no groove above upright rails
         const Real z0 = frame.outer.min().z + rules.backGrooveOffset;
         return Aabb(Vec3(opening.min().x - reach, opening.min().y - reach, z0),
-                    Vec3(opening.max().x + reach, opening.max().y + reach, z0 + backThickness));
+                    Vec3(opening.max().x + reach, opening.max().y + top, z0 + backThickness));
     }
 
     bool isEmbeddedInto(ComponentKind kind) const noexcept override
     {
         return kind == ComponentKind::SideWall || kind == ComponentKind::TopPanel
-            || kind == ComponentKind::BottomPanel;
+            || kind == ComponentKind::BottomPanel || kind == ComponentKind::Rail;
     }
 };
 

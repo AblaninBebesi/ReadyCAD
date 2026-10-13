@@ -41,7 +41,8 @@ using TreePath = std::vector<std::size_t>;
 ///   1. remembers the state before (Memento pattern: the project serialised to JSON),
 ///   2. applies the change — if it throws, the model is restored and the error propagates,
 ///   3. checks that the product can still be built: no new parts in each other's space, no
-///      part without size — otherwise the change is refused (ConstructionError) and undone,
+///      part without size, no new worktop cut-out that cannot be made — otherwise the change is
+///      refused (ConstructionError) and undone,
 ///   4. recomputes the derived data: drilling (detailing), cut list, edge banding usage,
 ///      hardware list, overlapping parts.
 /// So the UI never sees a half-applied change, stale drilling or a product that cannot be
@@ -78,6 +79,13 @@ public:
     /// Pairs of parts in each other's space. An edit never adds one; a project file of an older
     /// version may bring some, and the warnings show them.
     [[nodiscard]] const std::vector<core::Overlap>& overlaps() const noexcept { return overlaps_; }
+
+    /// Base cabinets of a kitchen whose worktop cut-out cannot be made (Kitchen::misplacedCutouts).
+    /// Like overlaps(): an edit never adds one, an older file may bring some.
+    [[nodiscard]] const std::vector<const core::Carcass*>& misplacedCutouts() const noexcept
+    {
+        return misplacedCutouts_;
+    }
 
     /// Panels closer than this (mm) do not count as overlapping: rounding of the formulas.
     static constexpr core::Real kOverlapTolerance = 0.01;
@@ -138,6 +146,7 @@ private:
     detailing::DetailingReport report_;
     std::vector<detailing::CutListRow> cutList_;
     std::vector<core::Overlap> overlaps_;
+    std::vector<const core::Carcass*> misplacedCutouts_;
     std::vector<detailing::EdgeBandUsage> edgeUsage_;
     std::vector<detailing::HardwareItem> hardware_;
 };

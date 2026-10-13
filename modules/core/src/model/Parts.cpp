@@ -177,6 +177,81 @@ bool BackPanel::allowsOverlapWith(const FurnitureComponent& other) const
 }
 
 // ---------------------------------------------------------------------------------------------
+// Rail / Plinth
+// ---------------------------------------------------------------------------------------------
+
+Rail::Rail(RailPosition position, bool upright)
+    : PanelComponent(upright ? Axis::Z : Axis::Y, Axis::X), position_(position), upright_(upright)
+{
+}
+
+Vec3 Rail::updateSize(const LayoutSlot& slot)
+{
+    const CarcassFrame& f = requireFrame(slot, kind());
+    const Real length = f.outer.size().x - f.leftThickness - f.rightThickness;
+    const Real width = slot.r().kitchen.railWidth;
+    return upright_ ? Vec3(length, width, thickness(slot)) : Vec3(length, thickness(slot), width);
+}
+
+Vec3 Rail::updatePosition(const LayoutSlot& slot, const Vec3& size)
+{
+    const CarcassFrame& f = requireFrame(slot, kind());
+    const Vec3& lo = f.outer.min();
+    const Vec3& hi = f.outer.max();
+    Real z = hi.z - size.z; // the front rail is flush with the carcass front edge
+    if (position_ == RailPosition::Rear) {
+        // Flat: on the rear edges like a top panel, the back panel in its groove. Upright: in
+        // front of the back panel, which then reaches up to the top.
+        z = upright_ && f.backMount != nullptr
+                ? f.backMount->backPanelBox(f, slot.r(), f.backThickness).max().z
+                : lo.z + f.rearOffset();
+    }
+    return {lo.x + f.leftThickness, hi.y - size.y, z};
+}
+
+const Material& Rail::defaultMaterial(const ConstructionRules& r) const
+{
+    return r.carcassMaterial;
+}
+
+EdgeBand Rail::defaultEdge(EdgeSide side, const LayoutSlot& slot) const
+{
+    if (position_ == RailPosition::Rear) {
+        return {};
+    }
+    // Flat: L2 is the front edge. Upright: L1 is the lower edge, seen under the worktop when a
+    // door or the top drawer is open.
+    const EdgeSide visible = upright_ ? EdgeSide::L1 : EdgeSide::L2;
+    return side == visible ? slot.r().visibleEdge : EdgeBand{};
+}
+
+Plinth::Plinth() : PanelComponent(Axis::Z, Axis::X) {}
+
+Vec3 Plinth::updateSize(const LayoutSlot& slot)
+{
+    const Vec3 zone = slot.box.size();
+    return {zone.x, zone.y, thickness(slot)};
+}
+
+Vec3 Plinth::updatePosition(const LayoutSlot& slot, const Vec3& size)
+{
+    const CarcassFrame& f = requireFrame(slot, kind());
+    const Real face = f.outer.max().z - slot.r().kitchen.plinthSetback;
+    return {slot.box.min().x, slot.box.min().y, face - size.z};
+}
+
+const Material& Plinth::defaultMaterial(const ConstructionRules& r) const
+{
+    return r.carcassMaterial;
+}
+
+EdgeBand Plinth::defaultEdge(EdgeSide side, const LayoutSlot& slot) const
+{
+    // Width axis is Y: L1 stands on the floor and takes the moisture of mopping.
+    return side == EdgeSide::L1 ? slot.r().hiddenEdge : EdgeBand{};
+}
+
+// ---------------------------------------------------------------------------------------------
 // Shelf (adjustable)
 // ---------------------------------------------------------------------------------------------
 
@@ -434,6 +509,62 @@ DrawerFront::DrawerFront()
 const std::string& DrawerFront::defaultHandleId(const ConstructionRules& r) const
 {
     return r.handles.defaultDrawerHandle;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Worktop
+// ---------------------------------------------------------------------------------------------
+
+WorktopCutout WorktopCutout::standard(CutoutKind kind) noexcept
+{
+    switch (kind) {
+    case CutoutKind::Hob:
+        return {CutoutKind::Hob, 560.0, 490.0, 5.0, 60.0};
+    case CutoutKind::Sink:
+        break;
+    }
+    return {CutoutKind::Sink, 560.0, 480.0, 15.0, 60.0};
+}
+
+Worktop::Worktop() : PanelComponent(Axis::Y, Axis::X)
+{
+    setInCuttingPlan(false);
+}
+
+Vec3 Worktop::updateSize(const LayoutSlot& slot)
+{
+    const Vec3 zone = slot.box.size();
+    return {zone.x, thickness(slot), zone.z};
+}
+
+Vec3 Worktop::updatePosition(const LayoutSlot& slot, const Vec3&)
+{
+    return slot.box.min();
+}
+
+void Worktop::updatePanel(const LayoutSlot& slot)
+{
+    PanelComponent::updatePanel(slot);
+    // Panel x runs along X, panel y along Z, both from the box minimum.
+    std::vector<PanelCutout> cutouts;
+    if (slot.kitchen != nullptr) {
+        for (const PanelCutout& c : slot.kitchen->cutouts) {
+            cutouts.push_back({Vec2(c.center.x - box().min().x, c.center.y - box().min().z),
+                               c.length, c.width, c.radius});
+        }
+    }
+    panel_->setCutouts(std::move(cutouts));
+}
+
+const Material& Worktop::defaultMaterial(const ConstructionRules& r) const
+{
+    return r.worktopMaterial;
+}
+
+EdgeBand Worktop::defaultEdge(EdgeSide side, const LayoutSlot& slot) const
+{
+    // Width axis is Z: L1 lies against the wall, the front edge and the ends are visible.
+    return side == EdgeSide::L1 ? EdgeBand{} : slot.r().visibleEdge;
 }
 
 // ---------------------------------------------------------------------------------------------

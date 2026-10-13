@@ -1,6 +1,8 @@
 // Stage 9, end to end: no critical failures. Every catalogue model goes through the whole
 // pipeline on both machines; and random sequences of edits — the user trying things, also
 // impossible ones — never leave a broken product behind, and the pipeline keeps producing files.
+// Kitchen stage: the random user also builds kitchens — adds, moves, resizes and removes
+// cabinets, rails, plinths and worktop cut-outs.
 //
 // The random sequences are reproducible: a failure names its seed and step.
 
@@ -16,6 +18,7 @@
 #include <cmath>
 #include <filesystem>
 #include <functional>
+#include <optional>
 #include <random>
 #include <string>
 #include <vector>
@@ -61,6 +64,8 @@ void producePackage(const editor::Document& doc, nesting::Machine machine,
 
 /// Everything a user can click on, looked up in the current tree (undo/redo rebuild it).
 struct Targets {
+    std::vector<core::Carcass*> carcasses;
+    std::vector<core::Carcass*> cabinets; ///< of a kitchen row
     std::vector<core::Section*> sections;
     std::vector<core::Shelf*> shelves;
     std::vector<core::Door*> doors;
@@ -74,6 +79,13 @@ Targets targetsOf(core::Product& product)
     Targets t;
     product.visit([&t](core::FurnitureComponent& c) {
         switch (c.kind()) {
+        case core::ComponentKind::Carcass:
+            t.carcasses.push_back(static_cast<core::Carcass*>(&c));
+            if (c.parent()->kind() == core::ComponentKind::CabinetRow) {
+                t.cabinets.push_back(static_cast<core::Carcass*>(&c));
+                t.removable.push_back(&c);
+            }
+            break;
         case core::ComponentKind::Section:
             t.sections.push_back(static_cast<core::Section*>(&c));
             break;
@@ -120,7 +132,7 @@ public:
     std::string edit(editor::Document& doc)
     {
         Targets t = targetsOf(doc.product());
-        switch (number(0, 16)) {
+        switch (number(0, 17)) {
         case 0: {
             // Sometimes impossible on purpose: zero or negative sizes are refused.
             const core::Size3D size{number(0, 9) == 0 ? -100.0 : number(300, 2800) * 1.0,
@@ -212,19 +224,67 @@ public:
             }
             return "cutting plan";
         case 14:
-            switch (number(0, 2)) {
-            case 0:
-                editor::setTopJoint(doc, coin() ? core::JointType::Overlay : core::JointType::Inset);
-                break;
-            case 1:
-                editor::setBottomJoint(doc, coin() ? core::JointType::Overlay : core::JointType::Inset);
-                break;
-            default:
-                editor::setBackMount(doc, static_cast<core::BackMountType>(number(0, 2)));
-                break;
+            if (core::Carcass* c = any(t.carcasses)) {
+                const auto joint = coin() ? core::JointType::Overlay : core::JointType::Inset;
+                switch (number(0, 4)) {
+                case 0:
+                    editor::setTopJoint(doc, c->id(), joint);
+                    break;
+                case 1:
+                    editor::setBottomJoint(doc, c->id(), joint);
+                    break;
+                case 2:
+                    editor::setBackMount(doc, c->id(), static_cast<core::BackMountType>(number(0, 2)));
+                    break;
+                case 3:
+                    editor::setTopStyle(doc, c->id(), static_cast<core::CarcassTop>(number(0, 2)));
+                    break;
+                default:
+                    editor::setPlinth(doc, c->id(), coin());
+                    break;
+                }
             }
             return "construction";
-        case 15:
+        case 15: {
+            // Kitchen edits: refused on a wardrobe (not a kitchen), often refused in a kitchen
+            // too (no room, a cut-out over a rail or off the worktop).
+            core::Carcass* cabinet = any(t.cabinets);
+            switch (number(0, 4)) {
+            case 0:
+                editor::addCabinet(doc, static_cast<core::CabinetModule>(number(0, 5)),
+                                   number(300, 900));
+                break;
+            case 1:
+                if (cabinet != nullptr) {
+                    editor::setCabinetWidth(doc, cabinet->id(),
+                                            coin() ? std::nullopt
+                                                   : std::optional<core::Real>(number(150, 1200)));
+                }
+                break;
+            case 2:
+                if (cabinet != nullptr) {
+                    editor::moveCabinet(doc, cabinet->id(), number(-2, 2));
+                }
+                break;
+            case 3:
+                if (cabinet != nullptr) {
+                    const auto kind = coin() ? core::CutoutKind::Sink : core::CutoutKind::Hob;
+                    editor::setCutout(doc, cabinet->id(),
+                                      coin() ? std::nullopt
+                                             : std::optional<core::WorktopCutout>(core::WorktopCutout{
+                                                   kind, number(200, 900) * 1.0,
+                                                   number(200, 650) * 1.0, number(0, 40) * 1.0,
+                                                   number(0, 150) * 1.0}));
+                }
+                break;
+            default:
+                editor::setKitchenSizes(doc, {number(300, 1000) * 1.0, number(200, 1000) * 1.0,
+                                              number(150, 700) * 1.0, number(300, 800) * 1.0});
+                break;
+            }
+            return "kitchen";
+        }
+        case 16:
             doc.undo();
             return "undo";
         default:
@@ -254,6 +314,7 @@ void checkProduct(const editor::Document& doc)
         quantity += r.quantity;
     }
     CHECK(quantity == static_cast<int>(core::collectPanels(product).size()));
+    CHECK(doc.misplacedCutouts().empty());
     for (const core::Overlap& o : core::findOverlaps(product, 0.01)) {
         FAIL_CHECK("overlap " << core::toString(o.first->kind()) << " / "
                               << core::toString(o.second->kind()) << " size "
@@ -265,15 +326,19 @@ void checkProduct(const editor::Document& doc)
     CHECK(storage::saveProduct(*storage::loadProduct(saved)) == saved);
 }
 
-/// Returns how many edits were accepted (the others were refused as impossible).
-int randomSession(unsigned seed, int steps, int pipelineEvery)
+/// Returns how many edits were accepted (the others were refused as impossible). Starts from a
+/// random catalogue model, or from `start`.
+int randomSession(unsigned seed, int steps, int pipelineEvery,
+                  std::optional<core::CatalogItem> start = std::nullopt)
 {
     int accepted = 0;
     const rc::test::TempFolder temp("random_" + std::to_string(seed));
     RandomUser user(seed);
     const auto items = core::catalogItems();
-    editor::Document doc = editor::Document::fromCatalog(
-        items[static_cast<std::size_t>(user.number(0, static_cast<int>(items.size()) - 1))]);
+    const core::CatalogItem item =
+        start ? *start
+              : items[static_cast<std::size_t>(user.number(0, static_cast<int>(items.size()) - 1))];
+    editor::Document doc = editor::Document::fromCatalog(item);
 
     for (int step = 1; step <= steps; ++step) {
         const std::string before = storage::saveProduct(doc.product());
@@ -324,11 +389,21 @@ TEST_CASE("Random edits never break the product or the pipeline", "[integration]
     }
 }
 
+TEST_CASE("Random edits of a kitchen never break it", "[integration][robustness]")
+{
+    for (const unsigned seed : {11U, 12U}) {
+        CHECK(randomSession(seed, 40, 20, core::CatalogItem::Kitchen) > 15);
+    }
+}
+
 TEST_CASE("Random edits, long run", "[.][soak]")
 {
     int accepted = 0;
     for (unsigned seed = 1; seed <= 40; ++seed) {
         accepted += randomSession(seed, 80, 20);
     }
-    WARN("accepted edits: " << accepted << " of " << 40 * 80);
+    for (unsigned seed = 101; seed <= 120; ++seed) {
+        accepted += randomSession(seed, 80, 20, core::CatalogItem::Kitchen);
+    }
+    WARN("accepted edits: " << accepted << " of " << 60 * 80);
 }

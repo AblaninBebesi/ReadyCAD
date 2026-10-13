@@ -24,6 +24,7 @@ bool takesConnectors(const core::FurnitureComponent& component)
     case ComponentKind::Partition:
     case ComponentKind::DrawerBoxSide:
     case ComponentKind::DrawerBoxEnd:
+    case ComponentKind::Rail:
         return true;
     case ComponentKind::Shelf:
         return static_cast<const core::Shelf&>(component).mount() == core::ShelfMount::Confirmat;

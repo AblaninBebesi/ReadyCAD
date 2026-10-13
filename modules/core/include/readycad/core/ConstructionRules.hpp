@@ -21,6 +21,7 @@ struct ConstructionRules {
     Material frontMaterial{"MDF Lam 18", MaterialType::MDF, 18.0, false};
     Material drawerBoxMaterial{"Suntalam 16", MaterialType::Chipboard, 16.0, true};
     Material drawerBottomMaterial{"HDF 3", MaterialType::HDF, 3.0, false};
+    Material worktopMaterial{"Tezgah 38", MaterialType::Chipboard, 38.0, false};
 
     // --- Edge banding -----------------------------------------------------------------------
     EdgeBand visibleEdge{2.0, "ABS 2"};   // front edges you see and touch
@@ -52,6 +53,14 @@ struct ConstructionRules {
     Real drawerBoxMaxHeight = 250.0;
     Real drawerRearClearance = 10.0;      // between the box and the back panel
     std::vector<Real> drawerSlideLengths{250, 300, 350, 400, 450, 500, 550, 600, 650};
+
+    // --- Kitchens ---------------------------------------------------------------------------
+    struct Kitchen {
+        Real plinthHeight = 100.0; // adjustable legs under base cabinets, hidden by the plinth
+        Real plinthSetback = 40.0; // plinth face behind the carcass front edge: room for the feet
+        Real railWidth = 100.0;    // kuşak: depth of a flat rail, height of an upright one
+        Real cutoutMargin = 50.0;  // worktop left around a sink or hob cut-out, to the edges
+    } kitchen;
 
     // --- System 32 --------------------------------------------------------------------------
     /// All holes of a carcass (shelf supports, hinge plates) lie on one vertical grid with a

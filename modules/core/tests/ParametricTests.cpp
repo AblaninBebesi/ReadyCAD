@@ -204,7 +204,7 @@ TEST_CASE("Every catalogue item is collision-free, also after resizing",
     CAPTURE(static_cast<int>(item));
 
     const auto product = createProduct(item);
-    REQUIRE(product->carcass() != nullptr);
+    REQUIRE((product->carcass() != nullptr || product->kitchen() != nullptr));
     CHECK(collectPanels(*product).size() > 5);
     requireNoOverlaps(*product);
 
@@ -213,12 +213,20 @@ TEST_CASE("Every catalogue item is collision-free, also after resizing",
     product->setDimensions({base.width + delta, base.height + delta, base.depth + delta});
     requireNoOverlaps(*product);
 
-    // Carcass parts stay inside the product box; fronts stand in front of it.
+    // Carcass parts stay inside the product box; fronts stand in front of their carcass (a wall
+    // cabinet is not as deep as the product); a worktop may reach over the base fronts.
     for (const FurnitureComponent* part : collectPanels(*product)) {
         const bool isFront =
             part->kind() == ComponentKind::Door || part->kind() == ComponentKind::DrawerFront;
         if (isFront) {
-            CHECK(part->box().min().z == Approx(product->dimensions().depth));
+            const FurnitureComponent* carcass = part->parent();
+            while (carcass->kind() != ComponentKind::Carcass) {
+                carcass = carcass->parent();
+            }
+            CHECK(part->box().min().z == Approx(carcass->box().max().z));
+        } else if (part->kind() == ComponentKind::Worktop) {
+            CHECK(part->box().min().x >= product->box().min().x - kEpsilon);
+            CHECK(part->box().max().x <= product->box().max().x + kEpsilon);
         } else {
             CHECK(product->box().contains(part->box()));
         }

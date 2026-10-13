@@ -15,7 +15,18 @@ enum class HandleType {
 /// A handle model from a supplier's catalogue. This is workshop DATA: every workshop enters the
 /// handles of its own supplier; furniture refers to them by `id`.
 /// Kinds of hardware (фурнитура) in the hardware list of a product.
-enum class HardwareKind { Confirmat, Dowel, Eccentric, ShelfSupport, Hinge, Handle, DrawerSlide };
+enum class HardwareKind {
+    Confirmat,
+    Dowel,
+    Eccentric,
+    ShelfSupport,
+    Hinge,
+    Handle,
+    DrawerSlide,
+    Leg,        // adjustable leg under a base cabinet
+    PlinthClip, // holds the plinth on a front leg
+    Hanger,     // cabinet hanger of a wall cabinet
+};
 
 struct HandleModel {
     std::string id;       // stable key referenced by fronts, e.g. "bar-128"

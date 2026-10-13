@@ -1,5 +1,6 @@
 // Stage 5: what gets drawn and what gets picked (no OpenGL needed).
 
+#include "readycad/core/builders/Catalog.hpp"
 #include "readycad/core/builders/WardrobeBuilder.hpp"
 #include "readycad/core/model/Queries.hpp"
 #include "readycad/detailing/Detailing.hpp"
@@ -131,4 +132,33 @@ TEST_CASE("Ray-box intersection", "[render][picking]")
     CHECK_FALSE(render::intersect({glm::vec3(15, 5, 20), glm::vec3(0, 0, -1)}, min, max));
     CHECK_FALSE(render::intersect({glm::vec3(5, 5, 20), glm::vec3(0, 0, 1)}, min, max)); // behind
     CHECK(render::intersect({glm::vec3(5, 5, 5), glm::vec3(1, 0, 0)}, min, max) == Approx(0.0f));
+}
+
+TEST_CASE("A worktop is drawn around its cut-outs", "[render][scene][kitchen]")
+{
+    const auto kitchen = createProduct(CatalogItem::Kitchen);
+    const render::Scene scene = render::buildScene(*kitchen, {});
+    const Worktop& worktop = kitchen->kitchen()->worktop();
+
+    // The sink is open: a ray from above into it (in front of the wall cabinets) reaches the
+    // cabinet below, not the worktop.
+    const render::Ray intoTheSink{glm::vec3(700.0f, 3000.0f, 450.0f), glm::vec3(0.0f, -1.0f, 0.0f)};
+    const auto hit = render::pick(scene, intoTheSink);
+    REQUIRE(hit.has_value());
+    CHECK(*hit != worktop.id());
+    // Next to it the worktop is solid.
+    const render::Ray beside{glm::vec3(1200.0f, 3000.0f, 450.0f), glm::vec3(0.0f, -1.0f, 0.0f)};
+    CHECK(render::pick(scene, beside) == worktop.id());
+
+    // Its pieces cover exactly the worktop without the two openings (corners drawn square).
+    double area = 0.0;
+    for (const auto& box : scene.boxes) {
+        if (box.component == worktop.id()) {
+            CHECK(box.category == ItemCategory::Worktop);
+            area += static_cast<double>(box.max.x - box.min.x)
+                  * static_cast<double>(box.max.z - box.min.z);
+        }
+    }
+    CHECK(area == Approx(2400.0 * 600.0 - 560.0 * 480.0 - 560.0 * 490.0));
+    CHECK(countCategory(scene, ItemCategory::Plinth) == 5);
 }

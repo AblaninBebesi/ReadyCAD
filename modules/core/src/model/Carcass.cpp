@@ -1,5 +1,8 @@
 #include "readycad/core/model/Carcass.hpp"
 
+#include <algorithm>
+#include <stdexcept>
+
 namespace rc::core {
 
 Carcass::Carcass()
@@ -10,6 +13,7 @@ Carcass::Carcass()
     , bottom_(std::make_shared<BottomPanel>())
     , back_(std::make_shared<BackPanel>())
     , interior_(std::make_shared<Section>())
+    , plinth_(std::make_shared<Plinth>())
 {
     adopt(left_);
     adopt(right_);
@@ -37,35 +41,160 @@ void Carcass::setBackMount(BackMountType type)
     requestLayout();
 }
 
+std::size_t Carcass::indexOf(const FurnitureComponent& child) const noexcept
+{
+    const auto& all = children();
+    const auto it = std::find_if(all.begin(), all.end(),
+                                 [&child](const Ptr& c) { return c.get() == &child; });
+    return static_cast<std::size_t>(it - all.begin());
+}
+
+void Carcass::setTopStyle(CarcassTop style)
+{
+    if (style == topStyle_) {
+        return;
+    }
+    // The top part(s) keep their place among the children: the tree reads the same way.
+    const std::size_t at = indexOf(topStyle_ == CarcassTop::Panel
+                                       ? static_cast<const FurnitureComponent&>(*top_)
+                                       : static_cast<const FurnitureComponent&>(*frontRail_));
+    const std::shared_ptr<Rail> oldFront = frontRail_;
+    const std::shared_ptr<Rail> oldRear = rearRail_;
+    detachChildren([this](const FurnitureComponent& c) {
+        return &c == top_.get() || &c == frontRail_.get() || &c == rearRail_.get();
+    });
+    topStyle_ = style;
+
+    if (style == CarcassTop::Panel) {
+        frontRail_.reset();
+        rearRail_.reset();
+        adoptAt(at, top_);
+    } else {
+        // Rails of the other orientation are other parts (their axes differ): keep what still
+        // applies of the user's choices — name, material, cutting plan; not the edges.
+        const bool upright = style == CarcassTop::UprightRails;
+        frontRail_ = std::make_shared<Rail>(RailPosition::Front, upright);
+        rearRail_ = std::make_shared<Rail>(RailPosition::Rear, upright);
+        for (const auto& [from, to] : {std::pair{oldFront, frontRail_}, std::pair{oldRear, rearRail_}}) {
+            if (from) {
+                to->setName(from->name());
+                to->setMaterialOverride(from->materialOverride());
+                to->setInCuttingPlan(from->inCuttingPlan());
+            }
+        }
+        adoptAt(at, frontRail_);
+        adoptAt(at + 1, rearRail_);
+    }
+    requestLayout();
+}
+
+bool Carcass::hasPlinth() const noexcept
+{
+    return plinth_->parent() == this;
+}
+
+void Carcass::setPlinth(bool plinth)
+{
+    if (plinth == hasPlinth()) {
+        return;
+    }
+    if (plinth) {
+        adopt(plinth_);
+    } else {
+        detachChildren([this](const FurnitureComponent& c) { return &c == plinth_.get(); });
+    }
+    requestLayout();
+}
+
+void Carcass::setFixedWidth(std::optional<Real> width)
+{
+    if (width && !(*width > 0.0)) {
+        throw std::invalid_argument("Carcass: width must be > 0");
+    }
+    fixedWidth_ = width;
+    requestLayout();
+}
+
+void Carcass::setCutout(std::optional<WorktopCutout> cutout)
+{
+    if (cutout) {
+        const bool sized = cutout->width > 0.0 && cutout->depth > 0.0 && cutout->radius >= 0.0
+                        && cutout->frontOffset >= 0.0;
+        if (!sized || 2.0 * cutout->radius > std::min(cutout->width, cutout->depth)) {
+            throw std::invalid_argument("Carcass: invalid worktop cut-out");
+        }
+    }
+    cutout_ = cutout;
+    requestLayout();
+}
+
+Rail* Carcass::frontRail() const noexcept
+{
+    return frontRail_.get();
+}
+
+Rail* Carcass::rearRail() const noexcept
+{
+    return rearRail_.get();
+}
+
+Plinth* Carcass::plinth() const noexcept
+{
+    return hasPlinth() ? plinth_.get() : nullptr;
+}
+
+std::vector<PanelComponent*> Carcass::frameParts() const
+{
+    std::vector<PanelComponent*> parts{left_.get(), right_.get()};
+    if (topStyle_ == CarcassTop::Panel) {
+        parts.push_back(top_.get());
+    } else {
+        parts.push_back(frontRail_.get());
+        parts.push_back(rearRail_.get());
+    }
+    parts.push_back(bottom_.get());
+    return parts;
+}
+
 void Carcass::layoutChildren(const LayoutSlot& slot)
 {
-    const Aabb& outer = box();
+    // 0. A plinth takes the bottom of the box: the carcass itself stands on it.
+    const Aabb& whole = box();
+    const Real plinthHeight =
+        hasPlinth() ? std::clamp(slot.r().kitchen.plinthHeight, 0.0, whole.size().y) : 0.0;
+    const Aabb outer(whole.min() + Vec3(0.0, plinthHeight, 0.0), whole.max());
+    const bool panelTop = topStyle_ == CarcassTop::Panel;
 
     // 1. Context for the structural parts' own formulas.
     frame_.outer = outer;
     frame_.leftThickness = left_->thickness(slot);
     frame_.rightThickness = right_->thickness(slot);
-    frame_.topThickness = top_->thickness(slot);
+    frame_.topThickness = panelTop ? top_->thickness(slot) : frontRail_->thickness(slot);
     frame_.bottomThickness = bottom_->thickness(slot);
-    frame_.topJoint = topJoint_;
+    frame_.topJoint = panelTop ? topJoint_ : JointType::Inset; // rails stand between the sides
     frame_.bottomJoint = bottomJoint_;
+    frame_.top = topStyle_;
     frame_.backMount = backMount_.get();
     frame_.backThickness = back_->thickness(slot);
 
     LayoutSlot partSlot = slot.withBox(outer);
     partSlot.frame = &frame_;
     partSlot.frontZ = outer.max().z;
-    for (FurnitureComponent* part : {static_cast<FurnitureComponent*>(left_.get()),
-                                     static_cast<FurnitureComponent*>(right_.get()),
-                                     static_cast<FurnitureComponent*>(top_.get()),
-                                     static_cast<FurnitureComponent*>(bottom_.get()),
-                                     static_cast<FurnitureComponent*>(back_.get())}) {
+    for (PanelComponent* part : frameParts()) {
         part->layout(partSlot);
+    }
+    back_->layout(partSlot);
+    if (Plinth* plinth = this->plinth()) {
+        LayoutSlot plinthSlot = partSlot;
+        plinthSlot.box = Aabb(whole.min(), Vec3(whole.max().x, outer.min().y, whole.max().z));
+        plinth->layout(plinthSlot);
     }
 
     // 2. The opening is whatever the walls left free.
+    const Real top = panelTop ? top_->box().min().y
+                              : std::min(frontRail_->box().min().y, rearRail_->box().min().y);
     const Aabb opening(Vec3(left_->box().max().x, bottom_->box().max().y, back_->box().max().z),
-                       Vec3(right_->box().min().x, top_->box().min().y, outer.max().z));
+                       Vec3(right_->box().min().x, top, outer.max().z));
 
     // 3. Fronts may cover the outer walls up to frontEdgeGap from the carcass edge.
     const Real edgeGap = slot.r().frontEdgeGap;

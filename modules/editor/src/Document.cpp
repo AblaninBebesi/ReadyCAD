@@ -16,9 +16,18 @@ std::string txt(i18n::TextId id)
     return std::string(i18n::text(id));
 }
 
-/// Throws ConstructionError if the change made a part lose its size or put parts into each
-/// other's space (more overlapping pairs than `overlapsBefore`).
-void requireBuildable(const core::Product& product, std::size_t overlapsBefore)
+std::vector<const core::Carcass*> misplacedCutoutsOf(const core::Product& product)
+{
+    const core::Kitchen* kitchen = product.kitchen();
+    return kitchen != nullptr ? kitchen->misplacedCutouts(product.rules())
+                              : std::vector<const core::Carcass*>{};
+}
+
+/// Throws ConstructionError if the change made a part lose its size, put parts into each
+/// other's space (more overlapping pairs than `overlapsBefore`) or a worktop cut-out where it
+/// cannot be made (more than `cutoutsBefore`).
+void requireBuildable(const core::Product& product, std::size_t overlapsBefore,
+                      std::size_t cutoutsBefore)
 {
     for (const core::FurnitureComponent* c : core::collectPanels(product)) {
         const core::Panel& panel = *c->panel();
@@ -36,6 +45,12 @@ void requireBuildable(const core::Product& product, std::size_t overlapsBefore)
                                 + txt(i18n::TextId::PartsOverlap) + " ("
                                 + i18n::displayName(*o.first) + " — "
                                 + i18n::displayName(*o.second) + ")");
+    }
+    const auto cutouts = misplacedCutoutsOf(product);
+    if (cutouts.size() > cutoutsBefore) {
+        throw ConstructionError(txt(i18n::TextId::ChangeRefused) + ": "
+                                + txt(i18n::TextId::CutoutDoesNotFit) + " ("
+                                + i18n::displayName(*cutouts.front()) + ")");
     }
 }
 
@@ -131,7 +146,7 @@ void Document::edit(std::string_view description,
 
     try {
         change(*product_);
-        requireBuildable(*product_, overlaps_.size());
+        requireBuildable(*product_, overlaps_.size(), misplacedCutouts_.size());
     } catch (...) {
         restore(before); // strong guarantee: a failed edit leaves no trace
         refresh();
@@ -209,6 +224,7 @@ void Document::refresh()
     edgeUsage_ = detailing::edgeBandUsage(cutList_, product_->rules());
     hardware_ = detailing::hardwareList(*product_);
     overlaps_ = core::findOverlaps(*product_, kOverlapTolerance);
+    misplacedCutouts_ = misplacedCutoutsOf(*product_);
     if (selection_ && product_->find(*selection_) == nullptr) {
         selection_.reset();
     }

@@ -14,4 +14,5 @@ rc_add_module(detailing
         tests/DrillingTests.cpp
         tests/DetailingSanityTests.cpp
         tests/FlatPartTests.cpp
-        tests/HardwareListTests.cpp)
+        tests/HardwareListTests.cpp
+        tests/KitchenDetailingTests.cpp)

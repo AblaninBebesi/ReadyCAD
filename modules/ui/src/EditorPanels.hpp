@@ -1,6 +1,7 @@
 #pragma once
 
 #include "readycad/cam/NestingCenter.hpp"
+#include "readycad/core/builders/KitchenBuilder.hpp"
 #include "readycad/editor/Document.hpp"
 #include "readycad/export/Documentation.hpp"
 #include "readycad/nesting/NestingRun.hpp"
@@ -114,6 +115,10 @@ struct UiState {
     // Production package (stage 9): asked for while the cutting plan was still being computed;
     // written into this folder as soon as the plan is ready.
     std::optional<std::filesystem::path> pendingPackage;
+
+    // Kitchens: the "add a cabinet" form
+    core::CabinetModule newCabinet = core::CabinetModule::BaseDoors;
+    core::Real newCabinetWidth = 600.0;
 };
 
 /// Runs a model operation; on an exception shows the error popup. Returns true if it succeeded.

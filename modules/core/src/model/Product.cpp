@@ -46,10 +46,21 @@ Carcass* Product::carcass() const noexcept
     return nullptr;
 }
 
+Kitchen* Product::kitchen() const noexcept
+{
+    for (const Ptr& child : children()) {
+        if (child->kind() == ComponentKind::Kitchen) {
+            return static_cast<Kitchen*>(child.get());
+        }
+    }
+    return nullptr;
+}
+
 bool Product::canAccept(const FurnitureComponent& child) const
 {
-    // One carcass per product for now; multi-carcass products (kitchens) come later.
-    return child.kind() == ComponentKind::Carcass && carcass() == nullptr;
+    // One carcass, or one kitchen with its own cabinets.
+    const bool root = child.kind() == ComponentKind::Carcass || child.kind() == ComponentKind::Kitchen;
+    return root && children().empty();
 }
 
 } // namespace rc::core

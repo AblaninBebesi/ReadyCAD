@@ -10,9 +10,10 @@
 
 namespace rc::render {
 
-enum class ItemCategory { Carcass, Back, Interior, Front, DrawerBox, Handle };
+enum class ItemCategory { Carcass, Back, Interior, Front, DrawerBox, Handle, Worktop, Plinth };
 
-/// One axis-aligned box to draw (a panel or a handle), in float millimetres.
+/// One axis-aligned box to draw (a panel, a piece of a panel around its cut-outs, a handle), in
+/// float millimetres.
 struct SceneBox {
     glm::vec3 min{0.0f};
     glm::vec3 max{0.0f};

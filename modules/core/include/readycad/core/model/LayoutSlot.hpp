@@ -2,8 +2,10 @@
 
 #include "readycad/core/Aabb.hpp"
 #include "readycad/core/ConstructionRules.hpp"
+#include "readycad/core/Panel.hpp"
 
 #include <optional>
+#include <vector>
 
 namespace rc::core {
 
@@ -13,6 +15,13 @@ class BackMount;
 enum class JointType {
     Overlay, // накладная: lies on the sides, full carcass width
     Inset,   // вкладная: sits between the sides
+};
+
+/// What closes a carcass at the top.
+enum class CarcassTop {
+    Panel,        // крышка: a top panel (wardrobes, wall cabinets)
+    FlatRails,    // two flat rails (kuşak) under a worktop: base cabinets
+    UprightRails, // two rails on edge: room under the worktop for a sink bowl or a hob
 };
 
 /// Front overlay: how far a front (door, drawer front) may extend beyond the opening it closes,
@@ -35,15 +44,16 @@ struct FrontOverlay {
 /// Geometry of the enclosing carcass that its structural parts (sides, top, bottom, back)
 /// need for their own formulas.
 struct CarcassFrame {
-    Aabb outer;                       // overall carcass box, product coordinates
+    Aabb outer;                       // the carcass itself (above its plinth), product coordinates
     // Thickness of each structural panel: its own material, which the user may change per part
     // (a 25 mm top on 18 mm sides). Every neighbour's formula uses the one it meets.
     Real leftThickness = 18.0;
     Real rightThickness = 18.0;
     Real topThickness = 18.0;
     Real bottomThickness = 18.0;
-    JointType topJoint = JointType::Overlay;
+    JointType topJoint = JointType::Overlay; // rails always stand between the sides: Inset
     JointType bottomJoint = JointType::Inset;
+    CarcassTop top = CarcassTop::Panel;
     const BackMount* backMount = nullptr;
     Real backThickness = 3.0;
 
@@ -60,6 +70,17 @@ struct DrawerBoxFrame {
     Real bottom = 3.0;
 };
 
+/// What a Kitchen tells its worktop: the openings the cabinets below need (a sink, a hob).
+struct KitchenFrame {
+    std::vector<PanelCutout> cutouts; // centre in product X (center.x) and Z (center.y)
+};
+
+/// Sizes of items along one axis: an item with a fixed size keeps it, the automatic ones
+/// (nullopt) share what is left of `available` equally. If the fixed sizes do not fit, or no
+/// item is automatic, the fixed sizes are scaled to fill `available` exactly.
+[[nodiscard]] std::vector<Real> distributeSizes(Real available,
+                                                const std::vector<std::optional<Real>>& fixed);
+
 /// What a parent offers to a child during layout — "constraints go down".
 ///
 /// The parent decides WHERE (the region and context), the child decides HOW (its own formula
@@ -72,6 +93,7 @@ struct LayoutSlot {
     const ConstructionRules* rules = &ConstructionRules::defaults();
     const CarcassFrame* frame = nullptr; // set by a Carcass for its own structural parts
     const DrawerBoxFrame* drawerBox = nullptr; // set by a Drawer for its box parts
+    const KitchenFrame* kitchen = nullptr;     // set by a Kitchen for its worktop
     /// Y of a hole of the enclosing carcass's System 32 grid (set by the Carcass for its
     /// interior); shelves on supports snap to it.
     std::optional<Real> holeGridOriginY;

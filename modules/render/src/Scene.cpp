@@ -36,6 +36,10 @@ ItemCategory categoryOf(ComponentKind kind)
     case ComponentKind::DrawerBoxEnd:
     case ComponentKind::DrawerBottom:
         return ItemCategory::DrawerBox;
+    case ComponentKind::Worktop:
+        return ItemCategory::Worktop;
+    case ComponentKind::Plinth:
+        return ItemCategory::Plinth;
     default:
         return ItemCategory::Carcass;
     }
@@ -50,6 +54,8 @@ glm::vec4 colorOf(ItemCategory category)
     case ItemCategory::Front:     return {0.94f, 0.94f, 0.92f, 1.0f}; // white MDF
     case ItemCategory::DrawerBox: return {0.78f, 0.78f, 0.76f, 1.0f};
     case ItemCategory::Handle:    return {0.55f, 0.57f, 0.60f, 1.0f}; // brushed metal
+    case ItemCategory::Worktop:   return {0.36f, 0.35f, 0.34f, 1.0f}; // anthracite laminate
+    case ItemCategory::Plinth:    return {0.42f, 0.40f, 0.38f, 1.0f};
     }
     return glm::vec4(1.0f);
 }
@@ -76,6 +82,55 @@ bool isFrontPart(ComponentKind kind)
     return kind == ComponentKind::Door || kind == ComponentKind::DrawerFront;
 }
 
+/// The panel's box without its cut-outs (a worktop around its sink), as boxes: the cut-outs'
+/// edges cut the panel into a grid and the cells outside them remain. Rounded corners of a
+/// cut-out are drawn square.
+std::vector<core::Aabb> solidParts(const core::FurnitureComponent& c)
+{
+    const auto& cutouts = c.panel()->cutouts();
+    if (cutouts.empty()) {
+        return {c.box()};
+    }
+    const detailing::PanelFrame frame(c);
+    const core::Vec3 size = frame.extents();
+    std::vector<core::Real> us{0.0, size.x};
+    std::vector<core::Real> vs{0.0, size.y};
+    for (const core::PanelCutout& cut : cutouts) {
+        for (const core::Real sign : {-1.0, 1.0}) {
+            us.push_back(std::clamp(cut.center.x + sign * cut.length / 2.0, 0.0, size.x));
+            vs.push_back(std::clamp(cut.center.y + sign * cut.width / 2.0, 0.0, size.y));
+        }
+    }
+    for (auto* cuts : {&us, &vs}) {
+        std::sort(cuts->begin(), cuts->end());
+        cuts->erase(std::unique(cuts->begin(), cuts->end()), cuts->end());
+    }
+    const int l = core::index(frame.lengthAxis());
+    const int w = core::index(frame.widthAxis());
+    std::vector<core::Aabb> parts;
+    for (std::size_t i = 0; i + 1 < us.size(); ++i) {
+        for (std::size_t j = 0; j + 1 < vs.size(); ++j) {
+            const core::Real u = (us[i] + us[i + 1]) / 2.0;
+            const core::Real v = (vs[j] + vs[j + 1]) / 2.0;
+            const bool open = std::any_of(cutouts.begin(), cutouts.end(), [&](const auto& cut) {
+                return std::abs(u - cut.center.x) < cut.length / 2.0
+                    && std::abs(v - cut.center.y) < cut.width / 2.0;
+            });
+            if (open) {
+                continue;
+            }
+            core::Vec3 lo = c.box().min();
+            core::Vec3 hi = c.box().max();
+            hi[l] = lo[l] + us[i + 1];
+            lo[l] += us[i];
+            hi[w] = lo[w] + vs[j + 1];
+            lo[w] += vs[j];
+            parts.emplace_back(lo, hi);
+        }
+    }
+    return parts;
+}
+
 } // namespace
 
 Scene buildScene(const core::Product& product, const SceneOptions& options)
@@ -97,15 +152,17 @@ Scene buildScene(const core::Product& product, const SceneOptions& options)
             return;
         }
         const bool isSelected = selected != nullptr && (selected == &c || selected->isAncestorOf(c));
-        SceneBox box;
-        box.min = toFloat(c.box().min());
-        box.max = toFloat(c.box().max());
-        box.category = categoryOf(c.kind());
-        box.color = isSelected ? glm::mix(colorOf(box.category), kSelectedTint, 0.55f)
-                               : colorOf(box.category);
-        box.component = c.id();
-        box.selected = isSelected;
-        scene.boxes.push_back(box);
+        for (const core::Aabb& part : solidParts(c)) {
+            SceneBox box;
+            box.min = toFloat(part.min());
+            box.max = toFloat(part.max());
+            box.category = categoryOf(c.kind());
+            box.color = isSelected ? glm::mix(colorOf(box.category), kSelectedTint, 0.55f)
+                                   : colorOf(box.category);
+            box.component = c.id();
+            box.selected = isSelected;
+            scene.boxes.push_back(box);
+        }
         scene.bounds.expand(c.box());
 
         // Handle: a bar standing out of the front's outer face.

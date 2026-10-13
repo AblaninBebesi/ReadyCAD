@@ -4,6 +4,7 @@
 #include "readycad/core/Panel.hpp"
 #include "readycad/core/builders/Catalog.hpp"
 #include "readycad/core/model/FurnitureComponent.hpp"
+#include "readycad/core/model/Kitchen.hpp"
 #include "readycad/core/model/Parts.hpp"
 #include "readycad/i18n/Localization.hpp"
 

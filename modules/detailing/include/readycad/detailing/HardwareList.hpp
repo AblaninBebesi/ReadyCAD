@@ -23,7 +23,8 @@ struct HardwareItem {
 ///  * shelf supports — 4 per shelf on supports;
 ///  * hinges — hinge cups in the doors;
 ///  * handles — per catalogue model on the fronts;
-///  * drawer slides — pairs, per slide length.
+///  * drawer slides — pairs, per slide length;
+///  * legs and plinth clips — under cabinets with a plinth; hangers — two per wall cabinet.
 /// Kinds with zero pieces are left out.
 [[nodiscard]] std::vector<HardwareItem> hardwareList(const core::Product& product);
 

@@ -1,5 +1,6 @@
 #include "readycad/core/builders/Catalog.hpp"
 
+#include "readycad/core/builders/KitchenBuilder.hpp"
 #include "readycad/core/builders/WardrobeBuilder.hpp"
 
 #include <array>
@@ -14,6 +15,7 @@ std::span<const CatalogItem> catalogItems() noexcept
         CatalogItem::WardrobeWithDrawers,
         CatalogItem::ChestOfDrawers,
         CatalogItem::Bookcase,
+        CatalogItem::Kitchen,
     };
     return kItems;
 }
@@ -48,6 +50,25 @@ std::shared_ptr<Product> createProduct(CatalogItem item, const ConstructionRules
             .shelvesPerSection(4)
             .doorsPerSection(0)
             .backMount(BackMountType::Overlay)
+            .build();
+
+    case CatalogItem::Kitchen:
+        // 2.4 m. The sink and the hob are not at the ends: the worktop needs material around their
+        // cut-outs; the drawers keep them apart. The last cabinet takes whatever length is left
+        // when the run is resized.
+        return KitchenBuilder()
+            .rules(rules)
+            .length(2400)
+            .add(CabinetModule::BaseDoors, 400)
+            .add(CabinetModule::Sink, 600)
+            .add(CabinetModule::BaseDrawers, 400)
+            .add(CabinetModule::Hob, 600)
+            .add(CabinetModule::BaseDoors)
+            .add(CabinetModule::WallDoors, 400)
+            .add(CabinetModule::WallDoors, 600)
+            .add(CabinetModule::WallDoors, 400)
+            .add(CabinetModule::WallDoors, 600)
+            .add(CabinetModule::WallDoors)
             .build();
     }
     throw std::invalid_argument("Unknown CatalogItem");

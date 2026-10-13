@@ -52,6 +52,17 @@ struct Groove {
     Real depth = 0.0;
 };
 
+/// An opening cut through the whole panel — the hole for a sink or a hob in a worktop: a
+/// rectangle with rounded corners, in panel x/y coordinates (x along the length).
+struct PanelCutout {
+    Vec2 center{0.0};
+    Real length = 0.0; // along x
+    Real width = 0.0;  // along y
+    Real radius = 0.0; // of the corners
+
+    friend bool operator==(const PanelCutout&, const PanelCutout&) = default;
+};
+
 /// A physical part cut from sheet material (ЛДСП/МДФ/ХДФ) — pure data.
 ///
 /// It does not know where it stands in the furniture: its owning FurnitureComponent computes the
@@ -104,6 +115,11 @@ public:
         grooves_.clear();
     }
 
+    /// Openings through the panel. Part of its shape (set by its component with the size), not
+    /// of the drilling: clearMachining() keeps them.
+    [[nodiscard]] const std::vector<PanelCutout>& cutouts() const noexcept { return cutouts_; }
+    void setCutouts(std::vector<PanelCutout> cutouts) { cutouts_ = std::move(cutouts); }
+
 private:
     Material material_;
     Axis thicknessAxis_;
@@ -113,6 +129,7 @@ private:
     std::array<EdgeBand, 4> edges_{};
     std::vector<Drilling> drillings_;
     std::vector<Groove> grooves_;
+    std::vector<PanelCutout> cutouts_;
 };
 
 } // namespace rc::core

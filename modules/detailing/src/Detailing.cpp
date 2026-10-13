@@ -356,13 +356,15 @@ void addBackGrooves(core::Carcass& carcass, const ConstructionRules& r)
     const Real grooveCentreZ =
         carcass.box().min().z + r.backGrooveOffset + r.backGrooveWidth / 2.0;
 
-    for (PanelComponent* part : {static_cast<PanelComponent*>(&carcass.leftSide()),
-                                 static_cast<PanelComponent*>(&carcass.rightSide()),
-                                 static_cast<PanelComponent*>(&carcass.top()),
-                                 static_cast<PanelComponent*>(&carcass.bottom())}) {
+    for (PanelComponent* part : carcass.frameParts()) {
         const PanelFrame frame(*part);
         if (frame.widthAxis() != Axis::Z) {
-            continue; // grooves run along the length, across the depth
+            continue; // grooves run along the length, across the depth (not upright rails)
+        }
+        const core::Aabb& box = part->box();
+        if (grooveCentreZ - r.backGrooveWidth / 2.0 < box.min().z - kTol
+            || grooveCentreZ + r.backGrooveWidth / 2.0 > box.max().z + kTol) {
+            continue; // the front rail: the groove is not in it
         }
         // Only where the back panel is (plus its expansion gap): an overlay top keeps clean ends.
         const int l = index(frame.lengthAxis());
@@ -440,27 +442,26 @@ DetailingReport applyDetailing(core::Product& product)
         part->panel()->clearMachining();
     }
 
-    core::Carcass* carcass = product.carcass();
-    if (carcass == nullptr) {
-        return report;
-    }
     const ConstructionRules& r = product.rules();
 
-    std::vector<PanelComponent*> walls;
-    for (PanelComponent* part : parts) {
-        if (isWall(*part)) {
-            walls.push_back(part);
+    // Carcass by carcass: the cabinets of a kitchen touch each other, but they are separate
+    // boxes — a joint, a shelf support or a hinge plate never crosses from one to the next.
+    for (core::Carcass* carcass : core::findAll<core::Carcass>(product)) {
+        std::vector<PanelComponent*> walls;
+        for (PanelComponent* part : core::findAll<PanelComponent>(*carcass)) {
+            if (isWall(*part)) {
+                walls.push_back(part);
+            }
         }
+        const std::vector<Joint> joints = findJoints(*carcass);
+        report.joints += static_cast<int>(joints.size());
+        for (const Joint& joint : joints) {
+            addJointFasteners(joint, r, report);
+        }
+        addShelfSupports(*carcass, walls, r, report);
+        addHinges(*carcass, walls, carcass->system32OriginY(), r, report);
+        addBackGrooves(*carcass, r);
     }
-
-    const std::vector<Joint> joints = findJoints(product);
-    report.joints = static_cast<int>(joints.size());
-    for (const Joint& joint : joints) {
-        addJointFasteners(joint, r, report);
-    }
-    addShelfSupports(*carcass, walls, r, report);
-    addHinges(*carcass, walls, carcass->system32OriginY(), r, report);
-    addBackGrooves(*carcass, r);
     addHandles(product, r, report);
 
     for (PanelComponent* part : parts) {

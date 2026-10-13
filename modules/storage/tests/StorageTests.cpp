@@ -181,6 +181,62 @@ TEST_CASE("Parts left out of the cutting plan and drawer box choices survive sav
     }
 }
 
+TEST_CASE("A kitchen keeps its cabinets, rails, plinths and cut-outs", "[storage][project][kitchen]")
+{
+    const auto kitchen = createProduct(CatalogItem::Kitchen);
+    Kitchen& k = *kitchen->kitchen();
+    Carcass& sink = *k.baseRow().cabinets()[1];
+    sink.setCutout(WorktopCutout{CutoutKind::Sink, 500.0, 420.0, 20.0, 70.0});
+    sink.frontRail()->setName("Evye kuşağı");
+    k.baseRow().cabinets()[0]->setPlinth(false);
+    k.baseRow().cabinets()[2]->setFixedWidth(450.0);
+    k.wallRow().cabinets()[3]->setTopStyle(CarcassTop::FlatRails);
+    k.worktop().setInCuttingPlan(true);
+    k.setSizes({760.0, 700.0, 300.0, 620.0});
+
+    const std::string saved = saveProduct(*kitchen);
+    const auto loaded = loadProduct(saved);
+    CHECK(saveProduct(*loaded) == saved);
+    requireSameGeometry(*kitchen, *loaded);
+
+    const Kitchen& l = *loaded->kitchen();
+    CHECK(l.sizes() == Kitchen::Sizes{760.0, 700.0, 300.0, 620.0});
+    CHECK(l.baseRow().cabinets()[1]->cutout() == sink.cutout());
+    CHECK(l.baseRow().cabinets()[1]->frontRail()->name() == "Evye kuşağı");
+    CHECK_FALSE(l.baseRow().cabinets()[0]->hasPlinth());
+    CHECK(l.baseRow().cabinets()[2]->fixedWidth() == 450.0);
+    CHECK_FALSE(l.baseRow().cabinets()[4]->fixedWidth().has_value());
+    CHECK(l.wallRow().cabinets()[3]->topStyle() == CarcassTop::FlatRails);
+    CHECK(l.worktop().inCuttingPlan());
+    CHECK(l.worktop().panel()->cutouts() == k.worktop().panel()->cutouts());
+
+    // The worktop starts out of the plan: a file says so explicitly, and so it is read back.
+    const auto fresh = loadProduct(saveProduct(*createProduct(CatalogItem::Kitchen)));
+    CHECK_FALSE(fresh->kitchen()->worktop().inCuttingPlan());
+}
+
+TEST_CASE("A project of version 1 still opens", "[storage][project]")
+{
+    // Before kitchens: no "topStyle", no plinth, no widths.
+    const auto wardrobe = createProduct(CatalogItem::WardrobeWithDrawers);
+    std::string text = saveProduct(*wardrobe);
+    const auto replace = [&text](const std::string& from, const std::string& to) {
+        for (std::size_t at = text.find(from); at != std::string::npos; at = text.find(from)) {
+            text.replace(at, from.size(), to);
+        }
+    };
+    replace("\"version\": 2", "\"version\": 1");
+    // "topStyle" is the last key of a carcass: take it out with the comma before it.
+    for (auto at = text.find("\"topStyle\""); at != std::string::npos;
+         at = text.find("\"topStyle\"")) {
+        const std::size_t comma = text.rfind(',', at);
+        const std::size_t end = text.find('"', text.find(':', at) + 3) + 1;
+        text.erase(comma, end - comma);
+    }
+    const auto loaded = loadProduct(text);
+    requireSameGeometry(*wardrobe, *loaded);
+}
+
 TEST_CASE("Broken files are rejected with a clear error", "[storage][errors]")
 {
     using Catch::Matchers::ContainsSubstring;

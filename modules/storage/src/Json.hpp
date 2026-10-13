@@ -9,6 +9,7 @@
 #include "readycad/core/Math.hpp"
 #include "readycad/core/model/Carcass.hpp"
 #include "readycad/core/model/Drawer.hpp"
+#include "readycad/core/model/Kitchen.hpp"
 #include "readycad/core/model/Product.hpp"
 #include "readycad/storage/Storage.hpp"
 
@@ -66,6 +67,15 @@ NLOHMANN_JSON_SERIALIZE_ENUM(HandleAnchor, {
     {HandleAnchor::Center, "center"},
     {HandleAnchor::Bottom, "bottom"},
 })
+NLOHMANN_JSON_SERIALIZE_ENUM(CarcassTop, {
+    {CarcassTop::Panel, "panel"},
+    {CarcassTop::FlatRails, "flatRails"},
+    {CarcassTop::UprightRails, "uprightRails"},
+})
+NLOHMANN_JSON_SERIALIZE_ENUM(CutoutKind, {
+    {CutoutKind::Sink, "sink"},
+    {CutoutKind::Hob, "hob"},
+})
 NLOHMANN_JSON_SERIALIZE_ENUM(Axis, {
     {Axis::X, "x"},
     {Axis::Y, "y"},
@@ -80,6 +90,10 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(HandleModel, id, name, supplier,
                                                 projection)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(HandlePlacement, modelId, orientation, anchor,
                                                 edgeOffset, anchorOffset)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(WorktopCutout, kind, width, depth, radius,
+                                                frontOffset)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(Kitchen::Sizes, baseHeight, wallHeight, wallDepth,
+                                                worktopDepth)
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(ConstructionRules::System32, pitch,
                                                 frontRowOffset, rearRowMinOffset, snapShelves)
@@ -102,14 +116,16 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(ConstructionRules::Handles, cata
                                                 drillOnMachine, minEdgeDistance)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(ConstructionRules::Cutting, premillAllowance,
                                                 rounding, edgeTrimAllowance)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(ConstructionRules::Kitchen, plinthHeight,
+                                                plinthSetback, railWidth, cutoutMargin)
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
     ConstructionRules, carcassMaterial, backMaterial, frontMaterial, drawerBoxMaterial,
-    drawerBottomMaterial, visibleEdge, hiddenEdge, backGrooveDepth, backGrooveOffset,
+    drawerBottomMaterial, worktopMaterial, visibleEdge, hiddenEdge, backGrooveDepth, backGrooveOffset,
     backGrooveWidth, backExpansionGap, backOverlayInset, shelfSideGap, shelfFrontSetback,
     shelfBackGap, confirmatShelfFrontSetback, confirmatShelfBackGap, partitionFrontSetback,
     frontEdgeGap, frontGap, drawerSlideClearance, drawerBoxBottomClearance, drawerBoxTopClearance,
-    drawerBoxMaxHeight, drawerRearClearance, drawerSlideLengths, system32, joints, confirmat,
+    drawerBoxMaxHeight, drawerRearClearance, drawerSlideLengths, kitchen, system32, joints, confirmat,
     dowel, eccentric, shelfSupport, hinge, minWallBetweenHoles, handles, cutting)
 
 } // namespace rc::core

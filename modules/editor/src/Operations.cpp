@@ -21,13 +21,23 @@ T& require(Product& product, ComponentId id)
     return *typed;
 }
 
-core::Carcass& requireCarcass(Product& product)
+core::Kitchen& requireKitchen(Product& product)
 {
-    core::Carcass* carcass = product.carcass();
-    if (carcass == nullptr) {
-        throw std::invalid_argument("The product has no carcass");
+    core::Kitchen* kitchen = product.kitchen();
+    if (kitchen == nullptr) {
+        throw std::invalid_argument("The product is not a kitchen");
     }
-    return *carcass;
+    return *kitchen;
+}
+
+/// A cabinet of a kitchen row.
+core::Carcass& requireCabinet(Product& product, ComponentId id)
+{
+    auto& cabinet = require<core::Carcass>(product, id);
+    if (cabinet.parent() == nullptr || cabinet.parent()->kind() != core::ComponentKind::CabinetRow) {
+        throw std::invalid_argument("Not a cabinet of a kitchen");
+    }
+    return cabinet;
 }
 
 /// Merge key unique per component, so dragging one value never merges with another part.
@@ -53,19 +63,71 @@ void setRules(Document& doc, core::ConstructionRules rules)
     doc.edit("Workshop profile", [&](Product& p) { p.setRules(std::move(rules)); });
 }
 
-void setTopJoint(Document& doc, core::JointType joint)
+void setTopJoint(Document& doc, ComponentId carcass, core::JointType joint)
 {
-    doc.edit("Top joint", [&](Product& p) { requireCarcass(p).setTopJoint(joint); });
+    doc.edit("Top joint",
+             [&](Product& p) { require<core::Carcass>(p, carcass).setTopJoint(joint); });
 }
 
-void setBottomJoint(Document& doc, core::JointType joint)
+void setBottomJoint(Document& doc, ComponentId carcass, core::JointType joint)
 {
-    doc.edit("Bottom joint", [&](Product& p) { requireCarcass(p).setBottomJoint(joint); });
+    doc.edit("Bottom joint",
+             [&](Product& p) { require<core::Carcass>(p, carcass).setBottomJoint(joint); });
 }
 
-void setBackMount(Document& doc, core::BackMountType mount)
+void setBackMount(Document& doc, ComponentId carcass, core::BackMountType mount)
 {
-    doc.edit("Back panel mount", [&](Product& p) { requireCarcass(p).setBackMount(mount); });
+    doc.edit("Back panel mount",
+             [&](Product& p) { require<core::Carcass>(p, carcass).setBackMount(mount); });
+}
+
+void setTopStyle(Document& doc, ComponentId carcass, core::CarcassTop style)
+{
+    doc.edit("Carcass top",
+             [&](Product& p) { require<core::Carcass>(p, carcass).setTopStyle(style); });
+}
+
+void setPlinth(Document& doc, ComponentId carcass, bool plinth)
+{
+    doc.edit("Plinth", [&](Product& p) { require<core::Carcass>(p, carcass).setPlinth(plinth); });
+}
+
+void setKitchenSizes(Document& doc, const core::Kitchen::Sizes& sizes)
+{
+    doc.edit(
+        "Kitchen sizes", [&](Product& p) { requireKitchen(p).setSizes(sizes); }, "kitchen-sizes");
+}
+
+void addCabinet(Document& doc, core::CabinetModule module, core::Real width)
+{
+    doc.edit("Add cabinet", [&](Product& p) {
+        core::Kitchen& kitchen = requireKitchen(p);
+        core::CabinetRow& row = core::levelOf(module) == core::RowLevel::Base ? kitchen.baseRow()
+                                                                              : kitchen.wallRow();
+        row.add(core::makeCabinet(module, width, width));
+    });
+}
+
+void setCabinetWidth(Document& doc, ComponentId cabinet, std::optional<core::Real> width)
+{
+    doc.edit(
+        "Cabinet width", [&](Product& p) { requireCabinet(p, cabinet).setFixedWidth(width); },
+        key("cabinet-width", cabinet));
+}
+
+void moveCabinet(Document& doc, ComponentId cabinet, int steps)
+{
+    doc.edit("Move cabinet", [&](Product& p) {
+        core::Carcass& c = requireCabinet(p, cabinet);
+        static_cast<core::CabinetRow*>(c.parent())->moveCabinet(cabinet, steps);
+    });
+}
+
+void setCutout(Document& doc, ComponentId cabinet, std::optional<core::WorktopCutout> cutout)
+{
+    doc.edit(
+        "Worktop cut-out", [&](Product& p) { requireCabinet(p, cabinet).setCutout(cutout); },
+        key("cutout", cabinet));
 }
 
 void splitSection(Document& doc, ComponentId section, core::Axis axis, int count)
@@ -168,9 +230,11 @@ void removeComponent(Document& doc, ComponentId component)
             throw std::invalid_argument("Component not found");
         }
         const core::ComponentKind kind = node->kind();
+        const bool cabinet = kind == core::ComponentKind::Carcass
+                          && node->parent()->kind() == core::ComponentKind::CabinetRow;
         const bool removable = kind == core::ComponentKind::Shelf
                             || kind == core::ComponentKind::Door
-                            || kind == core::ComponentKind::DrawerStack;
+                            || kind == core::ComponentKind::DrawerStack || cabinet;
         if (!removable) {
             throw std::logic_error("This part belongs to the construction and cannot be removed");
         }

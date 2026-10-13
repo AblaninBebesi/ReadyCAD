@@ -160,15 +160,29 @@ json writeSection(const Section& section)
     return out;
 }
 
+/// The carcass's own parts, as it has them now, by their key in the file.
+std::vector<std::pair<const char*, PanelComponent*>> namedParts(const Carcass& carcass)
+{
+    std::vector<std::pair<const char*, PanelComponent*>> named{
+        {"leftSide", &carcass.leftSide()}, {"rightSide", &carcass.rightSide()}};
+    if (carcass.topStyle() == CarcassTop::Panel) {
+        named.emplace_back("top", &carcass.top());
+    } else {
+        named.emplace_back("frontRail", carcass.frontRail());
+        named.emplace_back("rearRail", carcass.rearRail());
+    }
+    named.emplace_back("bottom", &carcass.bottom());
+    named.emplace_back("back", &carcass.back());
+    if (Plinth* plinth = carcass.plinth()) {
+        named.emplace_back("plinth", plinth);
+    }
+    return named;
+}
+
 json writeCarcass(const Carcass& carcass)
 {
     json parts;
-    const std::pair<const char*, const PanelComponent*> named[] = {
-        {"leftSide", &carcass.leftSide()}, {"rightSide", &carcass.rightSide()},
-        {"top", &carcass.top()},           {"bottom", &carcass.bottom()},
-        {"back", &carcass.back()},
-    };
-    for (const auto& [key, part] : named) {
+    for (const auto& [key, part] : namedParts(carcass)) {
         json choices = json::object();
         writePanelChoices(*part, choices);
         if (!choices.empty()) {
@@ -179,10 +193,38 @@ json writeCarcass(const Carcass& carcass)
     out["topJoint"] = carcass.topJoint();
     out["bottomJoint"] = carcass.bottomJoint();
     out["backMount"] = carcass.backMountType();
+    out["topStyle"] = carcass.topStyle();
+    if (carcass.hasPlinth()) {
+        out["plinth"] = true;
+    }
+    if (carcass.fixedWidth()) {
+        out["width"] = *carcass.fixedWidth();
+    }
+    if (carcass.cutout()) {
+        out["cutout"] = *carcass.cutout();
+    }
     if (!parts.empty()) {
         out["parts"] = parts;
     }
     out["interior"] = writeSection(carcass.interior());
+    return out;
+}
+
+json writeKitchen(const Kitchen& kitchen)
+{
+    json out;
+    out["sizes"] = kitchen.sizes();
+    json worktop = json::object();
+    writePanelChoices(kitchen.worktop(), worktop);
+    out["worktop"] = worktop;
+    for (const auto& [key, row] : {std::pair{"base", &kitchen.baseRow()},
+                                   std::pair{"wall", &kitchen.wallRow()}}) {
+        json cabinets = json::array();
+        for (const Carcass* cabinet : row->cabinets()) {
+            cabinets.push_back(writeCarcass(*cabinet));
+        }
+        out[key] = cabinets;
+    }
     return out;
 }
 
@@ -293,20 +335,37 @@ void readCarcass(const json& in, Carcass& carcass)
     carcass.setTopJoint(in.value("topJoint", JointType::Overlay));
     carcass.setBottomJoint(in.value("bottomJoint", JointType::Inset));
     carcass.setBackMount(in.value("backMount", BackMountType::Groove));
+    carcass.setTopStyle(in.value("topStyle", CarcassTop::Panel));
+    carcass.setPlinth(in.value("plinth", false));
+    carcass.setFixedWidth(readOptionalReal(in, "width"));
+    if (in.contains("cutout") && !in.at("cutout").is_null()) {
+        carcass.setCutout(in.at("cutout").get<WorktopCutout>());
+    }
     if (in.contains("parts")) {
         const json& parts = in.at("parts");
-        const std::pair<const char*, PanelComponent*> named[] = {
-            {"leftSide", &carcass.leftSide()}, {"rightSide", &carcass.rightSide()},
-            {"top", &carcass.top()},           {"bottom", &carcass.bottom()},
-            {"back", &carcass.back()},
-        };
-        for (const auto& [key, part] : named) {
+        for (const auto& [key, part] : namedParts(carcass)) {
             if (parts.contains(key)) {
                 readPanelChoices(parts.at(key), *part);
             }
         }
     }
     readSection(in.at("interior"), carcass.interior());
+}
+
+void readKitchen(const json& in, Kitchen& kitchen)
+{
+    kitchen.setSizes(in.value("sizes", json::object()).get<Kitchen::Sizes>());
+    // Always read: a worktop starts out of the cutting plan, so for it a missing "cutting" key
+    // means "in the plan".
+    readPanelChoices(in.value("worktop", json::object()), kitchen.worktop());
+    for (const auto& [key, row] : {std::pair{"base", &kitchen.baseRow()},
+                                   std::pair{"wall", &kitchen.wallRow()}}) {
+        for (const json& cabinet : in.value(key, json::array())) {
+            auto carcass = std::make_shared<Carcass>();
+            row->add(carcass);
+            readCarcass(cabinet, *carcass);
+        }
+    }
 }
 
 } // namespace
@@ -334,8 +393,9 @@ ConstructionRules loadProfile(std::string_view text)
 std::string saveProduct(const Product& product)
 {
     const Carcass* carcass = product.carcass();
-    if (carcass == nullptr) {
-        throw StorageError("The product has no carcass");
+    const Kitchen* kitchen = product.kitchen();
+    if (carcass == nullptr && kitchen == nullptr) {
+        throw StorageError("The product has neither a carcass nor a kitchen");
     }
     json doc;
     doc["format"] = std::string(kProjectFormat);
@@ -343,7 +403,11 @@ std::string saveProduct(const Product& product)
     doc["name"] = product.name();
     doc["dimensions"] = product.dimensions();
     doc["rules"] = product.rules();
-    doc["carcass"] = writeCarcass(*carcass);
+    if (carcass != nullptr) {
+        doc["carcass"] = writeCarcass(*carcass);
+    } else {
+        doc["kitchen"] = writeKitchen(*kitchen);
+    }
     return doc.dump(2);
 }
 
@@ -355,9 +419,15 @@ std::shared_ptr<Product> loadProduct(std::string_view text)
         auto product = std::make_shared<Product>(doc.value("name", std::string{}),
                                                  doc.value("rules", json::object())
                                                      .get<ConstructionRules>());
-        auto carcass = std::make_shared<Carcass>();
-        product->add(carcass);
-        readCarcass(doc.at("carcass"), *carcass);
+        if (doc.contains("kitchen")) {
+            auto kitchen = std::make_shared<Kitchen>();
+            product->add(kitchen);
+            readKitchen(doc.at("kitchen"), *kitchen);
+        } else {
+            auto carcass = std::make_shared<Carcass>();
+            product->add(carcass);
+            readCarcass(doc.at("carcass"), *carcass);
+        }
         product->setDimensions(doc.at("dimensions").get<Size3D>()); // first layout
         return product;
     } catch (const json::exception& e) {

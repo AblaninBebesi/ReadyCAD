@@ -40,11 +40,12 @@ TEST_CASE("Product parameters", "[editor][operations]")
     setProductName(doc, "Çocuk odası dolabı");
     CHECK(doc.product().name() == "Çocuk odası dolabı");
 
-    setBackMount(doc, BackMountType::Overlay);
+    const ComponentId carcass = doc.product().carcass()->id();
+    setBackMount(doc, carcass, BackMountType::Overlay);
     CHECK(doc.product().carcass()->backMountType() == BackMountType::Overlay);
     CHECK(doc.detailingReport().grooves == 0);
 
-    setTopJoint(doc, JointType::Inset);
+    setTopJoint(doc, carcass, JointType::Inset);
     CHECK(doc.product().carcass()->leftSide().size().height == Approx(2100.0));
 }
 
@@ -174,6 +175,94 @@ TEST_CASE("An edit that would make the product impossible to build is refused",
     setMaterialOverride(doc, doc.product().carcass()->top().id(),
                         Material{"Suntalam 25", MaterialType::Chipboard, 25.0, true});
     CHECK(doc.overlaps().empty());
+}
+
+TEST_CASE("Kitchen cabinets: add, size, move, remove, each one undoable step",
+          "[editor][operations][kitchen]")
+{
+    Document doc = Document::fromCatalog(CatalogItem::Kitchen);
+    const auto base = [&doc] { return doc.product().kitchen()->baseRow().cabinets(); };
+    REQUIRE(base().size() == 5);
+
+    // No room: the automatic cabinet (400) would lose its whole width.
+    CHECK_THROWS_AS(addCabinet(doc, CabinetModule::BaseDoors, 600.0), ConstructionError);
+    CHECK(base().size() == 5);
+
+    setDimensions(doc, {3000, 2120, 560});
+    addCabinet(doc, CabinetModule::BaseDrawers, 600.0);
+    REQUIRE(base().size() == 6);
+    CHECK(base().back()->interior().drawerStack() != nullptr);
+    CHECK(base().back()->box().max().x == Approx(3000.0));
+
+    const ComponentId added = base().back()->id();
+    setCabinetWidth(doc, added, 500.0);
+    CHECK(base().back()->box().size().x == Approx(500.0));
+    CHECK(base()[4]->box().size().x == Approx(500.0)); // the automatic one took the 100 mm
+
+    moveCabinet(doc, added, -10);
+    CHECK(base().front()->id() == added);
+    CHECK(base().front()->box().min().x == Approx(0.0));
+
+    removeComponent(doc, added);
+    CHECK(base().size() == 5);
+    doc.undo();
+    CHECK(base().size() == 6);
+    CHECK(doc.undoDescription() == "Move cabinet");
+
+    // Kitchen operations need a kitchen.
+    Document wardrobe = Document::fromCatalog(CatalogItem::Wardrobe);
+    CHECK_THROWS_AS(addCabinet(wardrobe, CabinetModule::WallDoors, 600.0), std::invalid_argument);
+    CHECK_THROWS_AS(setCabinetWidth(wardrobe, wardrobe.product().carcass()->id(), 500.0),
+                    std::invalid_argument);
+}
+
+TEST_CASE("Kitchen edits that cannot be built are refused", "[editor][operations][kitchen]")
+{
+    Document doc = Document::fromCatalog(CatalogItem::Kitchen);
+    const auto refused = [&](const std::function<void()>& edit, rc::i18n::TextId reason) {
+        const std::string before = rc::storage::saveProduct(doc.product());
+        try {
+            edit();
+            FAIL("the edit was accepted");
+        } catch (const ConstructionError& e) {
+            CHECK_THAT(e.what(), Catch::Matchers::ContainsSubstring(
+                                     std::string(rc::i18n::text(reason))));
+        }
+        CHECK(rc::storage::saveProduct(doc.product()) == before);
+    };
+    const auto sink = [&doc] { return doc.product().kitchen()->baseRow().cabinets()[1]; };
+
+    // Flat rails under the sink: the bowl would hit the front rail.
+    refused([&] { setTopStyle(doc, sink()->id(), CarcassTop::FlatRails); },
+            rc::i18n::TextId::CutoutDoesNotFit);
+    // Without the sink the cabinet may have them.
+    setCutout(doc, sink()->id(), std::nullopt);
+    setTopStyle(doc, sink()->id(), CarcassTop::FlatRails);
+    CHECK(doc.product().kitchen()->worktop().panel()->cutouts().size() == 1);
+
+    // Wall cabinets down to the worktop.
+    Kitchen::Sizes sizes = doc.product().kitchen()->sizes();
+    sizes.wallHeight = 1300.0;
+    refused([&] { setKitchenSizes(doc, sizes); }, rc::i18n::TextId::PartsOverlap);
+
+    // The last base cabinet carries the worktop.
+    while (doc.product().kitchen()->baseRow().cabinets().size() > 1) {
+        removeComponent(doc, doc.product().kitchen()->baseRow().cabinets().back()->id());
+    }
+    refused([&] { removeComponent(doc, doc.product().kitchen()->baseRow().cabinets()[0]->id()); },
+            rc::i18n::TextId::PartWithoutSize);
+}
+
+TEST_CASE("Carcass construction is set per carcass", "[editor][operations][kitchen]")
+{
+    Document doc = Document::fromCatalog(CatalogItem::Kitchen);
+    Carcass& wall = *doc.product().kitchen()->wallRow().cabinets()[0];
+    setBackMount(doc, wall.id(), BackMountType::Overlay);
+    setPlinth(doc, doc.product().kitchen()->wallRow().cabinets()[1]->id(), false);
+    const Kitchen& k = *doc.product().kitchen();
+    CHECK(k.wallRow().cabinets()[0]->backMountType() == BackMountType::Overlay);
+    CHECK(k.wallRow().cabinets()[1]->backMountType() == BackMountType::Groove);
+    CHECK(k.baseRow().cabinets()[0]->hasPlinth());
 }
 
 TEST_CASE("Part info for the properties panel", "[editor][partinfo]")

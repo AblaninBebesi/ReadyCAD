@@ -23,7 +23,8 @@ struct Joint {
 };
 
 /// Parts that are joined with connectors. Excluded: back panels (groove/nails), drawer bottoms
-/// (nails), fronts (hinges / screws from inside), shelves on supports (removable).
+/// (nails), fronts (hinges / screws from inside), shelves on supports (removable), plinths
+/// (clipped onto the legs), worktops (screwed on from below through the rails).
 [[nodiscard]] bool takesConnectors(const core::FurnitureComponent& component);
 
 /// All edge-to-face joints between connector-taking panels of the subtree.

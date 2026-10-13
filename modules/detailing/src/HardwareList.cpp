@@ -1,9 +1,11 @@
 #include "readycad/detailing/HardwareList.hpp"
 
 #include "readycad/core/model/Drawer.hpp"
+#include "readycad/core/model/Kitchen.hpp"
 #include "readycad/core/model/Parts.hpp"
 #include "readycad/core/model/Queries.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <map>
@@ -89,6 +91,24 @@ std::vector<HardwareItem> hardwareList(const core::Product& product)
     for (const auto& [length, pairs] : slides) {
         add(HardwareKind::DrawerSlide, number(length) + " mm", pairs);
     }
+
+    // Kitchens: legs under every cabinet with a plinth (two more for each further metre of
+    // width), a clip on every front leg for the plinth, two hangers per wall cabinet.
+    int legs = 0;
+    int hangers = 0;
+    for (const core::Carcass* carcass : core::findAll<core::Carcass>(product)) {
+        if (carcass->hasPlinth()) {
+            const Real width = carcass->box().size().x;
+            legs += 2 * (2 + static_cast<int>(std::max(0.0, width - 1.0) / 1000.0));
+        }
+        const auto* row = dynamic_cast<const core::CabinetRow*>(carcass->parent());
+        if (row != nullptr && row->level() == core::RowLevel::Wall) {
+            hangers += 2;
+        }
+    }
+    add(HardwareKind::Leg, number(rules.kitchen.plinthHeight) + " mm", legs);
+    add(HardwareKind::PlinthClip, "", legs / 2);
+    add(HardwareKind::Hanger, "", hangers);
     return list;
 }
 

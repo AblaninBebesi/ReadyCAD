@@ -81,6 +81,48 @@ private:
     std::optional<BackMountType> mountType_; // remembered for allowsOverlapWith()
 };
 
+enum class RailPosition { Front, Rear };
+
+/// Kuşak: a narrow strip between the side walls instead of a top panel — base cabinets under a
+/// worktop (the worktop lies on the sides and is screwed on from below through the rails).
+///  * flat (CarcassTop::FlatRails): lies like an inset top panel, railWidth deep; the rear rail
+///    holds the back panel in its groove;
+///  * upright (CarcassTop::UprightRails): stands on edge, railWidth high — the space under the
+///    worktop stays free for a sink bowl or a hob; the rear rail stands in front of the back.
+/// The orientation is fixed when the rail is made (it decides the panel's axes).
+class Rail final : public PanelComponent {
+public:
+    Rail(RailPosition position, bool upright);
+    [[nodiscard]] ComponentKind kind() const noexcept override { return ComponentKind::Rail; }
+    [[nodiscard]] RailPosition position() const noexcept { return position_; }
+    [[nodiscard]] bool upright() const noexcept { return upright_; }
+
+protected:
+    Vec3 updateSize(const LayoutSlot& slot) override;
+    Vec3 updatePosition(const LayoutSlot& slot, const Vec3& size) override;
+    const Material& defaultMaterial(const ConstructionRules& r) const override;
+    EdgeBand defaultEdge(EdgeSide side, const LayoutSlot& slot) const override;
+
+private:
+    RailPosition position_;
+    bool upright_;
+};
+
+/// Baza (цоколь): the strip in front of the legs of a base cabinet, set back from the carcass
+/// front so there is room for the feet. Its slot box is the zone under the carcass; slot.frame
+/// gives the carcass front.
+class Plinth final : public PanelComponent {
+public:
+    Plinth();
+    [[nodiscard]] ComponentKind kind() const noexcept override { return ComponentKind::Plinth; }
+
+protected:
+    Vec3 updateSize(const LayoutSlot& slot) override;
+    Vec3 updatePosition(const LayoutSlot& slot, const Vec3& size) override;
+    const Material& defaultMaterial(const ConstructionRules& r) const override;
+    EdgeBand defaultEdge(EdgeSide side, const LayoutSlot& slot) const override;
+};
+
 // =============================================================================================
 // Interior parts. The slot is the band a Section reserved for the part.
 // =============================================================================================
@@ -232,6 +274,45 @@ public:
 
 protected:
     const std::string& defaultHandleId(const ConstructionRules& r) const override;
+};
+
+// =============================================================================================
+// Kitchen parts
+// =============================================================================================
+
+enum class CutoutKind { Sink, Hob };
+
+/// The opening a base cabinet needs in the worktop above it: centred over the cabinet, its front
+/// edge `frontOffset` behind the worktop's front edge. Sizes are the cut-out of the appliance's
+/// installation instructions.
+struct WorktopCutout {
+    CutoutKind kind = CutoutKind::Sink;
+    Real width = 560.0;      // along the worktop
+    Real depth = 480.0;      // across it
+    Real radius = 15.0;      // of the corners
+    Real frontOffset = 60.0; // from the worktop's front edge
+
+    /// Typical cut-outs for a 60 cm cabinet: an inset sink 560 x 480, a hob 560 x 490; both
+    /// 60 mm from the front edge — behind the upright front rail of a 560 mm deep cabinet.
+    [[nodiscard]] static WorktopCutout standard(CutoutKind kind) noexcept;
+
+    friend bool operator==(const WorktopCutout&, const WorktopCutout&) = default;
+};
+
+/// Tezgah: lies on the base cabinets of a kitchen. Its slot box gives the length and the depth;
+/// slot.kitchen the openings for the appliances. Usually bought as a long slab and cut to length
+/// on its own, so it starts out of the cutting plan (one click puts it in).
+class Worktop final : public PanelComponent {
+public:
+    Worktop();
+    [[nodiscard]] ComponentKind kind() const noexcept override { return ComponentKind::Worktop; }
+
+protected:
+    Vec3 updateSize(const LayoutSlot& slot) override;
+    Vec3 updatePosition(const LayoutSlot& slot, const Vec3& size) override;
+    void updatePanel(const LayoutSlot& slot) override;
+    const Material& defaultMaterial(const ConstructionRules& r) const override;
+    EdgeBand defaultEdge(EdgeSide side, const LayoutSlot& slot) const override;
 };
 
 // =============================================================================================

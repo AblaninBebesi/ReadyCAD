@@ -120,6 +120,10 @@ protected:
     /// Attaches a child without the canAccept() check and without relayout — for parts a
     /// composite creates itself. Call requestLayout() once after a batch of changes.
     void adopt(Ptr child);
+    /// Like adopt(), but at a position among the children (clamped to the end).
+    void adoptAt(std::size_t index, Ptr child);
+    /// Moves the direct child at `from` to position `to` (both clamped), without relayout.
+    void moveChild(std::size_t from, std::size_t to);
 
     /// Detaches all direct children matching `predicate`, without relayout.
     std::vector<Ptr> detachChildren(const std::function<bool(const FurnitureComponent&)>& predicate);
