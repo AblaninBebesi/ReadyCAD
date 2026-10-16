@@ -13,7 +13,7 @@ DXF/PDF → управляющие программы для ЧПУ. Дипло�
 * CMake ≥ 3.25 и Ninja
 * Компилятор с поддержкой C++20: GCC ≥ 11 (MinGW-w64), Clang ≥ 14 или MSVC 2022
 * Интернет при первой конфигурации: glm, Catch2, GLFW, ImGui, nlohmann/json,
-  nativefiledialog-extended, libHaru и Clipper2 скачиваются через FetchContent в
+  nativefiledialog-extended, libHaru, Clipper2 и stb_image скачиваются через FetchContent в
   `build/<пресет>/_deps` и потом берутся оттуда. У каждого пресета своя копия: зависимости
   debug- и release-сборки компилируются с разными флагами и не должны смешиваться
 
@@ -87,6 +87,10 @@ DXF или каждая деталь в своём DXF для CAD/CAM; раск�
 программы ЧПУ.
 
 ![Кухня](docs/images/kitchen-editor.png)
+
+Декоры: «Parametreler → Desenler» — декор корпуса, фасадов и столешницы, «Desen» в свойствах
+детали — свой декор. Текстуры (CC0, ambientCG) лежат в `assets/textures`; сборка копирует
+`assets` рядом с `ReadyCAD.exe`.
 
 Вырезы и запилы: в свойствах любой детали раздел «Kesimler» — запил угла (под плинтус), запил
 на кромке, скругление и скос угла, вырез внутри, круглое отверстие (кабель-канал). Они

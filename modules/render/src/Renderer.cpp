@@ -1,5 +1,7 @@
 #include "readycad/render/Renderer.hpp"
 
+#include "readycad/render/Image.hpp"
+
 #include <glm/geometric.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/matrix.hpp>
@@ -19,26 +21,51 @@ uniform mat4 uModel;
 uniform mat4 uViewProj;
 uniform mat3 uNormalMatrix;
 out vec3 vNormal;
+out vec3 vWorld;
 void main() {
     vNormal = uNormalMatrix * aNormal;
-    gl_Position = uViewProj * uModel * vec4(aPosition, 1.0);
+    vec4 world = uModel * vec4(aPosition, 1.0);
+    vWorld = world.xyz;
+    gl_Position = uViewProj * world;
 }
 )";
 
+// A decor picture is laid in millimetres of the product: left to right along the panel's
+// length (the grain), on the faces up along its width, on the edges along its thickness.
 constexpr const char* kFragmentShader = R"(#version 330 core
 in vec3 vNormal;
+in vec3 vWorld;
 uniform vec4 uColor;
 uniform int uLit;
 uniform vec3 uLight1;
 uniform vec3 uLight2;
+uniform int uTextured;
+uniform sampler2D uTexture;
+uniform vec4 uTint;
+uniform vec3 uGrain;
+uniform vec3 uAcross;
+uniform float uTile;
 out vec4 fragColor;
 void main() {
     if (uLit == 0) { fragColor = uColor; return; }
     vec3 n = normalize(vNormal);
+    vec3 base = uColor.rgb;
+    if (uTextured == 1) {
+        vec3 thick = cross(uGrain, uAcross);
+        vec3 u = uGrain;
+        vec3 v = uAcross;
+        if (abs(dot(n, uGrain)) > 0.5) { u = uAcross; v = thick; }  // an end of the panel
+        else if (abs(dot(n, uAcross)) > 0.5) { v = thick; }        // a long edge
+        vec2 uv = vec2(dot(vWorld, u), dot(vWorld, v)) / uTile;
+        base = texture(uTexture, uv).rgb * uTint.rgb;
+    }
     float light = 0.38 + 0.50 * max(dot(n, uLight1), 0.0) + 0.22 * max(dot(n, uLight2), 0.0);
-    fragColor = vec4(uColor.rgb * light, uColor.a);
+    fragColor = vec4(base * light, uColor.a);
 }
 )";
+
+/// How large one picture is on the furniture, mm.
+constexpr float kTextureTile = 800.0f;
 
 /// Unit cube [0,1]^3 as 12 triangles with face normals.
 std::vector<float> cubeVertices()
@@ -139,10 +166,61 @@ Renderer::Renderer()
     , uLit_(shader_.location("uLit"))
     , uLight1_(shader_.location("uLight1"))
     , uLight2_(shader_.location("uLight2"))
+    , uTextured_(shader_.location("uTextured"))
+    , uTexture_(shader_.location("uTexture"))
+    , uTint_(shader_.location("uTint"))
+    , uGrain_(shader_.location("uGrain"))
+    , uAcross_(shader_.location("uAcross"))
+    , uTile_(shader_.location("uTile"))
     , cube_(makeMesh(cubeVertices(), GL_TRIANGLES))
     , cubeEdges_(makeMesh(cubeEdgeVertices(), GL_LINES))
     , disc_(makeMesh(discVertices(), GL_TRIANGLES))
 {
+}
+
+void Renderer::setTextureFolder(std::filesystem::path folder)
+{
+    textureFolder_ = std::move(folder);
+    textures_.clear();
+}
+
+GLuint Renderer::texture(const std::string& file)
+{
+    auto it = textures_.find(file);
+    if (it == textures_.end()) {
+        // Loaded once; a picture that cannot be read is remembered as missing (plain colour).
+        GlTexture loaded;
+        if (const auto image = loadImage(textureFolder_ / file)) {
+            GLuint name = 0;
+            glGenTextures(1, &name);
+            loaded = GlTexture(name);
+            glBindTexture(GL_TEXTURE_2D, name);
+            glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, image->width, image->height, 0, GL_RGB,
+                         GL_UNSIGNED_BYTE, image->rgb.data());
+            glGenerateMipmap(GL_TEXTURE_2D);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        }
+        it = textures_.emplace(file, std::move(loaded)).first;
+    }
+    return it->second.get();
+}
+
+void Renderer::useSurface(const SceneSurface& surface)
+{
+    const GLuint name = surface.texture.empty() ? 0 : texture(surface.texture);
+    shader_.set(uTextured_, name != 0 ? 1 : 0);
+    if (name != 0) {
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, name);
+        shader_.set(uTexture_, 0);
+        shader_.set(uTint_, surface.tint);
+        shader_.set(uGrain_, surface.grain);
+        shader_.set(uAcross_, surface.across);
+    }
 }
 
 void Renderer::uploadPrisms(const Scene& scene)
@@ -219,11 +297,13 @@ GLuint Renderer::render(const Scene& scene, const OrbitCamera& camera, int width
     glEnable(GL_POLYGON_OFFSET_FILL);
     glPolygonOffset(1.0f, 1.0f);
     shader_.set(uLit_, 1);
+    shader_.set(uTile_, kTextureTile);
     for (const SceneBox& box : scene.boxes) {
         const glm::mat4 model = boxMatrix(box.min, box.max);
         shader_.set(uModel_, model);
         shader_.set(uNormalMatrix_, normalMatrix(model));
         shader_.set(uColor_, box.color);
+        useSurface(box.surface);
         cube_.draw();
     }
     uploadPrisms(scene);
@@ -231,8 +311,10 @@ GLuint Renderer::render(const Scene& scene, const OrbitCamera& camera, int width
     shader_.set(uNormalMatrix_, glm::mat3(1.0f));
     for (std::size_t i = 0; i < scene.prisms.size(); ++i) {
         shader_.set(uColor_, scene.prisms[i].color);
+        useSurface(scene.prisms[i].surface);
         prismFaces_[i]->draw();
     }
+    shader_.set(uTextured_, 0);
 
     // 2. Holes: dark discs just above the surfaces.
     shader_.set(uLit_, 0);

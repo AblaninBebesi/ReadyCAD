@@ -2,6 +2,12 @@ add_executable(ReadyCAD main.cpp)
 target_link_libraries(ReadyCAD PRIVATE readycad::ui readycad::production)
 rc_set_warnings(ReadyCAD)
 
+# The program's own files (decor pictures) next to the executable, where it looks first.
+add_custom_command(TARGET ReadyCAD POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${PROJECT_SOURCE_DIR}/assets
+            $<TARGET_FILE_DIR:ReadyCAD>/assets
+    COMMENT "Copying assets next to ReadyCAD")
+
 if(WIN32)
     # Release builds: GUI subsystem (no console window). Debug keeps the console for logs.
     set_target_properties(ReadyCAD PROPERTIES WIN32_EXECUTABLE $<NOT:$<CONFIG:Debug>>)

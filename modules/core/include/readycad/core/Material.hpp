@@ -19,6 +19,7 @@ struct Material {
     MaterialType type = MaterialType::Chipboard;
     Real thickness = 18.0;
     bool hasGrain = false; // decor with a direction (wood texture): panels must not be rotated
+    std::string decor{};   // id in the workshop's decor catalogue; empty: the look of its kind
 
     friend bool operator==(const Material&, const Material&) = default;
 };

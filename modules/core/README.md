@@ -10,4 +10,6 @@ Kitchen: a product holds one carcass or one `Kitchen` — `CabinetRow`s of cabin
 
 Shapes: `PanelShape` — notches, shaped corners and openings bound to the edges of a panel (`ShapeFeature`), the outline built from them (`panelOutline`, also grown for the blank), `shapeFits`; `Polygon` helpers.
 
-**Stages:** 1 (math), 2 (component tree), 3 (parametrics), 9 (per-part thickness, cutting plan flag), kitchen, shapes
+Decors: `Decor`, `defaultDecorCatalog()`, `withDecor()` (the decor's name in the material's name, the grain from the decor); `Material::decor`, `ConstructionRules::decors`.
+
+**Stages:** 1 (math), 2 (component tree), 3 (parametrics), 9 (per-part thickness, cutting plan flag), kitchen, shapes, decors

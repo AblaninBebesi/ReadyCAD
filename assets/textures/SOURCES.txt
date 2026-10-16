@@ -1,0 +1,9 @@
+Wood_Beige.jpg;https://ambientcg.com/a/Wood094;CC0;0.8;horisontal
+Wood_Gold.jpg;https://ambientcg.com/a/Wood092;CC0;0.8;horisontal
+Wood_Dark_Brown.jpg;https://ambientcg.com/a/Wood051;CC0;0.8;horisontal
+Wood_Honey_Brown.jpg;https://ambientcg.com/a/Wood066;CC0;0.4;horisontal
+Plastic_White.jpg;https://ambientcg.com/a/Plastic013A;CC0;0.8;horisontal
+Marble_White.jpg;https://ambientcg.com/a/Marble021;CC0;0.8;horisontal
+Marble_Textured.jpg;https://ambientcg.com/a/Marble012;CC0;0.8;horisontal
+Marble_Black.jpg;https://ambientcg.com/a/Marble016;CC0;0.8;horisontal
+Chipboard.jpg;https://ambientcg.com/a/Chipboard005;CC0;0.8;horisontal

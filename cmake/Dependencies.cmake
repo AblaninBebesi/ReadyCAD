@@ -121,5 +121,16 @@ if(READYCAD_BUILD_APP)
         SYSTEM)
     FetchContent_MakeAvailable(nfd)
 
+    # --- stb_image: decoding the decor pictures (JPEG, PNG) for the 3D view --------------------
+    # One header, public domain / MIT; no releases, so pinned to a commit. Its implementation is
+    # compiled once, in a library of its own, without the project's warning flags.
+    FetchContent_Declare(stb
+        URL https://github.com/nothings/stb/archive/2c980bb59875b0d32144a71867fbdebb2f77cd20.tar.gz
+        SYSTEM)
+    FetchContent_MakeAvailable(stb)
+    add_library(stb_image STATIC ${CMAKE_CURRENT_LIST_DIR}/stb_image.c)
+    target_include_directories(stb_image SYSTEM PUBLIC ${stb_SOURCE_DIR})
+    add_library(stb::image ALIAS stb_image)
+
     find_package(OpenGL REQUIRED)
 endif()

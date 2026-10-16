@@ -216,8 +216,23 @@ Scene buildScene(const core::Product& product, const SceneOptions& options)
         }
         const bool isSelected = selected != nullptr && (selected == &c || selected->isAncestorOf(c));
         const ItemCategory category = categoryOf(c.kind());
-        const glm::vec4 color = isSelected ? glm::mix(colorOf(category), kSelectedTint, 0.55f)
-                                           : colorOf(category);
+        // The decor of its material: its picture along the grain, or its colour; without a decor
+        // the colour of its kind of part.
+        SceneSurface surface;
+        glm::vec4 plain = colorOf(category);
+        if (const core::Decor* decor = core::findDecor(rules.decors, c.panel()->material().decor)) {
+            plain = glm::vec4(decor->r / 255.0f, decor->g / 255.0f, decor->b / 255.0f, 1.0f);
+            surface.texture = decor->texture;
+            const detailing::PanelFrame frame(c);
+            surface.grain = glm::vec3(0.0f);
+            surface.grain[core::index(frame.lengthAxis())] = 1.0f;
+            surface.across = glm::vec3(0.0f);
+            surface.across[core::index(frame.widthAxis())] = 1.0f;
+        }
+        if (isSelected) {
+            surface.tint = glm::mix(glm::vec4(1.0f), kSelectedTint, 0.55f);
+        }
+        const glm::vec4 color = isSelected ? glm::mix(plain, kSelectedTint, 0.55f) : plain;
         if (c.panel()->outline().empty() && c.panel()->cutouts().empty()) {
             SceneBox box;
             box.min = toFloat(c.box().min());
@@ -226,6 +241,7 @@ Scene buildScene(const core::Product& product, const SceneOptions& options)
             box.color = color;
             box.component = c.id();
             box.selected = isSelected;
+            box.surface = surface;
             scene.boxes.push_back(box);
         } else {
             ScenePrism prism = prismOf(c);
@@ -233,6 +249,7 @@ Scene buildScene(const core::Product& product, const SceneOptions& options)
             prism.color = color;
             prism.component = c.id();
             prism.selected = isSelected;
+            prism.surface = surface;
             scene.prisms.push_back(std::move(prism));
         }
         scene.bounds.expand(c.box());

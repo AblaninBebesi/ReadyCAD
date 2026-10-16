@@ -4,6 +4,7 @@
 
 #include "readycad/core/builders/Catalog.hpp"
 #include "readycad/core/builders/WardrobeBuilder.hpp"
+#include "readycad/core/Decor.hpp"
 #include "readycad/core/model/Drawer.hpp"
 #include "readycad/core/model/Queries.hpp"
 #include "readycad/storage/Storage.hpp"
@@ -296,4 +297,30 @@ TEST_CASE("The shapes of parts survive save and load", "[storage][project][shape
 
     CHECK_THROWS_AS(loadProduct(std::string(saved).replace(saved.find("cornerNotch"), 11, "starNotch__")),
                     StorageError);
+}
+
+TEST_CASE("Decors survive save and load; an older profile gets the default catalogue",
+          "[storage][project][decor]")
+{
+    const auto wardrobe = createProduct(CatalogItem::Wardrobe);
+    ConstructionRules rules = wardrobe->rules();
+    rules.decors.push_back({"oak-x", "Meşe X", "Oak_X.jpg", 150, 120, 90, true});
+    rules.frontMaterial = withDecor(rules.frontMaterial, findDecor(rules.decors, "wood-dark"), rules.decors);
+    wardrobe->setRules(rules);
+    wardrobe->carcass()->leftSide().setMaterialOverride(
+        withDecor(rules.carcassMaterial, findDecor(rules.decors, "oak-x"), rules.decors));
+
+    const std::string saved = saveProduct(*wardrobe);
+    const auto loaded = loadProduct(saved);
+    CHECK(saveProduct(*loaded) == saved);
+    CHECK(loaded->rules().decors == rules.decors);
+    CHECK(loaded->rules().frontMaterial.name == "MDF Lam 18 Koyu kahve ahşap");
+    CHECK(loaded->carcass()->leftSide().material().decor == "oak-x");
+
+    // A profile written before decors: the materials without one, the catalogue the default.
+    const ConstructionRules old =
+        loadProfile(R"({"format": "readycad-profile", "version": 1, "rules": {"carcassMaterial":
+                       {"name": "Suntalam 18", "type": "chipboard", "thickness": 18, "hasGrain": true}}})");
+    CHECK(old.carcassMaterial.decor.empty());
+    CHECK(old.decors == defaultDecorCatalog());
 }

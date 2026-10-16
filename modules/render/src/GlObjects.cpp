@@ -93,6 +93,11 @@ void ShaderProgram::set(GLint location, int value) const noexcept
     glUniform1i(location, value);
 }
 
+void ShaderProgram::set(GLint location, float value) const noexcept
+{
+    glUniform1f(location, value);
+}
+
 Mesh::Mesh(const float* vertices, GLsizei vertexCount, GLenum primitive)
     : count_(vertexCount), primitive_(primitive)
 {

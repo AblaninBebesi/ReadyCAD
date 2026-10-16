@@ -39,7 +39,7 @@ Oklar sadeleştirilmiştir: her modülün tam bağımlılıkları tabloda listel
 | `cam`       | İşleme operasyonları (makineden bağımsız), CNC nesting planlaması (takımlar, sıra, rotalar, içeriden kesimler), lehçesi ayarlanabilen G-code son işlemcisi | 8, mutfak | core, detailing, nesting, i18n; Clipper2 (modülün içinde gizli) |
 | `editor`    | Belge, seçim, geri al/yinele, arayüz için işlemler, otomatik detaylandırma, ürünü birleştirilemez yapan değişikliklerin reddi. **OpenGL yok**, bu yüzden pencere olmadan test edilir | 5, 9 | yukarıdakilerin hepsi |
 | `production`| Üretim hattı: sipariş → kesilecek parçalar → kesim planı → PDF, DXF, CNC programları, CSV → özetli atölye paketi; pencere olmadan komut satırı | 9 | editor, i18n |
-| `render`    | OpenGL 3.3 core: sahne, kamera, fareyle seçim, GPU nesneleri için RAII sarmalayıcılar | 5 | core, detailing, glad |
+| `render`    | OpenGL 3.3 core: sahne, kamera, fareyle seçim, GPU nesneleri için RAII sarmalayıcılar; prizma olarak şekilli parçalar, desen dokuları | 5, şekiller, desenler | core, detailing, glad; stb_image (modülün içinde gizli) |
 | `ui`        | ImGui pencereleri, diyaloglar, dışa aktarma menüsü, kesim planı ve stok pencereleri | 1, 5–9 | editor, production, i18n, render, ImGui |
 | `app`       | `main()`: pencere veya pencere olmadan toplu işlem | 1, 9 | ui, production |
 
@@ -61,6 +61,7 @@ ReadyCAD/
 │   ├── src/                  gerçekleştirim (dışarıdan görünmez)
 │   └── tests/                modülün birim testleri -> bin/readycad_<name>_tests.exe
 ├── app/                      giriş noktası
+├── assets/textures/          desen resimleri (CC0, ambientCG), exe'nin yanına kopyalanır
 ├── tests/integration/        modüller arası ve uçtan uca (Aşama 9) testler
 └── docs/
 ```
@@ -1402,3 +1403,77 @@ Uzun çalıştırma: 60 oturum × 80 değişiklik, 4800 değişiklikten 3908'i k
 
 Henüz yapılmadı: serbest biçimli eğri konturlar (DXF'ten içe aktarma), kenarda pah (kenar
 profili), boydan boya olmayan cepler.
+
+## Desenler ve dokular (kesimlerden sonra)
+
+Tez danışmanının ikinci isteği: parçalar 3B'de gerçek malzeme gibi görünmeli. Kullanıcı CC0
+lisanslı dokuz dikişsiz doku seçti (ambientCG):
+* dört ahşap;
+* üç mermer;
+* beyaz plastik;
+* yonga levha.
+
+Damarlar soldan sağa gidecek şekilde döndürüldüler. `assets/textures` klasöründeler; kaynaklar ve
+lisanslar `assets/textures/SOURCES.txt` dosyasında.
+
+### Desen malzemenin özelliğidir
+
+| Ne | Nerede | Neden |
+|-----|-----|-------|
+| `Decor`: id, ad, resim (ya da düz renk), ortalama renk, damarı var mı | `core/Decor.hpp` | kulp kataloğu gibi atölye verisi: her atölyede kendi tedarikçisinin desenleri |
+| `ConstructionRules::decors`: katalog (varsayılan 11 desen: 9 resim, açık gri, antrasit) | ürünün kuralları | proje ve atölye profiliyle birlikte kaydedilir |
+| `Material::decor`: desenin id'si | malzeme | varsayılan olarak gövde «Bej ahşap», kapaklar «Beyaz», tezgah «Gri mermer» |
+
+**Başka desen, başka malzemedir.** Kesim planı, kesim listesi ve stok malzemeleri adlarından
+ayırır. Bu yüzden `withDecor()` adın sonuna desenin adını ekler: «Suntalam 18» → «Suntalam 18
+Beyaz» (önceki desenin adı birikmez, değiştirilir). Beyaz ve ceviz parçalar hiçbir zaman aynı
+levhaya ve aynı satıra düşmez, stokta da ayrı kalemler olur. Varsayılan malzemelerin adları
+aynı kalır («Suntalam 18»), bu yüzden eski adlarla tutulan atölye stoku hâlâ uyar.
+
+**Damar desenden gelir.** Ahşap bir desende `grain = true`: malzeme `hasGrain` alır ve kesim
+planı parçaları döndürmez (Aşama 7 kuralı). 3B'de resim, parçanın boyu boyunca gider: modelin
+Aşama 2'den beri damar yönü saydığı eksen. Düz renk ve mermer döndürülebilir.
+
+### Nasıl çizilir
+
+* Sahne (`SceneSurface`) her parça için resmini, boy ve en eksenlerini ve bir çarpanı (seçilende
+  turuncu) taşır. Deseni olmayan parça (arkalık, çekmece kutusu) eskisi gibi kendi türünün
+  rengindedir.
+* Resim doğrudan parça gölgelendiricisinde, yüzeyin normaline göre, ürünün milimetreleriyle
+  serilir (800 mm'de bir karo):
+  * yüzeyde parçanın boyu ve eni boyunca;
+  * uzun kenarda boyu ve kalınlığı boyunca;
+  * uçta eni ve kalınlığı boyunca.
+
+  Bu yüzden damarlar yüzeyden kenara kesintisiz geçer ve her parça için ayrı bir koordinat
+  tamponu gerekmez.
+* `loadImage()` JPEG ve PNG'yi `stb_image` ile okur. Bu, FetchContent ile bağlanan ve bir
+  commit'e sabitlenen tek bir başlık dosyasıdır; uygulaması bizim uyarı bayraklarımız
+  olmadan ayrı bir kütüphanede derlenir. Dosyayı `std::filesystem` okur, bu yüzden Türkçe
+  klasör adları sorun olmaz. Doku bir kez, mipmap'leriyle yüklenir. Resim okunamazsa yerine
+  desenin ortalama rengi çizilir: program çökmez ve beyaz lekeler göstermez.
+* `assets`, derlemeden sonra `ReadyCAD.exe`'nin yanına kopyalanır. Program bu klasörü önce
+  kendi yanında, derleme klasöründen çalışırken kaynak ağacında arar (`ui/Assets.cpp`).
+
+![Desenli mutfak](images/decors-kitchen.png)
+
+### Arayüz
+
+* «Parametreler → Desenler»: gövdenin, kapakların ve mutfakta tezgahın deseni (renk örneği ve
+  adı).
+* Parçanın özelliklerinde «Desen»: «Varsayılan (malzemenin adı)» ya da kendi deseni. Kendi
+  deseni, parçanın kendi malzemesidir (`setMaterialOverride`); bu yüzden her malzeme seçimi
+  gibi geri alınır, kaydedilir ve kesim listesine girer.
+
+![Desen seçimi](images/decors-editor.png)
+
+### Testler
+
+| Ne | Dosya |
+|-----|------|
+| Katalog: tekil id'ler; varsayılan malzemeler ona başvurur, damarlar uyar; başka desende malzemenin adı, desenin değiştirilmesi ve kaldırılması | `core/tests/DecorTests.cpp` |
+| Desenler ve desenli malzemeler kaydedilir; eski profil varsayılan kataloğu alır | `storage/tests/StorageTests.cpp` |
+| Sahne: yan panelin ve üst tablanın resmi ve damar yönü, beyaz kapaklar, desensiz arkalık, yedek renk | `render/tests/SceneTests.cpp` |
+| Kataloğun bütün resimleri okunur ve karedir; eksik veya bozuk dosya çökertmez | `render/tests/ImageTests.cpp` |
+
+Proje biçimi sürüm 4, atölye profili sürüm 2. Eski dosyalar açılır.

@@ -194,3 +194,26 @@ TEST_CASE("A notched side wall is a prism; plain panels stay boxes", "[render][s
     const render::Ray aboveNotch{glm::vec3(-100.0f, 150.0f, 7.0f), glm::vec3(1.0f, 0.0f, 0.0f)};
     CHECK(render::pick(scene, aboveNotch) == carcass.leftSide().id());
 }
+
+TEST_CASE("Panels show the picture of their decor, along their length", "[render][scene][decor]")
+{
+    const auto wardrobe = WardrobeBuilder().build();
+    const render::Scene scene = render::buildScene(*wardrobe, {});
+    const Carcass& c = *wardrobe->carcass();
+    const auto boxOf = [&](ComponentId id) {
+        return *std::find_if(scene.boxes.begin(), scene.boxes.end(),
+                             [&](const render::SceneBox& b) { return b.component == id; });
+    };
+    // The side wall: beige wood, the grain up the wall (its length runs along Y).
+    const render::SceneBox wall = boxOf(c.leftSide().id());
+    CHECK(wall.surface.texture == "Wood_Beige.jpg");
+    CHECK(wall.surface.grain == glm::vec3(0.0f, 1.0f, 0.0f));
+    CHECK(wall.surface.across == glm::vec3(0.0f, 0.0f, 1.0f));
+    // The top panel: the grain across the wardrobe.
+    CHECK(boxOf(c.top().id()).surface.grain == glm::vec3(1.0f, 0.0f, 0.0f));
+    // Doors white; the back without a decor: the colour of its kind.
+    CHECK(boxOf(c.interior().doors()[0]->id()).surface.texture == "Plastic_White.jpg");
+    CHECK(boxOf(c.back().id()).surface.texture.empty());
+    // The colour shown while a picture is missing: its average.
+    CHECK(wall.color.r == Approx(167.0f / 255.0f));
+}

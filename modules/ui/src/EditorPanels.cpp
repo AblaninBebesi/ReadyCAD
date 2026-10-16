@@ -258,6 +258,66 @@ bool drawConstructionRows(UiState& s, core::Carcass& carcass)
     return false;
 }
 
+/// A decor picked from the workshop's catalogue: a colour swatch and its name per entry.
+/// `extra` (a "default" entry) comes first when given; returns true when something was picked,
+/// `picked` is then the decor, or nullptr for the extra entry.
+bool decorCombo(const char* id, const std::vector<core::Decor>& catalog, const std::string& current,
+                const char* extra, bool extraSelected, const core::Decor*& picked)
+{
+    const core::Decor* now = core::findDecor(catalog, current);
+    const char* preview = extraSelected ? extra : (now != nullptr ? now->name.c_str() : tr(TextId::DecorNone));
+    bool changed = false;
+    if (ImGui::BeginCombo(id, preview)) {
+        const float swatch = ImGui::GetTextLineHeight();
+        if (extra != nullptr && ImGui::Selectable(extra, extraSelected)) {
+            picked = nullptr;
+            changed = true;
+        }
+        for (const core::Decor& decor : catalog) {
+            ImGui::PushID(decor.id.c_str());
+            ImGui::ColorButton("##swatch", ImVec4(decor.r / 255.0f, decor.g / 255.0f, decor.b / 255.0f, 1.0f),
+                               ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoBorder, ImVec2(swatch, swatch));
+            ImGui::SameLine();
+            if (ImGui::Selectable(decor.name.c_str(), !extraSelected && &decor == now)) {
+                picked = &decor;
+                changed = true;
+            }
+            ImGui::PopID();
+        }
+        ImGui::EndCombo();
+    }
+    return changed;
+}
+
+/// The decors of the product's materials: carcass, fronts and, in a kitchen, the worktop.
+bool drawDecorRows(UiState& s)
+{
+    ed::Document& doc = *s.document;
+    core::ConstructionRules rules = doc.product().rules();
+    PropertyTable table("decors");
+    if (!table.isOpen()) {
+        return false;
+    }
+    std::vector<std::pair<TextId, core::Material*>> slots{{TextId::DecorCarcass, &rules.carcassMaterial},
+                                                          {TextId::DecorFronts, &rules.frontMaterial}};
+    if (doc.product().kitchen() != nullptr) {
+        slots.emplace_back(TextId::DecorWorktop, &rules.worktopMaterial);
+    }
+    for (std::size_t i = 0; i < slots.size(); ++i) {
+        PropertyTable::row(tr(slots[i].first));
+        ImGui::PushID(static_cast<int>(i));
+        const core::Decor* picked = nullptr;
+        const bool changed = decorCombo("##decor", rules.decors, slots[i].second->decor, nullptr, false, picked);
+        ImGui::PopID();
+        if (changed) {
+            *slots[i].second = core::withDecor(*slots[i].second, picked, rules.decors);
+            run(s, [&] { ed::setRules(doc, rules); });
+            return true;
+        }
+    }
+    return false;
+}
+
 /// Kitchen sizes and the worktop height that follows from them.
 bool drawKitchenRows(UiState& s)
 {
@@ -1134,6 +1194,27 @@ void drawProperties(UiState& s)
             run(s, [&] { ed::setInCuttingPlan(doc, {id}, inPlan); });
             return;
         }
+        // Its own decor, or the one of its material in the product.
+        {
+            PropertyTable table("partDecor");
+            if (table.isOpen()) {
+                PropertyTable::row(tr(TextId::DecorLabel));
+                const core::ConstructionRules& rules = doc.product().rules();
+                const bool own = panel->materialOverride().has_value();
+                const std::string defaultLabel = std::string(tr(TextId::DecorDefault)) + " ("
+                                               + panel->material().name + ")";
+                const core::Decor* picked = nullptr;
+                if (decorCombo("##decor", rules.decors, panel->material().decor,
+                               own ? defaultLabel.c_str() : defaultLabel.c_str(), !own, picked)) {
+                    const core::ComponentId id = panel->id();
+                    const std::optional<core::Material> material =
+                        picked == nullptr ? std::nullopt
+                                          : std::optional(core::withDecor(panel->material(), picked, rules.decors));
+                    run(s, [&] { ed::setMaterialOverride(doc, id, material); });
+                    return;
+                }
+            }
+        }
         if (drawShapeEditor(s, *panel)) {
             return;
         }
@@ -1475,6 +1556,10 @@ void drawParametersWindow(UiState& state)
         } else if (product.kitchen() != nullptr) {
             ImGui::SeparatorText(tr(TextId::KitchenSizes));
             changed = drawKitchenRows(state) || drawAddCabinet(state, std::nullopt);
+        }
+        if (!changed) {
+            ImGui::SeparatorText(tr(TextId::DecorHeader));
+            changed = drawDecorRows(state);
         }
         if (!changed) {
             ImGui::SeparatorText(tr(TextId::ProfileHeader));

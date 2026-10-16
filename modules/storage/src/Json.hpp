@@ -94,7 +94,8 @@ NLOHMANN_JSON_SERIALIZE_ENUM(Axis, {
     {Axis::Z, "z"},
 })
 
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(Material, name, type, thickness, hasGrain)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(Material, name, type, thickness, hasGrain, decor)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(Decor, id, name, texture, r, g, b, grain)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(EdgeBand, thickness, name)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(Size3D, width, height, depth)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(HandleModel, id, name, supplier, article, type,
@@ -141,7 +142,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(ConstructionRules::Kitchen, plin
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
     ConstructionRules, carcassMaterial, backMaterial, frontMaterial, drawerBoxMaterial,
-    drawerBottomMaterial, worktopMaterial, visibleEdge, hiddenEdge, backGrooveDepth, backGrooveOffset,
+    drawerBottomMaterial, worktopMaterial, decors, visibleEdge, hiddenEdge, backGrooveDepth, backGrooveOffset,
     backGrooveWidth, backExpansionGap, backOverlayInset, shelfSideGap, shelfFrontSetback,
     shelfBackGap, confirmatShelfFrontSetback, confirmatShelfBackGap, partitionFrontSetback,
     frontEdgeGap, frontGap, drawerSlideClearance, drawerBoxBottomClearance, drawerBoxTopClearance,

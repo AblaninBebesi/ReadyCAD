@@ -6,4 +6,6 @@ Kitchen: a panel with cut-outs (the worktop) is drawn as boxes around its openin
 
 Shapes: shaped panels are prisms (`ScenePrism`) — the face triangulated by ear clipping with hole bridges (`Triangulate`), walls, edges; picking hits triangles.
 
-**Stages:** 5, kitchen, shapes
+Decors: `SceneSurface` (picture, grain and width axes, tint); the fragment shader lays the picture in product millimetres along the panel's length; `loadImage` (stb_image), textures loaded once, the decor's average colour when a picture is missing.
+
+**Stages:** 5, kitchen, shapes, decors

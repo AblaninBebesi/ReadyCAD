@@ -117,6 +117,8 @@ enum class TextId : std::size_t {
     ShapeRadius, ShapeOffset, ShapeFromEnd, ShapeNotchLength, ShapeNotchDepth, ShapeOpeningLength,
     ShapeOpeningWidth, ShapeDiameter, ShapeAutomatic, ShapeNone, AfterSawTitle, AfterSawNote,
     ShapeFromCorner, ShapeFromEdge,
+    // Decors
+    DecorHeader, DecorCarcass, DecorFronts, DecorWorktop, DecorLabel, DecorDefault, DecorNone,
 
     Count // keep last
 };

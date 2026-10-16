@@ -1,5 +1,6 @@
 #include "readycad/ui/Application.hpp"
 
+#include "Assets.hpp"
 #include "EditorPanels.hpp"
 #include "FileDialogs.hpp"
 #include "Fonts.hpp"
@@ -216,6 +217,7 @@ struct Application::Impl {
     {
         state.sceneOptions.showHoles = config.showHoles;
         state.sceneOptions.showFronts = config.showFronts;
+        renderer.setTextureFolder(assetsFolder() / "textures");
         // Stock of sheets and cutting settings of this user (or of a demo folder).
         loadWorkshopFiles(state, config.dataFolder.value_or(std::filesystem::path{}));
         const auto items = core::catalogItems();

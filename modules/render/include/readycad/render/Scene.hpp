@@ -7,21 +7,30 @@
 
 #include <cstdint>
 #include <optional>
+#include <string>
 #include <vector>
 
 namespace rc::render {
 
 enum class ItemCategory { Carcass, Back, Interior, Front, DrawerBox, Handle, Worktop, Plinth };
 
-/// One axis-aligned box to draw (a panel, a piece of a panel around its cut-outs, a handle), in
-/// float millimetres.
+/// The surface of a panel: the picture of its decor, laid along the panel's length (the grain).
+struct SceneSurface {
+    std::string texture;      ///< file in the texture folder; empty: the plain colour
+    glm::vec4 tint{1.0f};     ///< the picture is multiplied by it (orange when selected)
+    glm::vec3 grain{1.0f, 0.0f, 0.0f};  ///< the panel's length axis: the picture's left to right
+    glm::vec3 across{0.0f, 0.0f, 1.0f}; ///< its width axis
+};
+
+/// One axis-aligned box to draw (a panel or a handle), in float millimetres.
 struct SceneBox {
     glm::vec3 min{0.0f};
     glm::vec3 max{0.0f};
-    glm::vec4 color{1.0f};
+    glm::vec4 color{1.0f}; ///< plain colour; also what a picture that cannot be loaded shows
     ItemCategory category = ItemCategory::Carcass;
     core::ComponentId component; // what gets selected when this box is clicked
     bool selected = false;
+    SceneSurface surface;
 };
 
 /// A panel that is not a plain box — notches, shaped corners, openings: its faces as triangles
@@ -34,6 +43,7 @@ struct ScenePrism {
     ItemCategory category = ItemCategory::Carcass;
     core::ComponentId component;
     bool selected = false;
+    SceneSurface surface;
 };
 
 /// A hole, drawn as a small dark disc on the panel surface.

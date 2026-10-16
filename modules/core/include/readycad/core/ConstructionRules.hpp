@@ -1,5 +1,6 @@
 #pragma once
 
+#include "readycad/core/Decor.hpp"
 #include "readycad/core/Hardware.hpp"
 #include "readycad/core/Material.hpp"
 
@@ -16,12 +17,15 @@ namespace rc::core {
 /// to a Product; stage 5 saves/loads it as a file per workshop.
 struct ConstructionRules {
     // --- Materials --------------------------------------------------------------------------
-    Material carcassMaterial{"Suntalam 18", MaterialType::Chipboard, 18.0, true};
-    Material backMaterial{"HDF 3", MaterialType::HDF, 3.0, false};
-    Material frontMaterial{"MDF Lam 18", MaterialType::MDF, 18.0, false};
-    Material drawerBoxMaterial{"Suntalam 16", MaterialType::Chipboard, 16.0, true};
-    Material drawerBottomMaterial{"HDF 3", MaterialType::HDF, 3.0, false};
-    Material worktopMaterial{"Tezgah 38", MaterialType::Chipboard, 38.0, false};
+    Material carcassMaterial{"Suntalam 18", MaterialType::Chipboard, 18.0, true, "wood-beige"};
+    Material backMaterial{"HDF 3", MaterialType::HDF, 3.0, false, {}};
+    Material frontMaterial{"MDF Lam 18", MaterialType::MDF, 18.0, false, "white"};
+    Material drawerBoxMaterial{"Suntalam 16", MaterialType::Chipboard, 16.0, true, {}};
+    Material drawerBottomMaterial{"HDF 3", MaterialType::HDF, 3.0, false, {}};
+    Material worktopMaterial{"Tezgah 38", MaterialType::Chipboard, 38.0, false, "marble-grey"};
+
+    /// The decors of the workshop's supplier (the materials above refer to them).
+    std::vector<Decor> decors = defaultDecorCatalog();
 
     // --- Edge banding -----------------------------------------------------------------------
     EdgeBand visibleEdge{2.0, "ABS 2"};   // front edges you see and touch

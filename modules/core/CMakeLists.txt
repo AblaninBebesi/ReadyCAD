@@ -7,6 +7,7 @@ rc_add_module(core
     SOURCES
         src/Aabb.cpp
         src/ConstructionRules.cpp
+        src/Decor.cpp
         src/Hardware.cpp
         src/Panel.cpp
         src/PanelShape.cpp
@@ -40,6 +41,7 @@ rc_add_module(core
         tests/ParametricTests.cpp
         tests/HandleTests.cpp
         tests/KitchenTests.cpp
-        tests/PanelShapeTests.cpp)
+        tests/PanelShapeTests.cpp
+        tests/DecorTests.cpp)
 
 target_include_directories(readycad_core PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)

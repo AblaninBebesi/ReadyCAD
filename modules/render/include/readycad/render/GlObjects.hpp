@@ -76,6 +76,7 @@ public:
     void set(GLint location, const glm::vec3& value) const noexcept;
     void set(GLint location, const glm::vec4& value) const noexcept;
     void set(GLint location, int value) const noexcept;
+    void set(GLint location, float value) const noexcept;
 
 private:
     GlName<ProgramDeleter> program_;
