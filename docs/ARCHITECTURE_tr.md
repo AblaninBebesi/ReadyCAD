@@ -30,7 +30,7 @@ Oklar sadeleştirilmiştir: her modülün tam bağımlılıkları tabloda listel
 
 | Modül       | Sorumluluk | Aşama | Bağımlılıklar |
 |-------------|------------|-------|---------------|
-| `core`      | Matematik (mm, double), `Aabb`, mobilya bileşen ağacı (Composite), `Panel`, parametrik yeniden hesaplama; mutfak: modül dizileri, kuşaklar, baza, kesimli tezgah | 1–3, mutfak | glm |
+| `core`      | Matematik (mm, double), `Aabb`, mobilya bileşen ağacı (Composite), `Panel`, parametrik yeniden hesaplama; mutfak: modül dizileri, kuşaklar, baza, kesimli tezgah; parçalarda kesimler | 1–3, mutfak, şekiller | glm |
 | `i18n`      | Metinler (`TextId` + Türkçe tablo), model öğelerinin adları (parça türleri, kenarlar, delikler, bağlantı elemanları), UTF-8, ASCII'ye çevirme, dosya adları | 1, 6, 8, 9 | core |
 | `storage`   | JSON dosyaları: proje (`*.rcproj`), atölye profili (`*.rcprofile`), levha stoku (`stock.rcstock`), kesim ve CNC makinesi ayarları; atölye dosyaları tek klasörde | 5, 7, 8, 9 | core, nesting, cam |
 | `detailing` | Kesim ve net ölçüler, kenar bantları, «Sistem 32» delme, bağlantı elemanları, düzlemdeki parça (`FlatPart`, kesimleriyle), bağlantı elemanları listesi | 4, 6, mutfak | core |
@@ -374,7 +374,7 @@ taraftan işleme) de kullanacak.
 |--------|---------|
 | `CONTOUR` | net parçanın konturu (kapalı çoklu çizgi) |
 | `CUT_CONTOUR` | testereden çıkan ham parça |
-| `CUTOUT` | boydan boya kesim (tezgahta evye, ocak), içeriden frezelenir; mutfakla geldi |
+| `CUTOUT` | boydan boya kesim (tezgahta evye, kablo deliği, herhangi bir parçada iç kesim), içeriden frezelenir |
 | `EDGE_BAND` | bantlı kenarların işaretleri |
 | `DRILL_D5_Z13` | görünen yüzde Ø5, 13 derinliğinde delikler (üstten delinir) |
 | `DRILL_BACK_D7_Z18` | karşı yüzdeki delikler (parçanın çevrilmesi gerekir) |
@@ -1282,3 +1282,123 @@ Henüz yapılmadı:
 * plakadan uzun tezgah: ek modellenmez, elle kesilir;
 * çekmece raylarının delikleri delinmez (dolaplarda da);
 * tezgah arası paneli, kornişler.
+
+## Parçalarda kesimler ve oymalar (mutfaktan sonra)
+
+Tez danışmanının isteği: parça her zaman bir dikdörtgen değildir. Süpürgelik için yan panelde
+köşe kesimi, boru için kenarda kesim, masada veya TV ünitesinde kablo deliği, rafta yuvarlatılmış
+köşeler gerekir. Öneri (altı tür, kurallar aşağıda) danışman tarafından tamamen kabul edildi.
+
+### Kenarlara bağlı altı tür
+
+| Tür (arayüzde) | Yapı | Ne girilir |
+|---|---|---|
+| Köşe kesimi | `CornerNotch` | köşe, parçanın boyu ve eni yönünde ölçü |
+| Köşe yuvarlatma | `CornerRound` | köşe, yarıçap |
+| Köşe pahı | `CornerChamfer` | köşe, iki dik kenar |
+| Kenar kesimi | `EdgeNotch` | kenar, hangi köşesinden ölçüleceği, mesafe, boy, derinlik |
+| İç kesim | `InnerCutout` | merkezin ölçüldüğü köşe, iki mesafe, ölçüler, köşe yarıçapı |
+| Yuvarlak delik | `RoundHole` | aynı şekilde, çap |
+
+Hepsi birlikte bir `std::variant`'tır (`ShapeFeature`, `core/PanelShape.hpp`); liste parçada
+durur (`PanelComponent::shape()`) ve yerleşimde `Panel`'e kopyalanır. Köşeler ve kenarlar
+çizimlerdeki gibi adlandırılır: U1, U2 uzun kenarlar, G1, G2 kısa kenarlar, köşe «U1–G1».
+Konum her zaman mutlak koordinatlardan değil, kenarlardan ölçülür: «U1–G1, 100 × 15»
+süpürgelik kesimi dolap yükselince arka alt köşede kalır; «U2–G2» köşesinden ölçülen bir
+delik ön üst köşenin yanında durur.
+
+![Kesimli ve delikli yan panel](images/shapes-wall.png)
+
+### Kenarlardan kontur
+
+`panelOutline()`, U1–G1 köşesinden başlayarak parçayı saat yönünün tersine dolaşır. Her
+köşeye kendi şeklini (köşe, kesimin basamağı, yay, pah), her kenar boyunca sırayla o kenarın
+kesimlerini koyar. Konturun her kenarı nereden geldiğini bilir:
+
+| Kontur kenarı | Bant |
+|---|---|
+| `Edge`: dört kenardan birinin parçası | o kenarın bandı |
+| `Corner`: yuvarlatma veya pah | köşenin uzun kenarının bandı, yoksa kısa kenarınınki: müşteri bantlı bir kenar bekler |
+| `Notch`: bir kesimin kenarı | yok: kenar bantlama makinesi iç köşeyi dolaşamaz |
+
+`grow` parametresiyle aynı dolaşma **ham parçayı** verir: her kenar kendi payı kadar (ön
+frezeleme eksi bant kalınlığı) dışarı kayar, kesimler net yerlerinde kalır. Böylece net kontur,
+ham parça, ölçüsü ve bantları tek bir formülden çıkar. İç kesimler (`InnerCutout`,
+`RoundHole`), tezgahtaki evye ile aynı `PanelCutout` yapısıdır ve aynı yolu izler.
+
+### Yapılabilir mi
+
+Şekil değişikliği, diğer her değişiklik gibi, parça üretilemiyorsa reddedilir:
+
+* **sığmaz** (`shapeFits`, «kesim parçaya sığmaz»): bir köşede iki şekil; boydan boya ya da
+  komşusuna kadar kesim; kontur kendini kesiyor (kesimler buluştu veya üst üste bindi); iç kesim
+  parçanın dışına çıkıyor ya da kenara ve komşu kesime `minBridge` = 10 mm'den az malzeme
+  bırakıyor;
+* **işlemeye denk gelir** (`findShapeConflicts`, «delik veya kanal kesime denk gelir»):
+  * yüzeydeki bir delik bütün dairesiyle malzemede olmalı;
+  * kenardaki bir delik kendi kenarının kalan bir parçasından girmeli ve malzemede bitmeli;
+  * bir kanal malzemenin içinden geçmeli.
+
+560 mm'lik dolapta örnek: arkalık kanalı arka kenardan 16…20 mm'de geçer. 15 mm'lik süpürgelik
+kesimi yanından geçer, 20 mm'lik ise kanalı keserdi ve reddedilir. Üst tablanın konfirmatlarının
+yan panel ucuna girdiği köşe kesilemez. Denetimi detaylandırma yapar (deliklere ihtiyacı
+vardır); `Document::edit` denetimden önce delikleri yeniden hesaplar.
+
+### Bütün zincir boyunca
+
+* **Kesim listesi:** kontur işleme karşılaştırmasına girer; bu yüzden yuvarlatılmış raf,
+  düz raflardan ayrı bir satırdır.
+* **DXF ve PDF çizimleri:**
+  * parçanın (`CONTOUR`) ve ham parçanın (`CUT_CONTOUR`) konturu gerçek şeklindedir;
+  * bant işaretleri kesimin içinden değil, bantlı kenarlar boyunca gider;
+  * kesim kenarlarında ölçüler vardır;
+  * parça sayfasında her şekil için «Kesimler» satırları bulunur («Köşe kesimi U1–G1: 100 × 15»).
+* **Kesim planı:**
+  * nesting merkezi ham parçayı gerçek şekliyle alır ve No-Fit Polygon ile yerleştirir:
+    Aşama 7'de modeldeki şekilli parçaları «sonraya» bırakmıştık, artık varlar;
+  * testere çevreleyen dikdörtgeni keser; özette «Testereden sonra yapılacak kesimler»
+    bölümü çıkar: hangi parçalar CNC'de ya da elle tamamlanır.
+* **CNC programı:**
+  * dış kontur şekle göre, iç kesimler içeriden ve konturlardan önce frezelenir;
+  * frezeden dar bir kesim makinede yapılamaz: freze onun üzerinden geçerdi. Bu şöyle anlaşılır:
+    freze yarıçapı kadar büyütülüp geri küçültülen kontur daha dolu çıkar. Böyle bir kesim
+    sessizce kaybolmaz, «diğer makinelere kalan işler»e gider.
+
+  ![Freze yolu](images/shapes-toolpath.png)
+* **3B:** şekilli bir parça prizma olarak çizilir. Yüzey kulak kesme yöntemiyle üçgenlere
+  ayrılır (`render/Triangulate.cpp`): her delik, gördüğü bir köşeye köprüyle kontura bağlanır
+  (Eberly yöntemi), sonra üçgen «kulaklar» tek tek kesilir. Duvarlar kontur boyunca ve
+  kesimlerin çevresinde, çizgiler konturun döndüğü yerlerdedir. Fareyle seçim üçgenlere
+  bakar (Möller–Trumbore); bu yüzden bir kesime tıklamak arkasındakini seçer. Mutfak tezgahı
+  da artık köşeleri yuvarlatılmış kesimleriyle bir prizmadır.
+* **Proje dosyası:** sürüm 3; parçada `"shape": [{"type": "cornerNotch", "corner": "L1W1",
+  "alongLength": 100, "alongWidth": 15}, ...]`. Sürüm 1 ve 2 dosyaları açılır.
+
+### Arayüz
+
+![«Kesimler» bölümü](images/shapes-editor.png)
+
+Her parçanın özelliklerinde «Kesimler» bölümü vardır:
+* parçanın çizimindeki gibi bir taslağı: bantlı kenarlar kırmızı, kenar adları yazılı;
+* otomatik kesimler (tezgahta evye) salt okunur;
+* şekil listesi, alanlarıyla ve «Sil» düğmesiyle;
+* «Kesim ekle», bu ölçüdeki parçaya sığan bir şekil ekler.
+
+### Testler
+
+| Ne | Dosya |
+|-----|------|
+| Her türün konturu, kenarları ve bantları, paylı ham parça, her köşeden iç kesimler, daire; neyin sığıp neyin sığmadığı; ölçü değişince şekillerin parçayı izlemesi | `core/tests/PanelShapeTests.cpp` |
+| Kontur ve ham parçayla açınım; kesimlere karşı kanal, raf pimi delikleri ve kenardaki konfirmatlar; yuvarlatılmış raf ayrı satır | `detailing/tests/ShapeCheckTests.cpp` |
+| Şeklin kabulü veya nedeni ve parça adıyla reddi; geri alma | `editor/tests/OperationsTests.cpp` |
+| Şekiller kaydedilir; bilinmeyen tür dosya hatasıdır | `storage/tests/StorageTests.cpp` |
+| DXF: altı noktalı kontur, ham parça, iç kesim, kesim ölçüleri, bant işaretleri | `export/tests/DxfTests.cpp` |
+| Şekle ve dikdörtgene göre kesim planı; dar kesim diğer makinelere | `nesting/tests/FreeNestingTests.cpp`, `cam/tests/NestingCenterTests.cpp` |
+| Üçgenleme: dikdörtgen, kesimler, birden çok iç kesim; 3B'de kesimli parça | `render/tests/TriangulateTests.cpp`, `render/tests/SceneTests.cpp` |
+| Özette «testereden sonra» | `production/tests/SummaryTests.cpp` |
+| **Şekil yolculuğu**: iki yan panelde kesim, rafta kablo deliği ve yuvarlatmalar; proje; DXF; CNC programı; testere; rastgele kullanıcı parçaları keser | `tests/integration/ShapeJourneyTests.cpp`, `tests/integration/RobustnessTests.cpp` |
+
+Uzun çalıştırma: 60 oturum × 80 değişiklik, 4800 değişiklikten 3908'i kabul edildi, hiç ihlal yok.
+
+Henüz yapılmadı: serbest biçimli eğri konturlar (DXF'ten içe aktarma), kenarda pah (kenar
+profili), boydan boya olmayan cepler.

@@ -9,6 +9,10 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <glm/geometric.hpp>
+
+#include <algorithm>
+
 using namespace rc;
 using namespace rc::core;
 using render::ItemCategory;
@@ -150,15 +154,43 @@ TEST_CASE("A worktop is drawn around its cut-outs", "[render][scene][kitchen]")
     const render::Ray beside{glm::vec3(1200.0f, 3000.0f, 450.0f), glm::vec3(0.0f, -1.0f, 0.0f)};
     CHECK(render::pick(scene, beside) == worktop.id());
 
-    // Its pieces cover exactly the worktop without the two openings (corners drawn square).
-    double area = 0.0;
-    for (const auto& box : scene.boxes) {
-        if (box.component == worktop.id()) {
-            CHECK(box.category == ItemCategory::Worktop);
-            area += static_cast<double>(box.max.x - box.min.x)
-                  * static_cast<double>(box.max.z - box.min.z);
+    // A prism: its top face is the worktop without the two openings (rounded corners as
+    // straight pieces: a fraction of a square millimetre each).
+    const auto prism = std::find_if(scene.prisms.begin(), scene.prisms.end(),
+                                    [&](const render::ScenePrism& p) { return p.component == worktop.id(); });
+    REQUIRE(prism != scene.prisms.end());
+    CHECK(prism->category == ItemCategory::Worktop);
+    double top = 0.0;
+    for (std::size_t i = 0; i < prism->normals.size(); ++i) {
+        if (prism->normals[i].y > 0.5f) {
+            const glm::dvec3 a(prism->triangles[3 * i]);
+            const glm::dvec3 b(prism->triangles[3 * i + 1]);
+            const glm::dvec3 c(prism->triangles[3 * i + 2]);
+            top += glm::length(glm::cross(b - a, c - a)) / 2.0;
         }
     }
-    CHECK(area == Approx(2400.0 * 600.0 - 560.0 * 480.0 - 560.0 * 490.0));
+    const double pi = 3.14159265358979;
+    const double sink = 560.0 * 480.0 - (4.0 - pi) * 15.0 * 15.0;
+    const double hob = 560.0 * 490.0 - (4.0 - pi) * 5.0 * 5.0;
+    CHECK(top == Approx(2400.0 * 600.0 - sink - hob).epsilon(1e-4));
     CHECK(countCategory(scene, ItemCategory::Plinth) == 5);
+}
+
+TEST_CASE("A notched side wall is a prism; plain panels stay boxes", "[render][scene][shape]")
+{
+    const auto wardrobe = WardrobeBuilder().build();
+    Carcass& carcass = *wardrobe->carcass();
+    // A skirting board notch at the rear bottom corner (L1 is the rear edge, W1 the bottom end).
+    carcass.leftSide().setShape({CornerNotch{PanelCorner::L1W1, 100.0, 15.0}});
+    const render::Scene scene = render::buildScene(*wardrobe, {});
+    REQUIRE(scene.prisms.size() == 1);
+    CHECK(scene.boxes.size() == collectPanels(*wardrobe).size() - 1 + 2); // + 2 door handles
+
+    // The notch is empty: a ray along X through it at the rear bottom misses the wall...
+    const render::Ray throughNotch{glm::vec3(-100.0f, 50.0f, 7.0f), glm::vec3(1.0f, 0.0f, 0.0f)};
+    const auto hit = render::pick(scene, throughNotch);
+    CHECK((!hit || *hit != carcass.leftSide().id()));
+    // ...above it the wall is there.
+    const render::Ray aboveNotch{glm::vec3(-100.0f, 150.0f, 7.0f), glm::vec3(1.0f, 0.0f, 0.0f)};
+    CHECK(render::pick(scene, aboveNotch) == carcass.leftSide().id());
 }

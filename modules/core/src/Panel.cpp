@@ -1,5 +1,6 @@
 #include "readycad/core/Panel.hpp"
 
+#include <algorithm>
 #include <stdexcept>
 #include <utility>
 
@@ -44,6 +45,19 @@ const EdgeBand& Panel::edge(EdgeSide side) const noexcept
 void Panel::setEdge(EdgeSide side, EdgeBand band)
 {
     edges_[static_cast<std::size_t>(side)] = std::move(band);
+}
+
+void Panel::setShape(std::vector<ShapeFeature> features, std::vector<PanelCutout> automaticOpenings)
+{
+    const bool shaped = std::any_of(features.begin(), features.end(),
+                                    [](const ShapeFeature& f) { return changesOutline(f); });
+    outline_ = shaped ? panelOutline(finishLength_, finishWidth_, features)
+                      : std::vector<OutlineSide>{};
+    cutouts_ = std::move(automaticOpenings);
+    for (const PanelCutout& opening : featureOpenings(finishLength_, finishWidth_, features)) {
+        cutouts_.push_back(opening);
+    }
+    shape_ = std::move(features);
 }
 
 } // namespace rc::core

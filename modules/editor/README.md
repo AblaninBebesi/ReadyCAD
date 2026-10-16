@@ -6,4 +6,6 @@ Stage 9: an edit that would make the product impossible to build (parts in each 
 
 Kitchen: carcass operations by carcass id; add, size, move and remove cabinets, kitchen sizes, worktop cut-outs, top style, plinth; an edit that puts a cut-out where it cannot be made is refused like an overlap.
 
-**Stages:** 5, 9, kitchen
+Shapes: `setShape`; a shape that does not fit or takes away material a hole or a groove needs is refused (`shapeConflicts()`).
+
+**Stages:** 5, 9, kitchen, shapes

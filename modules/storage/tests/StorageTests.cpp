@@ -225,7 +225,7 @@ TEST_CASE("A project of version 1 still opens", "[storage][project]")
             text.replace(at, from.size(), to);
         }
     };
-    replace("\"version\": 2", "\"version\": 1");
+    replace("\"version\": " + std::to_string(kProjectFormatVersion), "\"version\": 1");
     // "topStyle" is the last key of a carcass: take it out with the comma before it.
     for (auto at = text.find("\"topStyle\""); at != std::string::npos;
          at = text.find("\"topStyle\"")) {
@@ -271,4 +271,29 @@ TEST_CASE("Files with Turkish names", "[storage][file]")
 
     std::filesystem::remove(path);
     CHECK_THROWS_AS(readTextFile(path), StorageError);
+}
+
+TEST_CASE("The shapes of parts survive save and load", "[storage][project][shape]")
+{
+    const auto wardrobe = createProduct(CatalogItem::Wardrobe);
+    Carcass& c = *wardrobe->carcass();
+    const std::vector<ShapeFeature> wall{CornerNotch{PanelCorner::L1W1, 100.0, 15.0},
+                                         EdgeNotch{EdgeSide::L1, true, 300.0, 80.0, 40.0},
+                                         InnerCutout{PanelCorner::L2W2, 300.0, 150.0, 120.0, 60.0, 8.0}};
+    const std::vector<ShapeFeature> shelf{CornerRound{PanelCorner::L2W1, 80.0},
+                                          CornerChamfer{PanelCorner::L2W2, 60.0, 40.0},
+                                          RoundHole{PanelCorner::L1W1, 380.0, 200.0, 60.0}};
+    c.leftSide().setShape(wall);
+    c.interior().shelves()[1]->setShape(shelf);
+
+    const std::string saved = saveProduct(*wardrobe);
+    CHECK_THAT(saved, Catch::Matchers::ContainsSubstring("\"cornerNotch\""));
+    const auto loaded = loadProduct(saved);
+    CHECK(saveProduct(*loaded) == saved);
+    CHECK(loaded->carcass()->leftSide().shape() == wall);
+    CHECK(loaded->carcass()->interior().shelves()[1]->shape() == shelf);
+    requireSameGeometry(*wardrobe, *loaded);
+
+    CHECK_THROWS_AS(loadProduct(std::string(saved).replace(saved.find("cornerNotch"), 11, "starNotch__")),
+                    StorageError);
 }

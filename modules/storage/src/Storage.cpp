@@ -5,8 +5,10 @@
 
 #include <nlohmann/json.hpp>
 
+#include <array>
 #include <fstream>
 #include <sstream>
+#include <variant>
 
 using nlohmann::json;
 
@@ -32,8 +34,36 @@ constexpr std::string_view kProfileFormat = "readycad-profile";
 // Writing
 // ---------------------------------------------------------------------------------------------
 
+/// The file name of each kind of shape feature.
+constexpr std::array<const char*, std::variant_size_v<ShapeFeature>> kShapeTypes = {
+    "cornerNotch", "cornerRound", "chamfer", "edgeNotch", "cutout", "hole"};
+
+json writeShape(const std::vector<ShapeFeature>& features)
+{
+    json out = json::array();
+    for (const ShapeFeature& feature : features) {
+        json item = std::visit([](const auto& f) { return json(f); }, feature);
+        item["type"] = kShapeTypes.at(feature.index());
+        out.push_back(item);
+    }
+    return out;
+}
+
+template <std::size_t I = 0>
+ShapeFeature readFeature(const json& in, const std::string& type)
+{
+    if constexpr (I < std::variant_size_v<ShapeFeature>) {
+        if (type == kShapeTypes[I]) {
+            return in.get<std::variant_alternative_t<I, ShapeFeature>>();
+        }
+        return readFeature<I + 1>(in, type);
+    } else {
+        throw StorageError("Unknown part shape feature '" + type + "'");
+    }
+}
+
 /// Per-part choices of a panel: name, material and edge overrides, left out of the cutting
-/// plan. Only what differs from the defaults is written.
+/// plan, its shape. Only what differs from the defaults is written.
 void writePanelChoices(const PanelComponent& part, json& out)
 {
     if (!part.name().empty()) {
@@ -55,6 +85,9 @@ void writePanelChoices(const PanelComponent& part, json& out)
     }
     if (!edges.empty()) {
         out["edges"] = edges;
+    }
+    if (!part.shape().empty()) {
+        out["shape"] = writeShape(part.shape());
     }
 }
 
@@ -241,6 +274,13 @@ void readPanelChoices(const json& in, PanelComponent& part)
         part.setMaterialOverride(in.at("material").get<Material>());
     }
     part.setInCuttingPlan(in.value("cutting", true));
+    if (in.contains("shape")) {
+        std::vector<ShapeFeature> shape;
+        for (const json& feature : in.at("shape")) {
+            shape.push_back(readFeature(feature, feature.at("type").get<std::string>()));
+        }
+        part.setShape(std::move(shape));
+    }
     if (in.contains("edges")) {
         const json& edges = in.at("edges");
         const std::pair<EdgeSide, const char*> sides[] = {

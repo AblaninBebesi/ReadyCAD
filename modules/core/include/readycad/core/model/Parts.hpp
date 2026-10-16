@@ -310,7 +310,7 @@ public:
 protected:
     Vec3 updateSize(const LayoutSlot& slot) override;
     Vec3 updatePosition(const LayoutSlot& slot, const Vec3& size) override;
-    void updatePanel(const LayoutSlot& slot) override;
+    std::vector<PanelCutout> automaticOpenings(const LayoutSlot& slot) const override;
     const Material& defaultMaterial(const ConstructionRules& r) const override;
     EdgeBand defaultEdge(EdgeSide side, const LayoutSlot& slot) const override;
 };

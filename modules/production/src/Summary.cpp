@@ -130,6 +130,12 @@ std::vector<std::string> attentionLines(const editor::Document& document)
         lines.push_back(txt(TextId::OverlapWarning) + ": " + i18n::displayName(*o.first) + " — "
                         + i18n::displayName(*o.second));
     }
+    for (const core::Carcass* cabinet : document.misplacedCutouts()) {
+        lines.push_back(txt(TextId::CutoutWarning) + ": " + i18n::displayName(*cabinet));
+    }
+    for (const detailing::ShapeConflict& c : document.shapeConflicts()) {
+        lines.push_back(txt(TextId::ShapeWarning) + ": " + i18n::displayName(*c.part));
+    }
     for (const std::string& warning : document.detailingReport().warnings) {
         lines.push_back(warning);
     }
@@ -206,6 +212,24 @@ std::string summaryText(const Order& order, const nesting::NestingResult* plan,
         }
         if (saw) {
             out += "\n" + txt(TextId::SawProgramsNote) + "\n";
+            // The saw cuts rectangles: notches, shaped corners and openings come after it.
+            std::vector<std::vector<std::string>> shaped;
+            for (std::size_t i = 0; i < cutList.size(); ++i) {
+                const detailing::CutListRow& row = cutList[i];
+                if (!row.inCuttingPlan) {
+                    continue;
+                }
+                const detailing::FlatPart flat = detailing::flatPartOf(doc.product(), row);
+                if (flat.shaped() || !flat.cutouts.empty()) {
+                    shaped.push_back({std::to_string(i + 1), exporting::partName(row),
+                                      "× " + std::to_string(row.quantity * order.quantity)});
+                }
+            }
+            if (!shaped.empty()) {
+                out += heading(txt(TextId::AfterSawTitle));
+                out += textTable(shaped, {true, false, true});
+                out += txt(TextId::AfterSawNote) + "\n";
+            }
         }
     }
 

@@ -145,6 +145,30 @@ Renderer::Renderer()
 {
 }
 
+void Renderer::uploadPrisms(const Scene& scene)
+{
+    if (scene.serial == prismSerial_ && prismFaces_.size() == scene.prisms.size()) {
+        return; // the same scene: its prisms are on the GPU already
+    }
+    prismFaces_.clear();
+    prismEdges_.clear();
+    for (const ScenePrism& prism : scene.prisms) {
+        std::vector<float> faces;
+        for (std::size_t i = 0; i < prism.triangles.size(); ++i) {
+            const glm::vec3& p = prism.triangles[i];
+            const glm::vec3& n = prism.normals[i / 3];
+            faces.insert(faces.end(), {p.x, p.y, p.z, n.x, n.y, n.z});
+        }
+        std::vector<float> edges;
+        for (const glm::vec3& p : prism.lines) {
+            edges.insert(edges.end(), {p.x, p.y, p.z, 0.0f, 0.0f, 0.0f});
+        }
+        prismFaces_.push_back(std::make_unique<Mesh>(makeMesh(faces, GL_TRIANGLES)));
+        prismEdges_.push_back(std::make_unique<Mesh>(makeMesh(edges, GL_LINES)));
+    }
+    prismSerial_ = scene.serial;
+}
+
 void Renderer::drawGrid(const Scene& scene, const glm::mat4& viewProjection)
 {
     // A 100 mm floor grid a bit larger than the product; rebuilt only when it must grow.
@@ -202,6 +226,13 @@ GLuint Renderer::render(const Scene& scene, const OrbitCamera& camera, int width
         shader_.set(uColor_, box.color);
         cube_.draw();
     }
+    uploadPrisms(scene);
+    shader_.set(uModel_, glm::mat4(1.0f));
+    shader_.set(uNormalMatrix_, glm::mat3(1.0f));
+    for (std::size_t i = 0; i < scene.prisms.size(); ++i) {
+        shader_.set(uColor_, scene.prisms[i].color);
+        prismFaces_[i]->draw();
+    }
 
     // 2. Holes: dark discs just above the surfaces.
     shader_.set(uLit_, 0);
@@ -217,6 +248,11 @@ GLuint Renderer::render(const Scene& scene, const OrbitCamera& camera, int width
         shader_.set(uModel_, boxMatrix(box.min, box.max));
         shader_.set(uColor_, box.selected ? kSelectedOutline : kOutline);
         cubeEdges_.draw();
+    }
+    shader_.set(uModel_, glm::mat4(1.0f));
+    for (std::size_t i = 0; i < scene.prisms.size(); ++i) {
+        shader_.set(uColor_, scene.prisms[i].selected ? kSelectedOutline : kOutline);
+        prismEdges_[i]->draw();
     }
     if (scene.highlight) {
         const glm::vec3 min(static_cast<float>(scene.highlight->min().x),

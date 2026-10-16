@@ -14,4 +14,6 @@ Stage 9: cut list rows left out of the cutting plan are marked with "*" and a fo
 
 Kitchen: cut-outs on the `CUTOUT` layer, dimensioned as a chain along the part.
 
-**Stages:** 6, 7, 9, kitchen
+Shapes: real outlines and blanks of shaped parts, band marks along the banded sides, notch dimensions, the features on the part page.
+
+**Stages:** 6, 7, 9, kitchen, shapes

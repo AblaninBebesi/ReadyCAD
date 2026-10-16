@@ -213,6 +213,14 @@ void setMaterialOverride(Document& doc, ComponentId part, std::optional<core::Ma
     });
 }
 
+void setShape(Document& doc, ComponentId part, std::vector<core::ShapeFeature> features)
+{
+    doc.edit(
+        "Part shape",
+        [&](Product& p) { require<core::PanelComponent>(p, part).setShape(std::move(features)); },
+        key("shape", part));
+}
+
 void setInCuttingPlan(Document& doc, const std::vector<ComponentId>& parts, bool inPlan)
 {
     doc.edit("Cutting plan", [&](Product& p) {

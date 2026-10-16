@@ -11,4 +11,6 @@ Stage 9: `WorkshopFiles` (stock and settings of a workshop in one folder, missin
 
 Kitchen: project format 2 — `"kitchen"` with sizes, worktop and the cabinets of both rows; carcasses with `topStyle`, `plinth`, `width`, `cutout`. Version 1 files still open.
 
-**Stages:** 5, 7, 8, 9, kitchen
+Shapes: project format 3 — `"shape"` of a part.
+
+**Stages:** 5, 7, 8, 9, kitchen, shapes

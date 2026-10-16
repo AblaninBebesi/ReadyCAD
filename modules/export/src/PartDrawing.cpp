@@ -109,15 +109,30 @@ Drawing drawPart(const FlatPart& part, const PartDrawingOptions& options)
     const Real l = part.length;
     const Real w = part.width;
 
+    // The finished part and the sawn blank: rectangles, or the real shape with its notches and
+    // shaped corners.
+    const bool shaped = part.shaped();
     const std::size_t contour = drawing.addLayer(
         {std::string(layers::kContour), 7, {0, 0, 0}, LineType::Continuous, LineWeight::Thick});
-    drawing.rectangle(contour, Vec2(0.0), Vec2(l, w));
+    if (shaped) {
+        std::vector<Vec2> points;
+        for (const detailing::FlatContourSide& side : part.contour) {
+            points.push_back(side.start);
+        }
+        drawing.add(contour, Polyline{points, true, false});
+    } else {
+        drawing.rectangle(contour, Vec2(0.0), Vec2(l, w));
+    }
 
     if (options.cutContour) {
         const std::size_t cut = drawing.addLayer({std::string(layers::kCutContour), 8,
                                                   {150, 150, 150}, LineType::Continuous,
                                                   LineWeight::Thin});
-        drawing.rectangle(cut, part.cut.min, part.cut.max);
+        if (shaped) {
+            drawing.add(cut, Polyline{part.blank, true, false});
+        } else {
+            drawing.rectangle(cut, part.cut.min, part.cut.max);
+        }
     }
 
     // Holes and grooves, one layer per tool and depth.
@@ -155,11 +170,23 @@ Drawing drawPart(const FlatPart& part, const PartDrawingOptions& options)
                                                     LineWeight::Thick});
         const Real inset = 0.35 * h;
         const Real gap = 0.5 * h;
+        // A shaped part: marks along the sides that are banded — the pieces of the edges and
+        // the shaped corners, not the notches.
+        for (const detailing::FlatContourSide& side : part.contour) {
+            if (!shaped || !side.band.present() || glm::length(side.end - side.start) < inset) {
+                continue;
+            }
+            const Vec2 along = glm::normalize(side.end - side.start);
+            const Vec2 inward(-along.y, along.x);
+            const Real trim = side.kind == core::OutlineSideKind::Edge ? inset : 0.0;
+            drawing.line(marks, side.start + inward * inset + along * trim,
+                         side.end + inward * inset - along * trim);
+        }
         for (std::size_t i = 0; i < part.outline.size(); ++i) {
             const detailing::FlatEdge& edge = part.outline[i];
             const Vec2 along = glm::normalize(edge.end - edge.start);
             const Vec2 inward(-along.y, along.x); // the outline runs counter-clockwise
-            if (edge.band.present()) {
+            if (edge.band.present() && !shaped) {
                 drawing.line(marks, edge.start + inward * inset + along * inset,
                              edge.end + inward * inset - along * inset);
             }
@@ -218,6 +245,14 @@ Drawing drawPart(const FlatPart& part, const PartDrawingOptions& options)
         drawing.dimension(dims, {Vec2(0.0, 0.0), Vec2(l, 0.0),
                                  -(offset + (chained ? 2.5 * h : 0.0)), "", h, h});
         drawing.dimension(dims, {Vec2(0.0, 0.0), Vec2(0.0, w), offset, "", h, h});
+        // The sides of the notches, dimensioned in the space they leave free (outside the
+        // outline, which runs counter-clockwise).
+        for (const detailing::FlatContourSide& side : part.contour) {
+            if (side.kind == core::OutlineSideKind::Notch
+                && glm::length(side.end - side.start) > core::kEpsilon) {
+                drawing.dimension(dims, {side.start, side.end, -1.2 * h, "", h, h});
+            }
+        }
     }
 
     // Origin of the hole coordinates.

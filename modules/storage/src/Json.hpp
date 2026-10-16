@@ -76,6 +76,18 @@ NLOHMANN_JSON_SERIALIZE_ENUM(CutoutKind, {
     {CutoutKind::Sink, "sink"},
     {CutoutKind::Hob, "hob"},
 })
+NLOHMANN_JSON_SERIALIZE_ENUM(EdgeSide, {
+    {EdgeSide::L1, "L1"},
+    {EdgeSide::L2, "L2"},
+    {EdgeSide::W1, "W1"},
+    {EdgeSide::W2, "W2"},
+})
+NLOHMANN_JSON_SERIALIZE_ENUM(PanelCorner, {
+    {PanelCorner::L1W1, "L1W1"},
+    {PanelCorner::L1W2, "L1W2"},
+    {PanelCorner::L2W2, "L2W2"},
+    {PanelCorner::L2W1, "L2W1"},
+})
 NLOHMANN_JSON_SERIALIZE_ENUM(Axis, {
     {Axis::X, "x"},
     {Axis::Y, "y"},
@@ -92,6 +104,14 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(HandlePlacement, modelId, orient
                                                 edgeOffset, anchorOffset)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(WorktopCutout, kind, width, depth, radius,
                                                 frontOffset)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(CornerNotch, corner, alongLength, alongWidth)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(CornerRound, corner, radius)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(CornerChamfer, corner, alongLength, alongWidth)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(EdgeNotch, edge, fromEnd, offset, length, depth)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(InnerCutout, from, alongLength, alongWidth,
+                                                length, width, radius)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(RoundHole, from, alongLength, alongWidth,
+                                                diameter)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(Kitchen::Sizes, baseHeight, wallHeight, wallDepth,
                                                 worktopDepth)
 
@@ -126,7 +146,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
     shelfBackGap, confirmatShelfFrontSetback, confirmatShelfBackGap, partitionFrontSetback,
     frontEdgeGap, frontGap, drawerSlideClearance, drawerBoxBottomClearance, drawerBoxTopClearance,
     drawerBoxMaxHeight, drawerRearClearance, drawerSlideLengths, kitchen, system32, joints, confirmat,
-    dowel, eccentric, shelfSupport, hinge, minWallBetweenHoles, handles, cutting)
+    dowel, eccentric, shelfSupport, hinge, minWallBetweenHoles, minBridge, handles, cutting)
 
 } // namespace rc::core
 

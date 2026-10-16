@@ -157,6 +157,57 @@ std::string partName(ComponentKind kind, const std::string& name, std::optional<
     return result;
 }
 
+std::string cornerText(core::PanelCorner corner)
+{
+    using core::EdgeSide;
+    const bool l1 = corner == core::PanelCorner::L1W1 || corner == core::PanelCorner::L1W2;
+    const bool w1 = corner == core::PanelCorner::L1W1 || corner == core::PanelCorner::L2W1;
+    return std::string(text(edgeText(l1 ? EdgeSide::L1 : EdgeSide::L2))) + "–"
+         + std::string(text(edgeText(w1 ? EdgeSide::W1 : EdgeSide::W2)));
+}
+
+TextId featureKindText(const core::ShapeFeature& feature) noexcept
+{
+    static constexpr TextId kinds[] = {TextId::ShapeCornerNotch, TextId::ShapeCornerRound,
+                                       TextId::ShapeChamfer,     TextId::ShapeEdgeNotch,
+                                       TextId::ShapeInnerCutout, TextId::ShapeRoundHole};
+    return kinds[feature.index()];
+}
+
+std::string featureText(const core::ShapeFeature& feature)
+{
+    const std::string kind(text(featureKindText(feature)));
+    const auto from = [](core::PanelCorner corner, core::Real alongL, core::Real alongW) {
+        return cornerText(corner) + std::string(text(TextId::ShapeFromCorner)) + " " + mm(alongL) + " / "
+               + mm(alongW);
+    };
+    return std::visit(
+        [&](const auto& f) -> std::string {
+            using T = std::decay_t<decltype(f)>;
+            if constexpr (std::is_same_v<T, core::CornerNotch> || std::is_same_v<T, core::CornerChamfer>) {
+                return kind + " " + cornerText(f.corner) + ": " + mm(f.alongLength) + " × "
+                     + mm(f.alongWidth);
+            } else if constexpr (std::is_same_v<T, core::CornerRound>) {
+                return kind + " " + cornerText(f.corner) + ": R" + mm(f.radius);
+            } else if constexpr (std::is_same_v<T, core::EdgeNotch>) {
+                // The offset runs from the edge's corner with W1 / L1, or with W2 / L2.
+                const bool longEdge = f.edge == core::EdgeSide::L1 || f.edge == core::EdgeSide::L2;
+                const core::EdgeSide start = longEdge ? (f.fromEnd ? core::EdgeSide::W2 : core::EdgeSide::W1)
+                                                      : (f.fromEnd ? core::EdgeSide::L2 : core::EdgeSide::L1);
+                return kind + " " + std::string(text(edgeText(f.edge))) + ": "
+                     + std::string(text(edgeText(start))) + std::string(text(TextId::ShapeFromEdge)) + " "
+                     + mm(f.offset) + ", "
+                     + mm(f.length) + " × " + mm(f.depth);
+            } else if constexpr (std::is_same_v<T, core::InnerCutout>) {
+                return kind + " " + mm(f.length) + " × " + mm(f.width) + " R" + mm(f.radius) + ": "
+                     + from(f.from, f.alongLength, f.alongWidth);
+            } else {
+                return kind + " Ø" + mm(f.diameter) + ": " + from(f.from, f.alongLength, f.alongWidth);
+            }
+        },
+        feature);
+}
+
 std::string mm(core::Real value)
 {
     char buffer[32];

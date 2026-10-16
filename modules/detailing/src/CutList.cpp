@@ -120,11 +120,16 @@ bool sameCutout(const FlatCutout& a, const FlatCutout& b)
         && core::nearlyEqual(a.width, b.width, kTol) && core::nearlyEqual(a.radius, b.radius, kTol);
 }
 
-/// The same holes, grooves and cut-outs as seen in the drawing of the part.
+bool sameSide(const FlatContourSide& a, const FlatContourSide& b)
+{
+    return a.kind == b.kind && near(a.start, b.start) && near(a.end, b.end);
+}
+
+/// The same holes, grooves, cut-outs and outline as seen in the drawing of the part.
 bool sameMachining(const FlatPart& a, const FlatPart& b)
 {
     return sameSet(a.holes, b.holes, sameHole) && sameSet(a.grooves, b.grooves, sameGroove)
-        && sameSet(a.cutouts, b.cutouts, sameCutout);
+        && sameSet(a.cutouts, b.cutouts, sameCutout) && sameSet(a.contour, b.contour, sameSide);
 }
 
 } // namespace

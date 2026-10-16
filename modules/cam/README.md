@@ -11,4 +11,6 @@ New controllers are new dialects (data) or new postprocessors; new machine types
 
 Kitchen: `Contour::inner` — openings (a sink in a worktop) are cut from the inside, before any part's outline, climb milling counter-clockwise; an opening narrower than the router is left for other machines.
 
-**Stages:** 8, kitchen
+Shapes: the outline of a shaped part is cut as it is; a notch narrower than the router is left for other machines.
+
+**Stages:** 8, kitchen, shapes

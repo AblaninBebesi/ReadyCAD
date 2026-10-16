@@ -1,11 +1,15 @@
 #include "readycad/render/Scene.hpp"
 
+#include "readycad/core/Polygon.hpp"
 #include "readycad/core/model/Parts.hpp"
 #include "readycad/detailing/PanelFrame.hpp"
+#include "readycad/render/Triangulate.hpp"
 
 #include <glm/common.hpp>
 
 #include <algorithm>
+#include <array>
+#include <atomic>
 #include <cmath>
 #include <limits>
 
@@ -82,60 +86,119 @@ bool isFrontPart(ComponentKind kind)
     return kind == ComponentKind::Door || kind == ComponentKind::DrawerFront;
 }
 
-/// The panel's box without its cut-outs (a worktop around its sink), as boxes: the cut-outs'
-/// edges cut the panel into a grid and the cells outside them remain. Rounded corners of a
-/// cut-out are drawn square.
-std::vector<core::Aabb> solidParts(const core::FurnitureComponent& c)
+/// A shaped panel as a prism: its face (outline less openings) triangulated at both sides,
+/// walls along the outline and around the openings, edges where the outline turns.
+ScenePrism prismOf(const core::FurnitureComponent& c)
 {
-    const auto& cutouts = c.panel()->cutouts();
-    if (cutouts.empty()) {
-        return {c.box()};
-    }
+    const core::Panel& panel = *c.panel();
     const detailing::PanelFrame frame(c);
     const core::Vec3 size = frame.extents();
-    std::vector<core::Real> us{0.0, size.x};
-    std::vector<core::Real> vs{0.0, size.y};
-    for (const core::PanelCutout& cut : cutouts) {
-        for (const core::Real sign : {-1.0, 1.0}) {
-            us.push_back(std::clamp(cut.center.x + sign * cut.length / 2.0, 0.0, size.x));
-            vs.push_back(std::clamp(cut.center.y + sign * cut.width / 2.0, 0.0, size.y));
+    const auto world = [&frame](core::Vec2 p, core::Real z) {
+        return toFloat(frame.toWorld(core::Vec3(p.x, p.y, z)));
+    };
+    const auto direction = [&frame](core::Vec2 d) {
+        core::Vec3 v(0.0);
+        v[core::index(frame.lengthAxis())] = d.x;
+        v[core::index(frame.widthAxis())] = d.y;
+        return toFloat(v);
+    };
+    glm::vec3 up(0.0f);
+    up[core::index(frame.thicknessAxis())] = 1.0f;
+
+    std::vector<core::Vec2> outer = panel.outline().empty()
+                                        ? std::vector<core::Vec2>{{0.0, 0.0}, {size.x, 0.0},
+                                                                  {size.x, size.y}, {0.0, size.y}}
+                                        : core::outlinePoints(panel.outline());
+    std::vector<std::vector<core::Vec2>> holes;
+    for (const core::PanelCutout& opening : panel.cutouts()) {
+        holes.push_back(core::openingOutline(opening));
+    }
+
+    ScenePrism prism;
+    for (const Triangle2& t : triangulate(outer, holes)) {
+        for (const core::Real z : {0.0, size.z}) {
+            for (const core::Vec2& p : t) {
+                prism.triangles.push_back(world(p, z));
+            }
+            prism.normals.push_back(z > 0.0 ? up : -up);
         }
     }
-    for (auto* cuts : {&us, &vs}) {
-        std::sort(cuts->begin(), cuts->end());
-        cuts->erase(std::unique(cuts->begin(), cuts->end()), cuts->end());
-    }
-    const int l = core::index(frame.lengthAxis());
-    const int w = core::index(frame.widthAxis());
-    std::vector<core::Aabb> parts;
-    for (std::size_t i = 0; i + 1 < us.size(); ++i) {
-        for (std::size_t j = 0; j + 1 < vs.size(); ++j) {
-            const core::Real u = (us[i] + us[i + 1]) / 2.0;
-            const core::Real v = (vs[j] + vs[j + 1]) / 2.0;
-            const bool open = std::any_of(cutouts.begin(), cutouts.end(), [&](const auto& cut) {
-                return std::abs(u - cut.center.x) < cut.length / 2.0
-                    && std::abs(v - cut.center.y) < cut.width / 2.0;
-            });
-            if (open) {
+    // Walls: the outline runs counter-clockwise, so the outside is on its right; around an
+    // opening (also counter-clockwise) the material is on the right and the wall looks left.
+    const auto walls = [&](const std::vector<core::Vec2>& loop, bool opening) {
+        for (std::size_t i = 0; i < loop.size(); ++i) {
+            const core::Vec2 a = loop[i];
+            const core::Vec2 b = loop[(i + 1) % loop.size()];
+            const core::Vec2 d = b - a;
+            if (glm::length(d) <= core::kEpsilon) {
                 continue;
             }
-            core::Vec3 lo = c.box().min();
-            core::Vec3 hi = c.box().max();
-            hi[l] = lo[l] + us[i + 1];
-            lo[l] += us[i];
-            hi[w] = lo[w] + vs[j + 1];
-            lo[w] += vs[j];
-            parts.emplace_back(lo, hi);
+            const core::Vec2 right = glm::normalize(core::Vec2(d.y, -d.x));
+            const glm::vec3 normal = direction(opening ? -right : right);
+            for (const auto& tri : {std::array{world(a, 0.0), world(b, 0.0), world(b, size.z)},
+                                    std::array{world(a, 0.0), world(b, size.z), world(a, size.z)}}) {
+                prism.triangles.insert(prism.triangles.end(), tri.begin(), tri.end());
+                prism.normals.push_back(normal);
+            }
+            // The outline at both faces; upright edges where it turns (not inside an arc).
+            for (const core::Real z : {0.0, size.z}) {
+                prism.lines.push_back(world(a, z));
+                prism.lines.push_back(world(b, z));
+            }
+            const core::Vec2 before = loop[(i + loop.size() - 1) % loop.size()];
+            const core::Vec2 in = a - before;
+            if (glm::length(in) > core::kEpsilon
+                && glm::dot(glm::normalize(in), glm::normalize(d)) < 0.94) {
+                prism.lines.push_back(world(a, 0.0));
+                prism.lines.push_back(world(a, size.z));
+            }
         }
+    };
+    if (core::signedArea(outer) < 0.0) {
+        std::reverse(outer.begin(), outer.end());
     }
-    return parts;
+    walls(outer, false);
+    for (auto& hole : holes) {
+        if (core::signedArea(hole) < 0.0) {
+            std::reverse(hole.begin(), hole.end());
+        }
+        walls(hole, true);
+    }
+    return prism;
+}
+
+/// Distance along the ray to the triangle (Möller–Trumbore), or nullopt.
+std::optional<float> intersectTriangle(const Ray& ray, glm::vec3 a, glm::vec3 b, glm::vec3 c)
+{
+    const glm::vec3 e1 = b - a;
+    const glm::vec3 e2 = c - a;
+    const glm::vec3 p = glm::cross(ray.direction, e2);
+    const float det = glm::dot(e1, p);
+    if (std::abs(det) < 1e-9f) {
+        return std::nullopt; // parallel
+    }
+    const float inv = 1.0f / det;
+    const glm::vec3 s = ray.origin - a;
+    const float u = glm::dot(s, p) * inv;
+    if (u < 0.0f || u > 1.0f) {
+        return std::nullopt;
+    }
+    const glm::vec3 q = glm::cross(s, e1);
+    const float v = glm::dot(ray.direction, q) * inv;
+    if (v < 0.0f || u + v > 1.0f) {
+        return std::nullopt;
+    }
+    const float t = glm::dot(e2, q) * inv;
+    return t >= 0.0f ? std::optional(t) : std::nullopt;
 }
 
 } // namespace
 
 Scene buildScene(const core::Product& product, const SceneOptions& options)
 {
+    static std::atomic<std::uint64_t> serials{0};
     Scene scene;
+    scene.serial = ++serials;
     const core::ConstructionRules& rules = product.rules();
 
     const core::FurnitureComponent* selected =
@@ -152,16 +215,25 @@ Scene buildScene(const core::Product& product, const SceneOptions& options)
             return;
         }
         const bool isSelected = selected != nullptr && (selected == &c || selected->isAncestorOf(c));
-        for (const core::Aabb& part : solidParts(c)) {
+        const ItemCategory category = categoryOf(c.kind());
+        const glm::vec4 color = isSelected ? glm::mix(colorOf(category), kSelectedTint, 0.55f)
+                                           : colorOf(category);
+        if (c.panel()->outline().empty() && c.panel()->cutouts().empty()) {
             SceneBox box;
-            box.min = toFloat(part.min());
-            box.max = toFloat(part.max());
-            box.category = categoryOf(c.kind());
-            box.color = isSelected ? glm::mix(colorOf(box.category), kSelectedTint, 0.55f)
-                                   : colorOf(box.category);
+            box.min = toFloat(c.box().min());
+            box.max = toFloat(c.box().max());
+            box.category = category;
+            box.color = color;
             box.component = c.id();
             box.selected = isSelected;
             scene.boxes.push_back(box);
+        } else {
+            ScenePrism prism = prismOf(c);
+            prism.category = category;
+            prism.color = color;
+            prism.component = c.id();
+            prism.selected = isSelected;
+            scene.prisms.push_back(std::move(prism));
         }
         scene.bounds.expand(c.box());
 
@@ -235,6 +307,16 @@ std::optional<core::ComponentId> pick(const Scene& scene, const Ray& ray)
         if (const auto t = intersect(ray, box.min, box.max); t && *t < bestDistance) {
             bestDistance = *t;
             best = box.component;
+        }
+    }
+    for (const ScenePrism& prism : scene.prisms) {
+        for (std::size_t i = 0; i + 2 < prism.triangles.size(); i += 3) {
+            const auto t = intersectTriangle(ray, prism.triangles[i], prism.triangles[i + 1],
+                                             prism.triangles[i + 2]);
+            if (t && *t < bestDistance) {
+                bestDistance = *t;
+                best = prism.component;
+            }
         }
     }
     return best;

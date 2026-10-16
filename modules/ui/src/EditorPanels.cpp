@@ -2,6 +2,7 @@
 
 #include "FileDialogs.hpp"
 #include "readycad/core/model/Drawer.hpp"
+#include "readycad/detailing/FlatPart.hpp"
 #include "readycad/editor/Operations.hpp"
 #include "readycad/editor/PartInfo.hpp"
 #include "readycad/export/Dxf.hpp"
@@ -11,6 +12,7 @@
 #include "readycad/production/Summary.hpp"
 #include "readycad/storage/Storage.hpp"
 
+#include <glm/geometric.hpp>
 #include <imgui.h>
 #include <imgui_stdlib.h>
 
@@ -768,6 +770,234 @@ bool drawDrawerStackEditor(UiState& s, core::DrawerStack& stack)
     return deleteButton(s, stack.id());
 }
 
+// ---------------------------------------------------------------------------------------------
+// Shape of a part: notches, shaped corners, openings
+// ---------------------------------------------------------------------------------------------
+
+constexpr core::PanelCorner kCorners[] = {core::PanelCorner::L1W1, core::PanelCorner::L1W2,
+                                          core::PanelCorner::L2W2, core::PanelCorner::L2W1};
+constexpr core::EdgeSide kEdges[] = {core::EdgeSide::L1, core::EdgeSide::L2, core::EdgeSide::W1,
+                                     core::EdgeSide::W2};
+
+bool cornerCombo(const char* id, core::PanelCorner& corner)
+{
+    bool changed = false;
+    if (ImGui::BeginCombo(id, cornerText(corner).c_str())) {
+        for (const core::PanelCorner c : kCorners) {
+            if (ImGui::Selectable(cornerText(c).c_str(), c == corner) && c != corner) {
+                corner = c;
+                changed = true;
+            }
+        }
+        ImGui::EndCombo();
+    }
+    return changed;
+}
+
+bool edgeCombo(const char* id, core::EdgeSide& edge)
+{
+    bool changed = false;
+    if (ImGui::BeginCombo(id, tr(edgeText(edge)))) {
+        for (const core::EdgeSide e : kEdges) {
+            if (ImGui::Selectable(tr(edgeText(e)), e == edge) && e != edge) {
+                edge = e;
+                changed = true;
+            }
+        }
+        ImGui::EndCombo();
+    }
+    return changed;
+}
+
+/// A new feature of the given kind that fits a part of this size: at a corner, or centred.
+core::ShapeFeature newFeature(std::size_t kind, Real length, Real width)
+{
+    const Real small = std::min(length, width);
+    switch (kind) {
+    case 0:
+        return core::CornerNotch{core::PanelCorner::L1W1, std::min(100.0, length / 3.0),
+                                 std::min(20.0, width / 3.0)};
+    case 1:
+        return core::CornerRound{core::PanelCorner::L1W2, std::min(50.0, small / 3.0)};
+    case 2:
+        return core::CornerChamfer{core::PanelCorner::L1W2, std::min(50.0, length / 3.0),
+                                   std::min(50.0, width / 3.0)};
+    case 3: {
+        const Real notch = std::min(100.0, length / 4.0);
+        return core::EdgeNotch{core::EdgeSide::L1, false, (length - notch) / 2.0, notch,
+                               std::min(30.0, width / 3.0)};
+    }
+    case 4:
+        return core::InnerCutout{core::PanelCorner::L1W1, length / 2.0, width / 2.0,
+                                 std::min(100.0, length / 3.0), std::min(60.0, width / 3.0), 5.0};
+    default:
+        return core::RoundHole{core::PanelCorner::L1W1, length / 2.0, width / 2.0,
+                               std::min(60.0, small / 3.0)};
+    }
+}
+
+/// The fields of one feature. Sets `released` when a drag ended (the next one is a new step).
+bool featureRows(core::ShapeFeature& feature, bool& released)
+{
+    bool changed = false;
+    const auto size = [&](TextId label, Real& value, const char* id) {
+        PropertyTable::row(tr(label));
+        changed |= dragMm(id, value, 0.0, 5000.0);
+        released |= ImGui::IsItemDeactivatedAfterEdit();
+    };
+    std::visit(
+        [&](auto& f) {
+            using T = std::decay_t<decltype(f)>;
+            if constexpr (std::is_same_v<T, core::CornerNotch> || std::is_same_v<T, core::CornerChamfer>) {
+                PropertyTable::row(tr(TextId::ShapeCornerLabel));
+                changed |= cornerCombo("##corner", f.corner);
+                size(TextId::ShapeAlongLength, f.alongLength, "##l");
+                size(TextId::ShapeAlongWidth, f.alongWidth, "##w");
+            } else if constexpr (std::is_same_v<T, core::CornerRound>) {
+                PropertyTable::row(tr(TextId::ShapeCornerLabel));
+                changed |= cornerCombo("##corner", f.corner);
+                size(TextId::ShapeRadius, f.radius, "##r");
+            } else if constexpr (std::is_same_v<T, core::EdgeNotch>) {
+                PropertyTable::row(tr(TextId::ShapeEdgeLabel));
+                changed |= edgeCombo("##edge", f.edge);
+                PropertyTable::row(tr(TextId::ShapeFromEnd));
+                changed |= ImGui::Checkbox("##fromEnd", &f.fromEnd);
+                size(TextId::ShapeOffset, f.offset, "##o");
+                size(TextId::ShapeNotchLength, f.length, "##l");
+                size(TextId::ShapeNotchDepth, f.depth, "##d");
+            } else if constexpr (std::is_same_v<T, core::InnerCutout>) {
+                PropertyTable::row(tr(TextId::ShapeFromLabel));
+                changed |= cornerCombo("##from", f.from);
+                size(TextId::ShapeAlongLength, f.alongLength, "##x");
+                size(TextId::ShapeAlongWidth, f.alongWidth, "##y");
+                size(TextId::ShapeOpeningLength, f.length, "##l");
+                size(TextId::ShapeOpeningWidth, f.width, "##w");
+                size(TextId::ShapeRadius, f.radius, "##r");
+            } else {
+                PropertyTable::row(tr(TextId::ShapeFromLabel));
+                changed |= cornerCombo("##from", f.from);
+                size(TextId::ShapeAlongLength, f.alongLength, "##x");
+                size(TextId::ShapeAlongWidth, f.alongWidth, "##y");
+                size(TextId::ShapeDiameter, f.diameter, "##d");
+            }
+        },
+        feature);
+    return changed;
+}
+
+/// The part as its drawing shows it: outline, openings, the names of its edges.
+void drawPartSketch(const ed::Document& doc, const core::PanelComponent& part)
+{
+    const detailing::FlatPart flat = detailing::flatten(*part.panel(), doc.product().rules());
+    const float width = ImGui::GetContentRegionAvail().x;
+    const float margin = ImGui::GetTextLineHeight() * 1.6f;
+    const float height = std::clamp(width * 0.45f, 90.0f, 160.0f);
+    const float scale = std::min((width - 2.0f * margin) / static_cast<float>(flat.length),
+                                 (height - 2.0f * margin) / static_cast<float>(flat.width));
+    const ImVec2 origin = ImGui::GetCursorScreenPos();
+    const ImVec2 base(origin.x + (width - scale * static_cast<float>(flat.length)) / 2.0f,
+                      origin.y + (height + scale * static_cast<float>(flat.width)) / 2.0f);
+    const auto at = [&](core::Vec2 p) {
+        return ImVec2(base.x + scale * static_cast<float>(p.x), base.y - scale * static_cast<float>(p.y));
+    };
+    ImDrawList* draw = ImGui::GetWindowDrawList();
+    const ImU32 line = ImGui::GetColorU32(ImGuiCol_Text);
+    const ImU32 band = IM_COL32(220, 70, 60, 255);
+    for (const detailing::FlatContourSide& side : flat.contour) {
+        draw->AddLine(at(side.start), at(side.end), side.band.present() ? band : line, 2.0f);
+    }
+    for (const detailing::FlatCutout& c : flat.cutouts) {
+        std::vector<ImVec2> points;
+        for (const core::Vec2 p : detailing::cutoutOutline(c)) {
+            points.push_back(at(p));
+        }
+        draw->AddPolyline(points.data(), static_cast<int>(points.size()), line, 1.5f, ImDrawFlags_Closed);
+    }
+    // Edge names outside the part, as in the drawings.
+    const ImU32 label = ImGui::GetColorU32(ImGuiCol_TextDisabled);
+    for (std::size_t i = 0; i < flat.outline.size(); ++i) {
+        const detailing::FlatEdge& edge = flat.outline[i];
+        const core::Vec2 along = glm::normalize(edge.end - edge.start);
+        const core::Vec2 outside(along.y, -along.x);
+        const ImVec2 mid = at((edge.start + edge.end) * 0.5);
+        const char* name = tr(edgeText(edge.side));
+        const ImVec2 textSize = ImGui::CalcTextSize(name);
+        const float push = margin * 0.55f;
+        draw->AddText(ImVec2(mid.x + static_cast<float>(outside.x) * push - textSize.x / 2.0f,
+                             mid.y - static_cast<float>(outside.y) * push - textSize.y / 2.0f),
+                      label, name);
+    }
+    ImGui::Dummy(ImVec2(width, height));
+}
+
+bool drawShapeEditor(UiState& s, core::PanelComponent& part)
+{
+    ed::Document& doc = *s.document;
+    const core::ComponentId id = part.id();
+    ImGui::SeparatorText(tr(TextId::ShapeHeader));
+    drawPartSketch(doc, part);
+
+    // Openings the part gets from where it stands (a worktop's sink): shown, not edited here.
+    const std::size_t own = core::featureOpenings(part.panel()->finishLength(),
+                                                  part.panel()->finishWidth(), part.shape())
+                                .size();
+    const auto& all = part.panel()->cutouts();
+    for (std::size_t i = 0; i + own < all.size(); ++i) {
+        ImGui::TextDisabled("%s %s × %s (%s)", tr(TextId::ShapeInnerCutout), mm(all[i].length).c_str(),
+                            mm(all[i].width).c_str(), tr(TextId::ShapeAutomatic));
+    }
+
+    std::vector<core::ShapeFeature> features = part.shape();
+    bool changed = false;
+    bool released = false;
+    std::optional<std::size_t> removed;
+    for (std::size_t i = 0; i < features.size(); ++i) {
+        ImGui::PushID(static_cast<int>(i));
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted(tr(featureKindText(features[i])));
+        ImGui::SameLine(ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize(tr(TextId::Delete)).x);
+        if (ImGui::SmallButton(tr(TextId::Delete))) {
+            removed = i;
+        }
+        {
+            PropertyTable table("feature");
+            if (table.isOpen()) {
+                changed |= featureRows(features[i], released);
+            }
+        }
+        ImGui::PopID();
+    }
+    if (removed) {
+        features.erase(features.begin() + static_cast<std::ptrdiff_t>(*removed));
+        run(s, [&] { ed::setShape(doc, id, features); });
+        return true;
+    }
+    if (changed) {
+        run(s, [&] { ed::setShape(doc, id, features); });
+        return true;
+    }
+    if (released) {
+        doc.endMerge();
+    }
+
+    static constexpr TextId kKinds[] = {TextId::ShapeCornerNotch, TextId::ShapeCornerRound,
+                                        TextId::ShapeChamfer,     TextId::ShapeEdgeNotch,
+                                        TextId::ShapeInnerCutout, TextId::ShapeRoundHole};
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    if (ImGui::BeginCombo("##addShape", tr(TextId::ShapeAdd))) {
+        for (std::size_t k = 0; k < std::size(kKinds); ++k) {
+            if (ImGui::Selectable(tr(kKinds[k]))) {
+                features.push_back(newFeature(k, part.panel()->finishLength(), part.panel()->finishWidth()));
+                ImGui::EndCombo();
+                run(s, [&] { ed::setShape(doc, id, features); });
+                return true;
+            }
+        }
+        ImGui::EndCombo();
+    }
+    return false;
+}
+
 /// Kind-specific parameters of the selected component.
 bool drawEditor(UiState& s, core::FurnitureComponent& c)
 {
@@ -897,11 +1127,14 @@ void drawProperties(UiState& s)
     if (drawEditor(s, *selected)) {
         return; // the model changed: draw the fresh state next frame
     }
-    if (const auto* panel = dynamic_cast<const core::PanelComponent*>(selected)) {
+    if (auto* panel = dynamic_cast<core::PanelComponent*>(selected)) {
         bool inPlan = panel->inCuttingPlan();
         if (ImGui::Checkbox(tr(TextId::InCuttingPlan), &inPlan)) {
             const core::ComponentId id = panel->id();
             run(s, [&] { ed::setInCuttingPlan(doc, {id}, inPlan); });
+            return;
+        }
+        if (drawShapeEditor(s, *panel)) {
             return;
         }
     }

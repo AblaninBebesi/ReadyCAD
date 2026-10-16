@@ -79,7 +79,9 @@ std::vector<NestingPart> partsFromCutList(const core::Product& product,
         NestingPart part;
         part.label = std::to_string(i + 1);
         part.material = row.material;
-        part.outline = rectangle(Rect{flat.cut.min, flat.cut.max});
+        // A shaped part goes in with its real blank: the nesting centre fits parts by their shape
+        // (No-Fit Polygon), the panel saw takes its bounding rectangle.
+        part.outline = flat.shaped() ? flat.blank : rectangle(Rect{flat.cut.min, flat.cut.max});
         part.quantity = row.quantity * productCount;
         part.keepGrain = row.keepGrainDirection;
         part.cutListRow = i;

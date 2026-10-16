@@ -4,6 +4,7 @@
 
 #include <array>
 #include <optional>
+#include <vector>
 
 namespace rc::core {
 
@@ -36,6 +37,12 @@ public:
     [[nodiscard]] bool inCuttingPlan() const noexcept { return inCuttingPlan_; }
     void setInCuttingPlan(bool value) noexcept { inCuttingPlan_ = value; }
 
+    /// Changes of the part's shape: notches, rounded or chamfered corners, openings. Bound to the
+    /// part's edges, they follow it when it changes size. Throws std::invalid_argument for a
+    /// feature with an impossible size (whether it fits is checked by the editor).
+    [[nodiscard]] const std::vector<ShapeFeature>& shape() const noexcept { return shape_; }
+    void setShape(std::vector<ShapeFeature> features);
+
     /// Thickness used in the formulas: that of the effective material under the slot's rules.
     /// Public because parents need it BEFORE laying the part out (to reserve its band).
     [[nodiscard]] Real thickness(const LayoutSlot& slot) const;
@@ -47,6 +54,9 @@ protected:
 
     [[nodiscard]] virtual const Material& defaultMaterial(const ConstructionRules& rules) const = 0;
     [[nodiscard]] virtual EdgeBand defaultEdge(EdgeSide side, const LayoutSlot& slot) const;
+    /// Openings the part gets from where it stands (a worktop: the sink and the hob of the
+    /// cabinets below). Default: none.
+    [[nodiscard]] virtual std::vector<PanelCutout> automaticOpenings(const LayoutSlot& slot) const;
 
     void updatePanel(const LayoutSlot& slot) override;
 
@@ -54,6 +64,7 @@ private:
     std::optional<Material> materialOverride_;
     std::array<std::optional<EdgeBand>, 4> edgeOverrides_{};
     bool inCuttingPlan_ = true;
+    std::vector<ShapeFeature> shape_;
 };
 
 } // namespace rc::core

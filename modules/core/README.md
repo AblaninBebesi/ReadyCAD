@@ -8,4 +8,6 @@ Stage 9: each structural panel and each drawer box part meets its neighbours wit
 
 Kitchen: a product holds one carcass or one `Kitchen` — `CabinetRow`s of cabinets (fixed or automatic widths, `distributeSizes()` shared with `Section`), `Worktop` with cut-outs, cabinets with `Rail`s (flat or upright) instead of a top panel and a `Plinth`; `KitchenBuilder` with six modules; `Kitchen::misplacedCutouts()`; `Panel::cutouts()`.
 
-**Stages:** 1 (math), 2 (component tree), 3 (parametrics), 9 (per-part thickness, cutting plan flag), kitchen
+Shapes: `PanelShape` — notches, shaped corners and openings bound to the edges of a panel (`ShapeFeature`), the outline built from them (`panelOutline`, also grown for the blank), `shapeFits`; `Polygon` helpers.
+
+**Stages:** 1 (math), 2 (component tree), 3 (parametrics), 9 (per-part thickness, cutting plan flag), kitchen, shapes

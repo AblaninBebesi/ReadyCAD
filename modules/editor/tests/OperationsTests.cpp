@@ -282,3 +282,42 @@ TEST_CASE("Part info for the properties panel", "[editor][partinfo]")
 
     CHECK_FALSE(describe(doc.product(), doc.product().rules()).panel.has_value());
 }
+
+TEST_CASE("A part's shape: accepted when it can be made, refused otherwise", "[editor][operations][shape]")
+{
+    Document doc = Document::fromCatalog(CatalogItem::Wardrobe);
+    const auto wall = [&doc] { return &doc.product().carcass()->leftSide(); };
+    const auto refused = [&](std::vector<ShapeFeature> shape, rc::i18n::TextId reason) {
+        const std::string before = rc::storage::saveProduct(doc.product());
+        try {
+            setShape(doc, wall()->id(), std::move(shape));
+            FAIL("the shape was accepted");
+        } catch (const ConstructionError& e) {
+            CHECK_THAT(e.what(), Catch::Matchers::ContainsSubstring(std::string(rc::i18n::text(reason))));
+            CHECK_THAT(e.what(), Catch::Matchers::ContainsSubstring("Yan panel"));
+        }
+        CHECK(rc::storage::saveProduct(doc.product()) == before);
+    };
+
+    // The skirting board notch and a cable hole.
+    setShape(doc, wall()->id(), {CornerNotch{PanelCorner::L1W1, 100.0, 15.0},
+                                 RoundHole{PanelCorner::L1W1, 900.0, 120.0, 60.0}});
+    CHECK(wall()->shape().size() == 2);
+    CHECK(doc.shapeConflicts().empty());
+    CHECK(doc.undoDescription() == "Part shape");
+
+    // Deeper than the back panel groove; two features in one corner.
+    refused({CornerNotch{PanelCorner::L1W1, 100.0, 20.0}}, rc::i18n::TextId::MachiningInCut);
+    refused({CornerRound{PanelCorner::L2W2, 30.0}, CornerNotch{PanelCorner::L2W2}},
+            rc::i18n::TextId::ShapeDoesNotFit);
+    // An impossible size never reaches the model.
+    CHECK_THROWS_AS(setShape(doc, wall()->id(), {RoundHole{PanelCorner::L1W1, 900.0, 120.0, -5.0}}),
+                    std::invalid_argument);
+
+    // The shape follows the wall; a lower wardrobe cannot drop its hole off the part.
+    setDimensions(doc, {800, 2200, 560});
+    CHECK(wall()->panel()->cutouts().size() == 1);
+    doc.undo();
+    doc.undo();
+    CHECK(wall()->shape().empty());
+}

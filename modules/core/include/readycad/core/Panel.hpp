@@ -2,23 +2,13 @@
 
 #include "readycad/core/Aabb.hpp"
 #include "readycad/core/Material.hpp"
+#include "readycad/core/PanelShape.hpp"
 
 #include <array>
 #include <utility>
 #include <vector>
 
 namespace rc::core {
-
-/// Edges of a rectangular panel in its own 2D system (length along local X, width along local Y):
-///
-///            L2 (long edge at width = max)
-///        +---------------------------+
-///    W1  |                           |  W2    (short edges at length = 0 / length = max)
-///        +---------------------------+
-///            L1 (long edge at width = 0)
-///
-/// Edges on L1/L2 make the part WIDER, edges on W1/W2 make it LONGER (see cut sizes).
-enum class EdgeSide { L1 = 0, L2 = 1, W1 = 2, W2 = 3 };
 
 enum class FastenerType { Confirmat, Dowel, Eccentric, ShelfSupport, Hinge, Groove, Handle };
 
@@ -50,17 +40,6 @@ struct Groove {
     Vec2 end{0.0};
     Real width = 0.0;
     Real depth = 0.0;
-};
-
-/// An opening cut through the whole panel — the hole for a sink or a hob in a worktop: a
-/// rectangle with rounded corners, in panel x/y coordinates (x along the length).
-struct PanelCutout {
-    Vec2 center{0.0};
-    Real length = 0.0; // along x
-    Real width = 0.0;  // along y
-    Real radius = 0.0; // of the corners
-
-    friend bool operator==(const PanelCutout&, const PanelCutout&) = default;
 };
 
 /// A physical part cut from sheet material (ЛДСП/МДФ/ХДФ) — pure data.
@@ -115,10 +94,15 @@ public:
         grooves_.clear();
     }
 
-    /// Openings through the panel. Part of its shape (set by its component with the size), not
-    /// of the drilling: clearMachining() keeps them.
+    /// The shape: features the user asked for (notches, rounded corners, openings) plus openings
+    /// the part gets from elsewhere (a worktop's sink). Part of the part, set by its component
+    /// after fitTo(), not of the drilling: clearMachining() keeps it.
+    void setShape(std::vector<ShapeFeature> features, std::vector<PanelCutout> automaticOpenings);
+    [[nodiscard]] const std::vector<ShapeFeature>& shape() const noexcept { return shape_; }
+    /// The finished outline when a feature changes it; empty for a plain rectangle.
+    [[nodiscard]] const std::vector<OutlineSide>& outline() const noexcept { return outline_; }
+    /// All openings through the panel: the automatic ones and those of the features.
     [[nodiscard]] const std::vector<PanelCutout>& cutouts() const noexcept { return cutouts_; }
-    void setCutouts(std::vector<PanelCutout> cutouts) { cutouts_ = std::move(cutouts); }
 
 private:
     Material material_;
@@ -129,6 +113,8 @@ private:
     std::array<EdgeBand, 4> edges_{};
     std::vector<Drilling> drillings_;
     std::vector<Groove> grooves_;
+    std::vector<ShapeFeature> shape_;
+    std::vector<OutlineSide> outline_;
     std::vector<PanelCutout> cutouts_;
 };
 

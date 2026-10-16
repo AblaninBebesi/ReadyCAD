@@ -5,6 +5,7 @@
 #include "readycad/editor/Operations.hpp"
 #include "readycad/i18n/Localization.hpp"
 #include "readycad/production/Summary.hpp"
+#include "readycad/production/Pipeline.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
@@ -119,4 +120,26 @@ TEST_CASE("The message after a package names what was written and what needs att
     CHECK_THAT(message, ContainsSubstring("1 " + txt(i18n::TextId::ProgramsWord)));
     CHECK_THAT(message, ContainsSubstring(txt(i18n::TextId::Unplaced) + ": 2"));
     CHECK_THAT(message, ContainsSubstring("5 " + txt(i18n::TextId::LeftoverEdge)));
+}
+
+TEST_CASE("After the saw: the parts with notches and openings are listed", "[production][summary][shape]")
+{
+    editor::Document doc = editor::Document::fromCatalog(core::CatalogItem::Wardrobe);
+    editor::setShape(doc, doc.product().carcass()->leftSide().id(),
+                     {core::CornerNotch{core::PanelCorner::L1W1, 100.0, 15.0}});
+    const Order order{doc, 2};
+    for (const nesting::Machine machine : {nesting::Machine::PanelSaw, nesting::Machine::NestingCenter}) {
+        nesting::NestingSettings settings;
+        settings.machine = machine;
+        settings.optimizer.populationSize = 4;
+        settings.optimizer.generations = 2;
+        const nesting::NestingResult plan = planCutting(order, nesting::StockManager{}, settings);
+        const std::string text = summaryText(order, &plan, Package{});
+        if (machine == nesting::Machine::PanelSaw) {
+            CHECK_THAT(text, ContainsSubstring(txt(i18n::TextId::AfterSawTitle)));
+            CHECK_THAT(text, ContainsSubstring("Yan panel (sol)  × 2"));
+        } else {
+            CHECK_THAT(text, !ContainsSubstring(txt(i18n::TextId::AfterSawTitle))); // the router cuts it
+        }
+    }
 }

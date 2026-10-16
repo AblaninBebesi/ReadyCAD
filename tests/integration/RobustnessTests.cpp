@@ -2,7 +2,7 @@
 // pipeline on both machines; and random sequences of edits — the user trying things, also
 // impossible ones — never leave a broken product behind, and the pipeline keeps producing files.
 // Kitchen stage: the random user also builds kitchens — adds, moves, resizes and removes
-// cabinets, rails, plinths and worktop cut-outs.
+// cabinets, rails, plinths and worktop cut-outs. Shapes: it notches, rounds and drills parts.
 //
 // The random sequences are reproducible: a failure names its seed and step.
 
@@ -132,7 +132,7 @@ public:
     std::string edit(editor::Document& doc)
     {
         Targets t = targetsOf(doc.product());
-        switch (number(0, 17)) {
+        switch (number(0, 18)) {
         case 0: {
             // Sometimes impossible on purpose: zero or negative sizes are refused.
             const core::Size3D size{number(0, 9) == 0 ? -100.0 : number(300, 2800) * 1.0,
@@ -285,6 +285,40 @@ public:
             return "kitchen";
         }
         case 16:
+            if (core::PanelComponent* p = any(t.panels)) {
+                // Mostly sizes that fit a part somewhere; often refused (holes, grooves, edges).
+                const auto corner = static_cast<core::PanelCorner>(number(0, 3));
+                const auto edge = static_cast<core::EdgeSide>(number(0, 3));
+                std::vector<core::ShapeFeature> shape;
+                for (int i = number(0, 2); i > 0; --i) {
+                    switch (number(0, 5)) {
+                    case 0:
+                        shape.push_back(core::CornerNotch{corner, number(10, 300) * 1.0, number(10, 120) * 1.0});
+                        break;
+                    case 1:
+                        shape.push_back(core::CornerRound{corner, number(5, 150) * 1.0});
+                        break;
+                    case 2:
+                        shape.push_back(core::CornerChamfer{corner, number(10, 150) * 1.0, number(10, 150) * 1.0});
+                        break;
+                    case 3:
+                        shape.push_back(core::EdgeNotch{edge, coin(), number(0, 900) * 1.0,
+                                                        number(20, 300) * 1.0, number(10, 120) * 1.0});
+                        break;
+                    case 4:
+                        shape.push_back(core::InnerCutout{corner, number(0, 1500) * 1.0, number(0, 600) * 1.0,
+                                                          number(20, 300) * 1.0, number(20, 200) * 1.0, 5.0});
+                        break;
+                    default:
+                        shape.push_back(core::RoundHole{corner, number(0, 1500) * 1.0, number(0, 600) * 1.0,
+                                                        number(10, 80) * 1.0});
+                        break;
+                    }
+                }
+                editor::setShape(doc, p->id(), shape);
+            }
+            return "shape";
+        case 17:
             doc.undo();
             return "undo";
         default:
@@ -315,6 +349,7 @@ void checkProduct(const editor::Document& doc)
     }
     CHECK(quantity == static_cast<int>(core::collectPanels(product).size()));
     CHECK(doc.misplacedCutouts().empty());
+    CHECK(doc.shapeConflicts().empty());
     for (const core::Overlap& o : core::findOverlaps(product, 0.01)) {
         FAIL_CHECK("overlap " << core::toString(o.first->kind()) << " / "
                               << core::toString(o.second->kind()) << " size "

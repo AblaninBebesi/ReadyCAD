@@ -4,6 +4,7 @@
 #include "readycad/cam/NestingCenter.hpp"
 #include "readycad/cam/Route.hpp"
 #include "readycad/detailing/FlatPart.hpp"
+#include "readycad/core/PanelShape.hpp"
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -300,4 +301,34 @@ TEST_CASE("An opening narrower than the router is left for someone else", "[cam]
     REQUIRE(sp.leftovers.size() == 1);
     CHECK(sp.leftovers.front().label == "1");
     CHECK(sp.leftovers.front().noTool == 1);
+}
+
+TEST_CASE("A notch narrower than the router is left for someone else", "[cam][planner][shape]")
+{
+    const auto jobWith = [](Real notch) {
+        SheetJob job;
+        job.name = "notch";
+        job.material = "Suntalam 18";
+        job.length = 1000.0;
+        job.width = 600.0;
+        job.thickness = 18.0;
+        job.partSpacing = 12.0;
+        PartMachining part;
+        part.label = "1";
+        part.name = "Raf";
+        part.thickness = 18.0;
+        nesting::Polygon outline = core::outlinePoints(core::panelOutline(
+            500.0, 300.0, {core::EdgeNotch{core::EdgeSide::L1, false, 200.0, notch, 40.0}}));
+        for (Vec2& p : outline) {
+            p += Vec2(20.0, 20.0);
+        }
+        part.operations = {Contour{nesting::normalized(outline)}};
+        job.parts = {part};
+        return job;
+    };
+    // The router is 12 mm: a 10 mm notch is left, a 30 mm one is cut.
+    const SheetProgram narrow = planSheet(jobWith(10.0), defaultProfile());
+    REQUIRE(narrow.leftovers.size() == 1);
+    CHECK(narrow.leftovers.front().noTool == 1);
+    CHECK(planSheet(jobWith(30.0), defaultProfile()).leftovers.empty());
 }

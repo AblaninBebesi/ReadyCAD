@@ -9,6 +9,8 @@ rc_add_module(core
         src/ConstructionRules.cpp
         src/Hardware.cpp
         src/Panel.cpp
+        src/PanelShape.cpp
+        src/Polygon.cpp
         src/Version.cpp
         src/model/BackMount.cpp
         src/model/Carcass.cpp
@@ -37,6 +39,7 @@ rc_add_module(core
         tests/SectionTests.cpp
         tests/ParametricTests.cpp
         tests/HandleTests.cpp
-        tests/KitchenTests.cpp)
+        tests/KitchenTests.cpp
+        tests/PanelShapeTests.cpp)
 
 target_include_directories(readycad_core PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)

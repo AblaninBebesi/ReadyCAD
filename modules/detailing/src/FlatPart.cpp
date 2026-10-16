@@ -118,30 +118,16 @@ const FlatEdge& FlatPart::edge(EdgeSide side) const
 
 std::vector<Vec2> cutoutOutline(const FlatCutout& cutout, int segments)
 {
-    const Real r = std::clamp(cutout.radius, 0.0, std::min(cutout.length, cutout.width) / 2.0);
-    const Real hx = cutout.length / 2.0 - r;
-    const Real hy = cutout.width / 2.0 - r;
-    // Centres of the corner arcs, counter-clockwise from the lower right, and where each arc
-    // starts (degrees).
-    const std::array<std::pair<Vec2, Real>, 4> corners{{{Vec2(hx, -hy), -90.0},
-                                                        {Vec2(hx, hy), 0.0},
-                                                        {Vec2(-hx, hy), 90.0},
-                                                        {Vec2(-hx, -hy), 180.0}}};
-    std::vector<Vec2> points;
-    for (const auto& [corner, start] : corners) {
-        if (r <= core::kEpsilon || segments < 1) {
-            // A square corner: the corner of the rectangle itself.
-            const Vec2 sharp(std::copysign(cutout.length / 2.0, corner.x),
-                             std::copysign(cutout.width / 2.0, corner.y));
-            points.push_back(cutout.center + sharp);
-            continue;
-        }
-        for (int i = 0; i <= segments; ++i) {
-            const Real angle = glm::radians(start + 90.0 * i / segments);
-            points.push_back(cutout.center + corner + r * Vec2(std::cos(angle), std::sin(angle)));
-        }
-    }
-    return points;
+    return core::openingOutline({cutout.center, cutout.length, cutout.width, cutout.radius},
+                                segments);
+}
+
+bool FlatPart::shaped() const noexcept
+{
+    return contour.size() != 4
+        || std::any_of(contour.begin(), contour.end(), [](const FlatContourSide& s) {
+               return s.kind != core::OutlineSideKind::Edge;
+           });
 }
 
 bool isRightHanded(const core::Panel& panel) noexcept
@@ -211,6 +197,43 @@ FlatPart flatten(const core::Panel& panel, const core::ConstructionRules& rules,
     }
     for (const core::PanelCutout& c : panel.cutouts()) {
         part.cutouts.push_back({view.point(c.center.x, c.center.y), c.length, c.width, c.radius});
+    }
+
+    // The outline and the blank, with the shape features. Seen through a flipped view the
+    // panel's counter-clockwise order turns clockwise: walk it backwards.
+    const auto bandOf = [&panel](const core::OutlineSide& side) -> core::EdgeBand {
+        switch (side.kind) {
+        case core::OutlineSideKind::Edge:
+            return panel.edge(side.edge);
+        case core::OutlineSideKind::Corner: {
+            const bool l1 = side.corner == core::PanelCorner::L1W1 || side.corner == core::PanelCorner::L1W2;
+            const bool w1 = side.corner == core::PanelCorner::L1W1 || side.corner == core::PanelCorner::L2W1;
+            const core::EdgeBand& along = panel.edge(l1 ? EdgeSide::L1 : EdgeSide::L2);
+            return along.present() ? along : panel.edge(w1 ? EdgeSide::W1 : EdgeSide::W2);
+        }
+        case core::OutlineSideKind::Notch:
+            break;
+        }
+        return {};
+    };
+    const std::vector<core::OutlineSide> finished =
+        core::panelOutline(l, w, panel.shape());
+    std::array<Real, 4> grow{};
+    for (const EdgeSide side : {EdgeSide::L1, EdgeSide::L2, EdgeSide::W1, EdgeSide::W2}) {
+        grow[static_cast<std::size_t>(side)] = cutDelta(panel.edge(side), rules);
+    }
+    const std::vector<core::OutlineSide> grown = core::panelOutline(l, w, panel.shape(), grow);
+    const std::size_t n = finished.size();
+    for (std::size_t k = 0; k < n; ++k) {
+        const std::size_t i = view.flipped ? n - 1 - k : k;
+        const Vec2 a = view.point(finished[i].start.x, finished[i].start.y);
+        const Vec2 b = view.point(finished[(i + 1) % n].start.x, finished[(i + 1) % n].start.y);
+        part.contour.push_back(
+            {view.flipped ? b : a, view.flipped ? a : b, finished[i].kind, bandOf(finished[i])});
+    }
+    for (std::size_t k = 0; k < grown.size(); ++k) {
+        const std::size_t i = view.flipped ? grown.size() - 1 - k : k;
+        part.blank.push_back(view.point(grown[i].start.x, grown[i].start.y));
     }
     return part;
 }

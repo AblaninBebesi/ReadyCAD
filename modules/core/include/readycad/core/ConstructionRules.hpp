@@ -126,6 +126,10 @@ struct ConstructionRules {
     /// must leave at least this much material between them.
     Real minWallBetweenHoles = 1.0;
 
+    /// A cut-out the user adds (an opening, a cable hole) keeps at least this much material to
+    /// the outline of the part and to the other openings.
+    Real minBridge = 10.0;
+
     // --- Handles ----------------------------------------------------------------------------
     struct Handles {
         std::vector<HandleModel> catalog = defaultHandleCatalog();

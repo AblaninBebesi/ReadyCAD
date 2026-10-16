@@ -62,6 +62,9 @@ void setHandle(Document& doc, core::ComponentId front,
                std::optional<core::HandlePlacement> placement);
 void setMaterialOverride(Document& doc, core::ComponentId part,
                          std::optional<core::Material> material);
+/// The notches, shaped corners and openings of a part (the whole list: the panel edits a copy).
+/// A shape that does not fit, or takes away material a hole or a groove needs, is refused.
+void setShape(Document& doc, core::ComponentId part, std::vector<core::ShapeFeature> features);
 /// Puts parts into the cutting plan or leaves them out (bought cut to size, cut elsewhere), in one
 /// step — e.g. all parts of a cut list row.
 void setInCuttingPlan(Document& doc, const std::vector<core::ComponentId>& parts, bool inPlan);

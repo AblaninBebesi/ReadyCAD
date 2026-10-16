@@ -9,5 +9,6 @@ rc_add_test_executable(readycad_integration_tests
         integration/RobustnessTests.cpp
         integration/UserJourneyTests.cpp
         integration/KitchenJourneyTests.cpp
+        integration/ShapeJourneyTests.cpp
     DEPENDS
         readycad::production)

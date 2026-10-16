@@ -107,7 +107,7 @@ struct NestingPart {
 
 /// One part per cut list row, `productCount` times its quantity; rows left out of the cutting
 /// plan (CutListRow::inCuttingPlan) are skipped, the others keep their row number. The outline is the sawn blank
-/// (cut size) in FlatPart coordinates: origin at the lower-left corner of the finished part, seen
+/// (cut size; for a part with notches or shaped corners FlatPart::blank) in FlatPart coordinates: origin at the lower-left corner of the finished part, seen
 /// from the face with more machining. A CNC drilling from above can then take the holes of the
 /// FlatPart straight onto the sheet with the same transform.
 [[nodiscard]] std::vector<NestingPart>

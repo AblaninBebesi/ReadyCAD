@@ -542,9 +542,8 @@ Vec3 Worktop::updatePosition(const LayoutSlot& slot, const Vec3&)
     return slot.box.min();
 }
 
-void Worktop::updatePanel(const LayoutSlot& slot)
+std::vector<PanelCutout> Worktop::automaticOpenings(const LayoutSlot& slot) const
 {
-    PanelComponent::updatePanel(slot);
     // Panel x runs along X, panel y along Z, both from the box minimum.
     std::vector<PanelCutout> cutouts;
     if (slot.kitchen != nullptr) {
@@ -553,7 +552,7 @@ void Worktop::updatePanel(const LayoutSlot& slot)
                                c.length, c.width, c.radius});
         }
     }
-    panel_->setCutouts(std::move(cutouts));
+    return cutouts;
 }
 
 const Material& Worktop::defaultMaterial(const ConstructionRules& r) const

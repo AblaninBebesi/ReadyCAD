@@ -6,6 +6,7 @@ rc_add_module(detailing
         src/HardwareList.cpp
         src/Joints.cpp
         src/PanelFrame.cpp
+        src/ShapeCheck.cpp
     DEPENDS
         readycad::core
     TESTS
@@ -15,4 +16,5 @@ rc_add_module(detailing
         tests/DetailingSanityTests.cpp
         tests/FlatPartTests.cpp
         tests/HardwareListTests.cpp
-        tests/KitchenDetailingTests.cpp)
+        tests/KitchenDetailingTests.cpp
+        tests/ShapeCheckTests.cpp)

@@ -24,10 +24,11 @@ std::vector<const core::Carcass*> misplacedCutoutsOf(const core::Product& produc
 }
 
 /// Throws ConstructionError if the change made a part lose its size, put parts into each
-/// other's space (more overlapping pairs than `overlapsBefore`) or a worktop cut-out where it
-/// cannot be made (more than `cutoutsBefore`).
+/// other's space (more overlapping pairs than `overlapsBefore`), a worktop cut-out where it
+/// cannot be made (more than `cutoutsBefore`) or gave a part a shape that cannot be made (more
+/// than `shapesBefore`). The drilling must be up to date.
 void requireBuildable(const core::Product& product, std::size_t overlapsBefore,
-                      std::size_t cutoutsBefore)
+                      std::size_t cutoutsBefore, std::size_t shapesBefore)
 {
     for (const core::FurnitureComponent* c : core::collectPanels(product)) {
         const core::Panel& panel = *c->panel();
@@ -51,6 +52,15 @@ void requireBuildable(const core::Product& product, std::size_t overlapsBefore,
         throw ConstructionError(txt(i18n::TextId::ChangeRefused) + ": "
                                 + txt(i18n::TextId::CutoutDoesNotFit) + " ("
                                 + i18n::displayName(*cutouts.front()) + ")");
+    }
+    const auto shapes = detailing::findShapeConflicts(product);
+    if (shapes.size() > shapesBefore) {
+        const detailing::ShapeConflict& c = shapes.front();
+        const bool fits = c.reason == detailing::ShapeConflict::Reason::DoesNotFit;
+        throw ConstructionError(txt(i18n::TextId::ChangeRefused) + ": "
+                                + txt(fits ? i18n::TextId::ShapeDoesNotFit
+                                           : i18n::TextId::MachiningInCut)
+                                + " (" + i18n::displayName(*c.part) + ")");
     }
 }
 
@@ -146,7 +156,10 @@ void Document::edit(std::string_view description,
 
     try {
         change(*product_);
-        requireBuildable(*product_, overlaps_.size(), misplacedCutouts_.size());
+        // The shape check needs the drilling of the changed geometry.
+        detailing::applyDetailing(*product_);
+        requireBuildable(*product_, overlaps_.size(), misplacedCutouts_.size(),
+                         shapeConflicts_.size());
     } catch (...) {
         restore(before); // strong guarantee: a failed edit leaves no trace
         refresh();
@@ -225,6 +238,7 @@ void Document::refresh()
     hardware_ = detailing::hardwareList(*product_);
     overlaps_ = core::findOverlaps(*product_, kOverlapTolerance);
     misplacedCutouts_ = misplacedCutoutsOf(*product_);
+    shapeConflicts_ = detailing::findShapeConflicts(*product_);
     if (selection_ && product_->find(*selection_) == nullptr) {
         selection_.reset();
     }

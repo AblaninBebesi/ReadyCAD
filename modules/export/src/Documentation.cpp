@@ -755,6 +755,14 @@ void partPages(Composer& composer, const DocumentationInput& in, std::size_t num
         {{txt(TextId::Grain), txt(row.keepGrainDirection ? TextId::GrainKept : TextId::GrainFree)}},
         {{txt(TextId::ViewFrom), faceName(part.viewFace)}},
     };
+    // Notches, shaped corners and openings the user added, named by the edges of the drawing.
+    if (const core::FurnitureComponent* c = in.product.find(row.components.front())) {
+        bool first = true;
+        for (const core::ShapeFeature& feature : c->panel()->shape()) {
+            facts.rows.push_back({{first ? txt(TextId::ShapeHeader) : "", i18n::featureText(feature)}});
+            first = false;
+        }
+    }
     Real y = infoTopLeft.y;
     y -= drawTable(canvas, infoTopLeft, infoWidth, y - min.y, facts, 0).second + kGap;
 

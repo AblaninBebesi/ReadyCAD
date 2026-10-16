@@ -20,8 +20,9 @@ public:
     using std::runtime_error::runtime_error;
 };
 
-/// 2: kitchens (a run of cabinets with rails, plinths and a worktop). Version 1 files still load.
-inline constexpr int kProjectFormatVersion = 2;
+/// 2: kitchens (a run of cabinets with rails, plinths and a worktop). 3: shapes of parts
+/// (notches, shaped corners, openings). Older files still load.
+inline constexpr int kProjectFormatVersion = 3;
 inline constexpr int kProfileFormatVersion = 1;
 inline constexpr int kStockFormatVersion = 1;
 inline constexpr int kSettingsFormatVersion = 1;

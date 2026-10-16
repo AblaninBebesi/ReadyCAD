@@ -349,3 +349,30 @@ TEST_CASE("A worktop in DXF: its cut-outs on their own layer, dimensioned", "[ex
     // depth and its distance from the front edge.
     CHECK(drawing.count<Dimension>(layers::kDimensions) == 2 + 5 + 2 * 2);
 }
+
+TEST_CASE("A notched part in DXF: its real outline and blank, the notch dimensioned",
+          "[export][dxf][shape]")
+{
+    const auto wardrobe = detailedWardrobe();
+    core::SideWall& wall = wardrobe->carcass()->leftSide();
+    wall.setShape({core::CornerNotch{core::PanelCorner::L1W1, 100.0, 15.0},
+                   core::RoundHole{core::PanelCorner::L1W1, 900.0, 120.0, 60.0}});
+    detailing::applyDetailing(*wardrobe);
+    const detailing::FlatPart flat = detailing::flatten(*wall.panel(), wardrobe->rules());
+    PartDrawingOptions options;
+    options.cutContour = true;
+    const Drawing drawing = drawPart(flat, options);
+
+    REQUIRE(drawing.count<Polyline>(layers::kContour) == 1);
+    const auto contour = std::find_if(drawing.entities().begin(), drawing.entities().end(), [&](const Entity& e) {
+        return drawing.layers()[e.layer].name == layers::kContour;
+    });
+    CHECK(std::get<Polyline>(contour->shape).points.size() == 6);
+    CHECK(std::get<Polyline>(contour->shape).closed);
+    CHECK(drawing.count<Polyline>(layers::kCutContour) == 1);
+    CHECK(drawing.count<Polyline>(layers::kCutout) == 1); // the cable hole
+    // Overall 2 + the hole's chain (3) and its two + the two sides of the notch.
+    CHECK(drawing.count<Dimension>(layers::kDimensions) == 2 + 3 + 2 + 2);
+    // The band marks follow the banded front edge only, not the notch.
+    CHECK(drawing.count<Line>(layers::kEdgeBand) == 1);
+}

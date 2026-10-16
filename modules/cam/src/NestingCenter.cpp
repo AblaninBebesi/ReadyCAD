@@ -424,9 +424,18 @@ SheetProgram planSheet(const SheetJob& job, const NestingCenterProfile& profile)
                     ++left.noTool;
                 }
             } else if (const auto* c = std::get_if<Contour>(&op)) {
-                if (c->inner && toolPath(c->outline, -router->diameter / 2.0).size() < 3) {
+                const Real r = router->diameter / 2.0;
+                if (c->inner && toolPath(c->outline, -r).size() < 3) {
                     ++left.noTool; // the contour router does not fit into the opening
                     continue;
+                }
+                // A notch narrower than the router: going round the part the tool passes over
+                // it. Grown by the radius and shrunk back, the outline then comes back fuller.
+                if (!c->inner) {
+                    const nesting::Polygon closed = toolPath(toolPath(c->outline, r), -r);
+                    if (nesting::area(closed) > nesting::area(c->outline) + 1.0) {
+                        ++left.noTool;
+                    }
                 }
                 const nesting::Rect box = nesting::bounds(c->outline);
                 cutouts.push_back({c->outline, nesting::area(c->outline),

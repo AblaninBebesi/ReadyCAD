@@ -3,6 +3,7 @@
 
 #include "LayoutCheck.hpp"
 #include "readycad/core/builders/Catalog.hpp"
+#include "readycad/core/builders/WardrobeBuilder.hpp"
 #include "readycad/detailing/CutList.hpp"
 #include "readycad/detailing/Detailing.hpp"
 #include "readycad/detailing/FlatPart.hpp"
@@ -215,5 +216,29 @@ TEST_CASE("Parts left out of the cutting plan are not nested", "[nesting][cutlis
         CHECK(row.inCuttingPlan);
         CHECK(p.label == std::to_string(*p.cutListRow + 1)); // the number of its cut list row
         CHECK(row.kind != rc::core::ComponentKind::BackPanel);
+    }
+}
+
+TEST_CASE("A shaped part goes to the nesting with its real blank", "[nesting][shape]")
+{
+    const auto wardrobe = rc::core::WardrobeBuilder().build();
+    wardrobe->carcass()->leftSide().setShape({rc::core::CornerNotch{rc::core::PanelCorner::L1W1, 300.0, 200.0}});
+    rc::detailing::applyDetailing(*wardrobe);
+    const auto cutList = rc::detailing::buildCutList(*wardrobe, wardrobe->rules());
+    const auto parts = partsFromCutList(*wardrobe, cutList);
+    const auto wall = std::find_if(parts.begin(), parts.end(), [&](const NestingPart& p) {
+        return cutList[*p.cutListRow].kind == rc::core::ComponentKind::SideWall && p.outline.size() > 4;
+    });
+    REQUIRE(wall != parts.end());
+    CHECK(area(wall->outline) == Approx(bounds(wall->outline).area() - 300.0 * 200.0).epsilon(1e-6));
+
+    // Both machines place it: the nesting centre by its shape, the saw by its rectangle.
+    for (const Machine machine : {Machine::NestingCenter, Machine::PanelSaw}) {
+        NestingSettings settings;
+        settings.machine = machine;
+        settings.optimizer.populationSize = 4;
+        settings.optimizer.generations = 2;
+        const NestingResult r = optimize(parts, StockManager{}, settings);
+        CHECK(r.unplaced.empty());
     }
 }

@@ -110,6 +110,13 @@ enum class TextId : std::size_t {
     ModuleSink, ModuleHob, ModuleWallDoors, ModuleWallOpen, KitchenHeader, PlinthHeight,
     PlinthSetback, RailWidth, HwLeg, HwPlinthClip, HwHanger, CabinetCount, CutoutDoesNotFit,
     CutoutWarning,
+    // Shapes: notches, shaped corners, openings of any part
+    ShapeDoesNotFit, MachiningInCut, ShapeWarning, ShapeHeader, ShapeAdd, ShapeCornerNotch,
+    ShapeEdgeNotch, ShapeCornerRound, ShapeChamfer, ShapeInnerCutout, ShapeRoundHole,
+    ShapeCornerLabel, ShapeEdgeLabel, ShapeFromLabel, ShapeAlongLength, ShapeAlongWidth,
+    ShapeRadius, ShapeOffset, ShapeFromEnd, ShapeNotchLength, ShapeNotchDepth, ShapeOpeningLength,
+    ShapeOpeningWidth, ShapeDiameter, ShapeAutomatic, ShapeNone, AfterSawTitle, AfterSawNote,
+    ShapeFromCorner, ShapeFromEdge,
 
     Count // keep last
 };

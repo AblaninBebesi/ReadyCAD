@@ -8,4 +8,6 @@ Stage 9: a part left out of the cutting plan gets a cut list row of its own (`Cu
 
 Kitchen: detailing carcass by carcass (no joint to the neighbouring cabinet), rails take connectors, back grooves only in parts that hold the back; legs, plinth clips and hangers; `FlatPart::cutouts` and `cutoutOutline()`. Cut list rows group parts with the same machining (holes, grooves, cut-outs as the drawing shows them) and the same hand of mirror parts.
 
-**Stages:** 4, 6, 9, kitchen
+Shapes: `FlatPart::contour` and `blank` of shaped parts; `findShapeConflicts` — holes and grooves must stay in material.
+
+**Stages:** 4, 6, 9, kitchen, shapes

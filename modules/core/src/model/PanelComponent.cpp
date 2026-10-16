@@ -27,6 +27,20 @@ EdgeBand PanelComponent::defaultEdge(EdgeSide, const LayoutSlot&) const
     return {};
 }
 
+std::vector<PanelCutout> PanelComponent::automaticOpenings(const LayoutSlot&) const
+{
+    return {};
+}
+
+void PanelComponent::setShape(std::vector<ShapeFeature> features)
+{
+    for (const ShapeFeature& feature : features) {
+        checkFeature(feature);
+    }
+    shape_ = std::move(features);
+    requestLayout();
+}
+
 Real PanelComponent::thickness(const LayoutSlot& slot) const
 {
     return materialOverride_ ? materialOverride_->thickness
@@ -44,6 +58,7 @@ void PanelComponent::updatePanel(const LayoutSlot& slot)
         const auto& custom = edgeOverrides_[static_cast<std::size_t>(side)];
         panel_->setEdge(side, custom ? *custom : defaultEdge(side, slot));
     }
+    panel_->setShape(shape_, automaticOpenings(slot));
 }
 
 } // namespace rc::core

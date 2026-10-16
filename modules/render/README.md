@@ -4,4 +4,6 @@ OpenGL 3.3 core renderer: scene built from the model (GL-free, tested), orbit ca
 
 Kitchen: a panel with cut-outs (the worktop) is drawn as boxes around its openings; own colours for worktop and plinth.
 
-**Stages:** 5, kitchen
+Shapes: shaped panels are prisms (`ScenePrism`) — the face triangulated by ear clipping with hole bridges (`Triangulate`), walls, edges; picking hits triangles.
+
+**Stages:** 5, kitchen, shapes

@@ -56,6 +56,15 @@ struct FlatCutout {
     friend bool operator==(const FlatCutout&, const FlatCutout&) = default;
 };
 
+/// A side of the finished outline as drawn: a piece of an edge, a rounded or chamfered corner
+/// (banded like its edges), or a side of a notch (not banded).
+struct FlatContourSide {
+    core::Vec2 start{0.0};
+    core::Vec2 end{0.0};
+    core::OutlineSideKind kind = core::OutlineSideKind::Edge;
+    core::EdgeBand band; ///< a corner takes its long edge's band, or its short edge's
+};
+
 /// One side of the finished outline: which edge of the panel it is, its band, and where it lies.
 struct FlatEdge {
     core::EdgeSide side = core::EdgeSide::L1;
@@ -79,13 +88,21 @@ struct FlatPart {
     core::PanelFace viewFace = core::PanelFace::Top; ///< Top or Bottom
     bool flipped = false; ///< v runs against the panel's local y (L2 at the bottom)
 
-    FlatRect cut; ///< the sawn blank before edge banding (pre-milling included)
-    std::array<FlatEdge, 4> outline{}; ///< bottom, right, top, left
+    FlatRect cut; ///< the sawn blank before edge banding (pre-milling included): its bounds
+    std::array<FlatEdge, 4> outline{}; ///< bottom, right, top, left (the four edges as named)
+    /// The finished outline, counter-clockwise: the four edges, or with notches and shaped
+    /// corners the real shape.
+    std::vector<FlatContourSide> contour;
+    /// The blank's outline, counter-clockwise: `cut` as a rectangle, or the real shape (banded
+    /// edges grown by their allowance, notches where they are).
+    std::vector<core::Vec2> blank;
     std::vector<FlatHole> holes;       ///< sorted: near, far, edge; then by v and u
     std::vector<FlatGroove> grooves;
     std::vector<FlatCutout> cutouts;   ///< openings through the whole part
 
     [[nodiscard]] std::size_t count(FlatSide side) const noexcept;
+    /// True if a notch or a shaped corner makes the outline more than a rectangle.
+    [[nodiscard]] bool shaped() const noexcept;
     /// The edge at a side of the outline: 0 bottom, 1 right, 2 top, 3 left.
     [[nodiscard]] const FlatEdge& edgeAt(std::size_t outlineIndex) const
     {

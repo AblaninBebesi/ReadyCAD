@@ -4,6 +4,7 @@ rc_add_module(render
         src/GlObjects.cpp
         src/Renderer.cpp
         src/Scene.cpp
+        src/Triangulate.cpp
     DEPENDS
         readycad::core
         readycad::detailing
@@ -11,4 +12,5 @@ rc_add_module(render
         OpenGL::GL
     TESTS
         tests/CameraTests.cpp
-        tests/SceneTests.cpp)
+        tests/SceneTests.cpp
+        tests/TriangulateTests.cpp)
