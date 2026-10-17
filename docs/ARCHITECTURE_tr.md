@@ -60,7 +60,7 @@ ReadyCAD/
 │   ├── include/readycad/<name>/   modülün genel (public) API'si
 │   ├── src/                  gerçekleştirim (dışarıdan görünmez)
 │   └── tests/                modülün birim testleri -> bin/readycad_<name>_tests.exe
-├── app/                      giriş noktası
+├── app/                      giriş noktası; resources/ — program simgesi (exe'ye gömülür)
 ├── assets/textures/          desen resimleri (CC0, ambientCG), exe'nin yanına kopyalanır
 ├── tests/integration/        modüller arası ve uçtan uca (Aşama 9) testler
 └── docs/

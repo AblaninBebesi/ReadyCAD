@@ -9,6 +9,14 @@ add_custom_command(TARGET ReadyCAD POST_BUILD
     COMMENT "Copying assets next to ReadyCAD")
 
 if(WIN32)
+    # The icon (app/resources/ReadyCAD.ico, 16-256 px) built into the executable.
+    set(READYCAD_ICON ${CMAKE_CURRENT_SOURCE_DIR}/resources/ReadyCAD.ico)
+    configure_file(resources/ReadyCAD.rc.in ${CMAKE_CURRENT_BINARY_DIR}/ReadyCAD.rc @ONLY)
+    target_sources(ReadyCAD PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/ReadyCAD.rc)
+    # windres reports no dependencies: a new picture must still rebuild the resource.
+    set_source_files_properties(${CMAKE_CURRENT_BINARY_DIR}/ReadyCAD.rc PROPERTIES
+        OBJECT_DEPENDS ${READYCAD_ICON})
+
     # Release builds: GUI subsystem (no console window). Debug keeps the console for logs.
     set_target_properties(ReadyCAD PROPERTIES WIN32_EXECUTABLE $<NOT:$<CONFIG:Debug>>)
     if(MINGW)

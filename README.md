@@ -1,5 +1,7 @@
 # ReadyCAD
 
+<img src="app/resources/ReadyCAD.png" alt="Иконка ReadyCAD" width="128" align="right">
+
 Параметрическое проектирование корпусной мебели: модель → деталировка → присадка → раскрой →
 DXF/PDF → управляющие программы для ЧПУ. Дипломный проект. C++20, CMake, OpenGL 3.3, Dear ImGui.
 Интерфейс на турецком языке.

@@ -59,7 +59,7 @@ ReadyCAD/
 │   ├── include/readycad/<name>/   публичный API модуля
 │   ├── src/                  реализация (снаружи не видна)
 │   └── tests/                юнит-тесты модуля -> bin/readycad_<name>_tests.exe
-├── app/                      точка входа
+├── app/                      точка входа; resources/ — иконка программы (вшивается в exe)
 ├── assets/textures/          картинки декоров (CC0, ambientCG), копируются рядом с exe
 ├── tests/integration/        межмодульные и сквозные (этап 9) тесты
 └── docs/

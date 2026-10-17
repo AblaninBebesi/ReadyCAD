@@ -1,0 +1,3 @@
+// The program's icon, built into ReadyCAD.exe: Explorer shows it on the file, and GLFW gives
+// every window the icon named GLFW_ICON (title bar, taskbar, Alt+Tab).
+GLFW_ICON ICON "@READYCAD_ICON@"
