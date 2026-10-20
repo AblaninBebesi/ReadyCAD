@@ -13,4 +13,6 @@ Kitchen: project format 2 — `"kitchen"` with sizes, worktop and the cabinets o
 
 Shapes: project format 3 — `"shape"` of a part. Decors: project format 4, profile format 2 — the decor catalogue and `decor` of materials.
 
-**Stages:** 5, 7, 8, 9, kitchen, shapes
+Corner kitchens: project format 5 — side runs under `"left"` / `"right"` with their corners, `blindFiller` of a carcass.
+
+**Stages:** 5, 7, 8, 9, kitchen, shapes, corner kitchens

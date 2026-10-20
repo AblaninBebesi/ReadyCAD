@@ -11,6 +11,8 @@ namespace rc::core {
 
 class BackMount;
 
+enum class Side { Left, Right };
+
 /// How a horizontal carcass panel (top or bottom) meets the side walls.
 enum class JointType {
     Overlay, // накладная: lies on the sides, full carcass width
@@ -70,9 +72,29 @@ struct DrawerBoxFrame {
     Real bottom = 3.0;
 };
 
-/// What a Kitchen tells its worktop: the openings the cabinets below need (a sink, a hob).
+/// What a Kitchen tells its runs, their corners and their worktops (heights in product Y, the
+/// rest in the coordinates of the run).
 struct KitchenFrame {
-    std::vector<PanelCutout> cutouts; // centre in product X (center.x) and Z (center.y)
+    Real baseTop = 0.0;    // top of the base cabinets: the underside of the worktop
+    Real wallBottom = 0.0; // underside of the wall cabinets
+    Real wallDepth = 320.0;
+    Real worktopDepth = 600.0;
+    /// How far from the back wall the cabinets of a side run start: the part of the back run's
+    /// corner cabinets they hide (its cabinets' depth and their fronts), base and wall.
+    Real cornerBase = 0.0;
+    Real cornerWall = 0.0;
+    /// For a worktop: the openings the cabinets below need (a sink, a hob; centre in X
+    /// (center.x) and Z (center.y)), and which of its ends meet a wall or another worktop.
+    std::vector<PanelCutout> cutouts;
+    bool startClosed = false; // at X min
+    bool endClosed = false;   // at X max
+};
+
+/// What a kitchen corner tells its blind cabinets: the end that runs on behind the cabinets of
+/// the other wall, and how much of it they hide, from that end of the carcass.
+struct CornerFrame {
+    Side blindEnd = Side::Right;
+    Real hidden = 0.0;
 };
 
 /// Sizes of items along one axis: an item with a fixed size keeps it, the automatic ones
@@ -93,7 +115,13 @@ struct LayoutSlot {
     const ConstructionRules* rules = &ConstructionRules::defaults();
     const CarcassFrame* frame = nullptr; // set by a Carcass for its own structural parts
     const DrawerBoxFrame* drawerBox = nullptr; // set by a Drawer for its box parts
-    const KitchenFrame* kitchen = nullptr;     // set by a Kitchen for its worktop
+    const KitchenFrame* kitchen = nullptr;     // set by a Kitchen for everything in it
+    const CornerFrame* corner = nullptr;       // set by a kitchen corner for its cabinets
+    /// How far the plinth of a base cabinet reaches beyond the carcass at X min / X max
+    /// (negative: it stops short) — set at a kitchen corner, so that the plinths of the two
+    /// walls meet. A cabinet row passes them to its first and last cabinet.
+    Real plinthBeyondStart = 0.0;
+    Real plinthBeyondEnd = 0.0;
     /// Y of a hole of the enclosing carcass's System 32 grid (set by the Carcass for its
     /// interior); shelves on supports snap to it.
     std::optional<Real> holeGridOriginY;

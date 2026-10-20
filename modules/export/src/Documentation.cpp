@@ -1,5 +1,6 @@
 #include "readycad/export/Documentation.hpp"
 
+#include "readycad/core/model/Kitchen.hpp"
 #include "readycad/core/model/Queries.hpp"
 #include "readycad/detailing/HardwareList.hpp"
 #include "readycad/export/PartDrawing.hpp"
@@ -64,6 +65,13 @@ std::string todayText()
 }
 
 namespace {
+
+/// A kitchen with runs on side walls: drawn as a plan and wall by wall.
+bool cornerKitchen(const core::Product& product)
+{
+    const core::Kitchen* kitchen = product.kitchen();
+    return kitchen != nullptr && kitchen->runs().size() > 1;
+}
 
 /// Removes the last UTF-8 code point.
 void popCodePoint(std::string& text)
@@ -484,10 +492,11 @@ void summaryPage(Composer& composer, const DocumentationInput& in, const std::st
         y -= kTable * 1.9;
     }
 
-    // A picture of the product on the right.
+    // A picture of the product on the right: from the front, a corner kitchen from above.
     const Vec2 picMin(min.x + columnWidth + 2.0 * kGap, min.y + 8.0);
     const Vec2 picMax = max;
-    const Bounds extent = viewExtent(in.product, ProductView::Front);
+    const ProductView picture = cornerKitchen(in.product) ? ProductView::Plan : ProductView::Front;
+    const Bounds extent = viewExtent(in.product, picture);
     if (!extent.empty && picMax.x - picMin.x > 30.0) {
         const int denominator = chooseScale([&](Real s) {
             return extent.size().x * s <= picMax.x - picMin.x
@@ -496,10 +505,11 @@ void summaryPage(Composer& composer, const DocumentationInput& in, const std::st
         const Real s = 1.0 / denominator;
         ProductViewOptions view;
         view.dimensions = false;
-        place(canvas, drawProductView(in.product, ProductView::Front, view), s, picMin, picMax);
+        place(canvas, drawProductView(in.product, picture, view), s, picMin, picMax);
         canvas.text(Vec2((picMin.x + picMax.x) / 2.0, picMin.y - 2.0),
-                    txt(TextId::ViewFrontClosed) + "  " + scaleText(denominator), kBody, false,
-                    HAlign::Center, VAlign::Top);
+                    txt(picture == ProductView::Plan ? TextId::ViewPlan : TextId::ViewFrontClosed)
+                        + "  " + scaleText(denominator),
+                    kBody, false, HAlign::Center, VAlign::Top);
     }
 }
 
@@ -582,7 +592,34 @@ struct ViewSet {
     }
 };
 
-void assemblyPage(Composer& composer, const DocumentationInput& in, const TextMetrics& metrics)
+/// The plan of a corner kitchen: all its walls from above, as large as the page allows.
+void planPage(Composer& composer, const DocumentationInput& in, const TextMetrics& metrics)
+{
+    const Vec2 area = composer.contentSize();
+    const auto build = [&](Real scale) {
+        ProductViewOptions options;
+        options.textHeight = kBody / scale;
+        return drawProductView(in.product, ProductView::Plan, options);
+    };
+    const int denominator = chooseScale([&](Real s) {
+        const Bounds b = build(s).bounds(metrics);
+        return b.size().x * s <= area.x && b.size().y * s <= area.y;
+    });
+    const Real s = 1.0 / denominator;
+    const Drawing plan = build(s);
+    const Bounds b = plan.bounds(metrics);
+
+    Canvas canvas = composer.newPage(txt(TextId::PagePlan), txt(TextId::PagePlan));
+    composer.setScale(scaleText(denominator));
+    const Vec2 size = b.size() * s;
+    const Vec2 offset(composer.contentMin().x + (area.x - size.x) / 2.0 - b.min.x * s,
+                      composer.contentMax().y - (area.y - size.y) / 2.0 - b.max.y * s);
+    canvas.drawing().append(plan, s, offset);
+}
+
+/// The assembly drawing of `root`: the product, or one wall of a corner kitchen.
+void assemblyPage(Composer& composer, const TextMetrics& metrics, const core::FurnitureComponent& root,
+                  const std::string& title)
 {
     const std::array<ProductView, 3> views{ProductView::Front, ProductView::FrontOpen,
                                            ProductView::Section};
@@ -596,7 +633,7 @@ void assemblyPage(Composer& composer, const DocumentationInput& in, const TextMe
         ProductViewOptions options;
         options.textHeight = kBody / scale;
         for (std::size_t i = 0; i < views.size(); ++i) {
-            set.drawings[i] = drawProductView(in.product, views[i], options);
+            set.drawings[i] = drawProductView(root, views[i], options);
             set.bounds[i] = set.drawings[i].bounds(metrics);
         }
         return set;
@@ -619,7 +656,7 @@ void assemblyPage(Composer& composer, const DocumentationInput& in, const TextMe
     const Real s = 1.0 / denominator;
     const ViewSet set = build(s);
 
-    Canvas canvas = composer.newPage(txt(TextId::PageAssembly), txt(TextId::PageAssembly));
+    Canvas canvas = composer.newPage(title, title);
     composer.setScale(scaleText(denominator));
 
     const Vec2 total = set.size(*layout, s, kTitleSpace);
@@ -636,7 +673,7 @@ void assemblyPage(Composer& composer, const DocumentationInput& in, const TextMe
             const Bounds& b = set.bounds[i];
             const Vec2 offset(x - b.min.x * s, floorY);
             canvas.drawing().append(set.drawings[i], s, offset);
-            const Bounds extent = viewExtent(in.product, views[i]);
+            const Bounds extent = viewExtent(root, views[i]);
             canvas.text(Vec2(offset.x + extent.center().x * s, rowTop - rowSize.y + kTitleSpace - 2.0),
                         txt(titles[i]), kBody + 0.5, true, HAlign::Center, VAlign::Top);
             x += b.size().x * s + 2.0 * kGap;
@@ -1082,7 +1119,16 @@ PageSet buildDocumentation(const DocumentationInput& in, const DocumentationOpti
         cuttingPages(composer, in);
     }
     if (options.assembly) {
-        assemblyPage(composer, in, metrics);
+        // A corner kitchen: its plan, then each wall as seen standing in front of it.
+        if (cornerKitchen(in.product)) {
+            planPage(composer, in, metrics);
+            for (const core::KitchenRun* run : in.product.kitchen()->runs()) {
+                assemblyPage(composer, metrics, *run,
+                             txt(TextId::PageAssembly) + " — " + i18n::displayName(*run));
+            }
+        } else {
+            assemblyPage(composer, metrics, in.product, txt(TextId::PageAssembly));
+        }
     }
     if (options.partDrawings) {
         for (std::size_t i = 0; i < in.cutList.size(); ++i) {

@@ -33,16 +33,26 @@ void setPlinth(Document& doc, core::ComponentId carcass, bool plinth);
 
 // --- Kitchens -------------------------------------------------------------------------------
 void setKitchenSizes(Document& doc, const core::Kitchen::Sizes& sizes);
-/// Adds a cabinet of a module at the right end of its row (base or wall), `width` mm wide.
-/// The other cabinets give way; if they cannot (all fixed, too little room) the edit is refused.
-void addCabinet(Document& doc, core::CabinetModule module, core::Real width);
-/// nullopt: the cabinet shares the free width with the other automatic ones.
+/// A run on a side wall, `length` mm along it: an L kitchen, with both sides a U. A new run
+/// comes with its corner (blind corner cabinets on the back run) and two automatic cabinets, a
+/// base and a wall one; an existing one only changes its length. nullopt: the run, its cabinets
+/// and its corner go.
+void setSideRun(Document& doc, core::Side side, std::optional<core::Real> length);
+/// Adds a cabinet of a module at the right end of its row (base or wall) in the run of `wall`,
+/// `width` mm wide. The other cabinets give way; if they cannot (all fixed, too little room)
+/// the edit is refused.
+void addCabinet(Document& doc, core::CabinetModule module, core::Real width,
+                core::KitchenWall wall = core::KitchenWall::Back);
+/// nullopt: the cabinet shares the free width with the other automatic ones (not a corner
+/// cabinet: it always has its width).
 void setCabinetWidth(Document& doc, core::ComponentId cabinet, std::optional<core::Real> width);
 /// Moves a cabinet of a row `steps` places to the right (negative: to the left).
 void moveCabinet(Document& doc, core::ComponentId cabinet, int steps);
-/// The opening a base cabinet needs in the worktop; nullopt = none.
+/// The opening a base cabinet of a row needs in the worktop; nullopt = none.
 void setCutout(Document& doc, core::ComponentId cabinet,
                std::optional<core::WorktopCutout> cutout);
+/// The filler of a blind corner cabinet (Carcass::setBlindCorner).
+void setBlindFiller(Document& doc, core::ComponentId cabinet, core::Real filler);
 
 // --- Sections -------------------------------------------------------------------------------
 void splitSection(Document& doc, core::ComponentId section, core::Axis axis, int count);

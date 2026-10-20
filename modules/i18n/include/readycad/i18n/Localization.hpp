@@ -111,6 +111,11 @@ enum class TextId : std::size_t {
     ModuleSink, ModuleHob, ModuleWallDoors, ModuleWallOpen, KitchenHeader, PlinthHeight,
     PlinthSetback, RailWidth, HwLeg, HwPlinthClip, HwHanger, CabinetCount, CutoutDoesNotFit,
     CutoutWarning,
+    // Corner kitchens: runs on side walls, corners, blind corner cabinets
+    KindKitchenRun, KindKitchenCorner, KindBlindPanel, CatalogKitchenL, CatalogKitchenU, RunBack,
+    RunLeft, RunRight, CornerLeft, CornerRight, BlindBaseCabinet, BlindWallCabinet,
+    BackWallLength, Filler, CornerBaseWidth, CornerBaseFiller, CornerWallWidth, CornerWallFiller,
+    PagePlan, ViewPlan,
     // Shapes: notches, shaped corners, openings of any part
     ShapeDoesNotFit, MachiningInCut, ShapeWarning, ShapeHeader, ShapeAdd, ShapeCornerNotch,
     ShapeEdgeNotch, ShapeCornerRound, ShapeChamfer, ShapeInnerCutout, ShapeRoundHole,

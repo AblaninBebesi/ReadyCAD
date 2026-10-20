@@ -3,6 +3,7 @@
 #include "readycad/core/builders/Catalog.hpp"
 #include "readycad/core/builders/WardrobeBuilder.hpp"
 #include "readycad/core/model/Carcass.hpp"
+#include "readycad/core/model/Kitchen.hpp"
 #include "readycad/core/model/Parts.hpp"
 #include "readycad/core/model/Queries.hpp"
 #include "readycad/core/model/Section.hpp"
@@ -159,4 +160,43 @@ TEST_CASE("Every catalogue item has all three views", "[export][views]")
             CHECK_FALSE(viewExtent(*product, view).empty);
         }
     }
+}
+
+TEST_CASE("A corner kitchen: a plan of the room, an elevation per wall", "[export][views][corner]")
+{
+    const auto product = core::createProduct(core::CatalogItem::KitchenL);
+    const core::Kitchen& kitchen = *product->kitchen();
+
+    // From above: the back wall at the top, the right wall down the right side; the worktops'
+    // cut-outs (the sink at the back, the hob at the side) seen through.
+    const Drawing plan = drawProductView(*product, ProductView::Plan, {25.0, true});
+    const Bounds extent = viewExtent(*product, ProductView::Plan);
+    CHECK(extent.min.x == Approx(0.0));
+    CHECK(extent.max.x == Approx(3000.0));
+    CHECK(extent.max.y == Approx(0.0));
+    CHECK(extent.min.y == Approx(-2400.0));
+    CHECK(plan.count<Polyline>() >= 2);
+    const auto planDims = dimensionValues(plan);
+    CHECK(planDims.count("3000") == 1);
+    CHECK(planDims.count("2400") == 1);
+    // The front edge of the back worktop, from wall to wall: the side worktop butts against it.
+    const std::vector<Line> visible = linesOn(plan, viewLayers::kVisible);
+    CHECK(std::any_of(visible.begin(), visible.end(), [](const Line& l) {
+        return std::abs(l.a.y + 600.0) < 1e-6 && std::abs(l.b.y + 600.0) < 1e-6
+            && std::min(l.a.x, l.b.x) < 1e-6 && std::max(l.a.x, l.b.x) > 3000.0 - 1e-6;
+    }));
+
+    // Each wall as seen standing in front of it, in its own coordinates.
+    const core::KitchenRun& side = *kitchen.sideRun(core::Side::Right);
+    const Bounds back = viewExtent(kitchen.backRun(), ProductView::Front);
+    CHECK(back.min.x == Approx(0.0));
+    CHECK(back.max.x == Approx(3000.0));
+    const Bounds right = viewExtent(side, ProductView::Front);
+    CHECK(right.min.x == Approx(338.0)); // its wall cabinets start in front of the corner's
+    CHECK(right.max.x == Approx(2400.0));
+    for (const ProductView view : {ProductView::Front, ProductView::FrontOpen, ProductView::Section}) {
+        CHECK(drawProductView(side, view).count<Line>() > 4);
+    }
+    // The open view leaves the blind panel out like the doors: the corner cabinet's shelf shows.
+    CHECK(viewExtent(kitchen.backRun(), ProductView::FrontOpen).max.x == Approx(3000.0));
 }

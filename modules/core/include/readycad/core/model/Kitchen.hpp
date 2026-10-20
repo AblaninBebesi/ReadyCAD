@@ -38,11 +38,117 @@ private:
     RowLevel level_;
 };
 
-/// Mutfak: a straight kitchen run against a wall. Base cabinets stand on the floor on their
-/// plinths, the worktop lies on them, wall cabinets hang with their tops on one line.
+/// The walls of a kitchen. The back wall always has a run of cabinets; one side wall has one
+/// too in an L kitchen (Г-образная), both in a U kitchen (П-образная).
+enum class KitchenWall { Back, Left, Right };
+
+/// Köşe: where the back wall's run meets a side wall's run, at an end of the back run. Its
+/// cabinets belong to the back run — its coordinates — and stand at that end; the side run
+/// starts in front of them.
 ///
-/// The product box is the run: width = its length, height = the top line of the wall cabinets,
-/// depth = the depth of the base cabinets (from the wall). Its own sizes give the rest:
+/// Blind corner (kör köşe): the cabinets are ordinary ones (Carcass::setBlindCorner) as wide as
+/// their fixedWidth, whose end runs on behind the side run's cabinets; a blind panel closes
+/// that part of their fronts.
+///
+///      back wall                     side wall (right)
+///     ─────────────────────────────┐
+///      … │   corner cabinet        │
+///        │  door │fill│ hidden     │
+///     ───┴───────┴────┼────────────┤
+///                     │ side run   │
+class KitchenCorner final : public FurnitureComponent {
+public:
+    /// `end`: the end of the back run it stands at. The cabinets come ready made
+    /// (makeCorner() in KitchenBuilder.hpp); throws std::invalid_argument for null.
+    KitchenCorner(Side end, std::shared_ptr<Carcass> base, std::shared_ptr<Carcass> wall);
+    [[nodiscard]] ComponentKind kind() const noexcept override
+    {
+        return ComponentKind::KitchenCorner;
+    }
+    [[nodiscard]] Side end() const noexcept { return end_; }
+
+    [[nodiscard]] Carcass& baseCabinet() const noexcept { return *base_; }
+    [[nodiscard]] Carcass& wallCabinet() const noexcept { return *wall_; }
+    /// What the corner takes of the back run, base and wall: its cabinets' widths.
+    [[nodiscard]] Real baseWidth() const noexcept;
+    [[nodiscard]] Real wallWidth() const noexcept;
+
+    static constexpr Real kBaseWidth = 1100.0; // without a fixed width
+    static constexpr Real kWallWidth = 800.0;
+
+protected:
+    void layoutChildren(const LayoutSlot& slot) override;
+
+private:
+    Side end_;
+    std::shared_ptr<Carcass> base_;
+    std::shared_ptr<Carcass> wall_;
+    CornerFrame baseFrame_; // rebuilt on every layout
+    CornerFrame wallFrame_;
+};
+
+/// The cabinets along one wall: base cabinets on their plinths, the worktop on them, wall
+/// cabinets hanging with their tops on one line.
+///
+/// A run is laid out in coordinates of its own, as a straight kitchen: its length along X, its
+/// front towards +Z, the back wall at Z = 0. The kitchen places it on its wall (ownPlacement):
+/// the cabinets, their drilling and their parts never learn which wall they stand at.
+///
+/// The back run holds the corners where side runs meet it, at its ends; a side run's cabinets
+/// start in front of them, its worktop at the back run's worktop edge (a butt joint), while the
+/// back run's worktop runs on to the side wall.
+class KitchenRun final : public FurnitureComponent {
+public:
+    explicit KitchenRun(KitchenWall wall);
+    [[nodiscard]] ComponentKind kind() const noexcept override { return ComponentKind::KitchenRun; }
+    [[nodiscard]] KitchenWall wall() const noexcept { return wall_; }
+
+    [[nodiscard]] CabinetRow& baseRow() const noexcept { return *baseRow_; }
+    [[nodiscard]] CabinetRow& wallRow() const noexcept { return *wallRow_; }
+    [[nodiscard]] Worktop& worktop() const noexcept { return *worktop_; }
+    /// The corner at an end of the back run; nullptr without a side run there.
+    [[nodiscard]] KitchenCorner* corner(Side end) const noexcept;
+    /// Every cabinet of the run, base and wall, the corners' included.
+    [[nodiscard]] std::vector<Carcass*> cabinets() const;
+
+    /// A side run's length along its wall: from the room's front to the back wall. (The back
+    /// run is as long as the product is wide.) Throws std::invalid_argument for a length <= 0.
+    [[nodiscard]] Real length() const noexcept { return length_; }
+    void setLength(Real length);
+
+    /// Base cabinets whose worktop cut-out cannot be made: it leaves less than
+    /// rules.kitchen.cutoutMargin of worktop to an edge or to another cut-out, or it does not
+    /// fall into the cabinet's opening — between its side walls, in front of its back, clear of
+    /// its rails — so the sink bowl or the hob would hit a part. Valid after layout.
+    [[nodiscard]] std::vector<const Carcass*> misplacedCutouts(const ConstructionRules& rules) const;
+
+protected:
+    void layoutChildren(const LayoutSlot& slot) override;
+    [[nodiscard]] const Placement* ownPlacement() const noexcept override { return &placement_; }
+
+private:
+    friend class Kitchen; // places the run and its corners
+
+    /// The cut-out of a cabinet in plan: centre in run X / Z, size along X / Z.
+    [[nodiscard]] PanelCutout planOf(const Carcass& cabinet) const;
+
+    KitchenWall wall_;
+    Real length_ = 1800.0;
+    Placement placement_; // set by the kitchen before every layout
+    std::shared_ptr<CabinetRow> baseRow_;
+    std::shared_ptr<Worktop> worktop_;
+    std::shared_ptr<CabinetRow> wallRow_;
+    std::shared_ptr<KitchenCorner> corners_[2]; // at the left and the right end (back run only)
+    KitchenFrame frame_; // the worktop's: cut-outs and closed ends, rebuilt on every layout
+};
+
+/// Mutfak: kitchen runs against the walls of a room — a straight kitchen on the back wall, an
+/// L kitchen with a run on one side wall, a U kitchen with runs on both.
+///
+/// The product box is the back run: width = its length, height = the top line of the wall
+/// cabinets, depth = the depth of the base cabinets (from the wall). Its own sizes give the rest;
+/// a side run is as long as its own length() and stands at the product's left (X = 0) or right
+/// side, from the back wall (Z = 0) towards the room:
 ///
 ///       ┌──────── wall cabinets ────────┐  ─ top line (product height)
 ///       │                               │    wallHeight, wallDepth deep
@@ -71,28 +177,32 @@ public:
     /// Throws std::invalid_argument for a size <= 0.
     void setSizes(const Sizes& sizes);
 
-    [[nodiscard]] CabinetRow& baseRow() const noexcept { return *baseRow_; }
-    [[nodiscard]] CabinetRow& wallRow() const noexcept { return *wallRow_; }
-    [[nodiscard]] Worktop& worktop() const noexcept { return *worktop_; }
+    [[nodiscard]] KitchenRun& backRun() const noexcept { return *backRun_; }
+    /// The run on a side wall; nullptr if that wall has none.
+    [[nodiscard]] KitchenRun* sideRun(Side side) const noexcept;
+    /// The runs that are there: the back run first, then the left and the right one.
+    [[nodiscard]] std::vector<KitchenRun*> runs() const;
+    /// Puts a run on a side wall with the corner where it meets the back run (replacing what
+    /// was there), or takes both away (nullptr, nullptr). Throws std::invalid_argument for a
+    /// run of another wall, a corner of the other end, or only one of the two.
+    void setSideRun(Side side, std::shared_ptr<KitchenRun> run, std::shared_ptr<KitchenCorner> corner);
 
-    /// Base cabinets whose worktop cut-out cannot be made: it leaves less than
-    /// rules.kitchen.cutoutMargin of worktop to an edge or to another cut-out, or it does not
-    /// fall into the cabinet's opening — between its side walls, in front of its back, clear of
-    /// its rails — so the sink bowl or the hob would hit a part. Valid after layout.
+    /// The back run's rows and worktop (all a straight kitchen has).
+    [[nodiscard]] CabinetRow& baseRow() const noexcept { return backRun_->baseRow(); }
+    [[nodiscard]] CabinetRow& wallRow() const noexcept { return backRun_->wallRow(); }
+    [[nodiscard]] Worktop& worktop() const noexcept { return backRun_->worktop(); }
+
+    /// KitchenRun::misplacedCutouts() of every run.
     [[nodiscard]] std::vector<const Carcass*> misplacedCutouts(const ConstructionRules& rules) const;
 
 protected:
     void layoutChildren(const LayoutSlot& slot) override;
 
 private:
-    /// The cut-out of a cabinet in plan: centre in product X / Z, size along X / Z.
-    [[nodiscard]] PanelCutout planOf(const Carcass& cabinet) const;
-
     Sizes sizes_;
-    std::shared_ptr<CabinetRow> baseRow_;
-    std::shared_ptr<Worktop> worktop_;
-    std::shared_ptr<CabinetRow> wallRow_;
-    KitchenFrame frame_; // the worktop's cut-outs, rebuilt on every layout
+    std::shared_ptr<KitchenRun> backRun_;
+    std::shared_ptr<KitchenRun> sideRuns_[2]; // left, right
+    KitchenFrame frame_; // what the runs get, rebuilt on every layout
 };
 
 } // namespace rc::core

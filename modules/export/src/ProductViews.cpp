@@ -2,6 +2,7 @@
 
 #include "readycad/core/model/Carcass.hpp"
 #include "readycad/core/model/Drawer.hpp"
+#include "readycad/core/model/Kitchen.hpp"
 #include "readycad/core/model/Parts.hpp"
 #include "readycad/core/model/Queries.hpp"
 #include "readycad/core/model/Section.hpp"
@@ -38,7 +39,8 @@ struct Item {
 
 bool isFront(ComponentKind kind) noexcept
 {
-    return kind == ComponentKind::Door || kind == ComponentKind::DrawerFront;
+    return kind == ComponentKind::Door || kind == ComponentKind::DrawerFront
+        || kind == ComponentKind::BlindPanel;
 }
 
 bool isWall(ComponentKind kind) noexcept
@@ -57,11 +59,54 @@ Rect projectSide(const Aabb& box)
     return {{box.min().z, box.min().y}, {box.max().z, box.max().y}};
 }
 
-std::vector<Item> collectItems(const core::Product& product, ProductView view)
+/// Plan: X to the right, the back wall at the top (Z = 0), the room below it.
+Rect projectPlan(const Aabb& box)
+{
+    return {{box.min().x, -box.max().z}, {box.max().x, -box.min().z}};
+}
+
+/// A part of a wall cabinet of a kitchen (of a row or of a corner): above the plan's cut.
+bool inWallCabinet(const FurnitureComponent& part)
+{
+    const FurnitureComponent* child = &part;
+    for (const FurnitureComponent* p = part.parent(); p != nullptr; child = p, p = p->parent()) {
+        if (p->kind() == ComponentKind::CabinetRow
+            && static_cast<const core::CabinetRow*>(p)->level() == core::RowLevel::Wall) {
+            return true;
+        }
+        if (p->kind() == ComponentKind::KitchenCorner
+            && &static_cast<const core::KitchenCorner*>(p)->wallCabinet() == child) {
+            return true;
+        }
+    }
+    return false;
+}
+
+const core::Product* productOf(const FurnitureComponent& root)
+{
+    return dynamic_cast<const core::Product*>(&root.root());
+}
+
+std::vector<Item> collectItems(const FurnitureComponent& root, ProductView view)
 {
     std::vector<Item> items;
-    const Real xc = view == ProductView::Section ? sectionPlaneX(product) : 0.0;
-    for (const FurnitureComponent* c : core::collectPanels(product)) {
+    if (view == ProductView::Plan) {
+        for (const FurnitureComponent* c : core::collectPanels(root.root())) {
+            if (inWallCabinet(*c)) {
+                continue;
+            }
+            const Aabb box = c->productBox();
+            Item item;
+            item.component = c;
+            item.rect = projectPlan(box);
+            item.nearMin = box.min().y;
+            item.nearMax = box.max().y;
+            items.push_back(item);
+        }
+        return items;
+    }
+    const Real xc = view == ProductView::Section ? sectionPlaneX(root) : 0.0;
+    for (const FurnitureComponent* c : core::collectPanels(root)) {
         const ComponentKind kind = c->kind();
         const Aabb& box = c->box();
         Item item;
@@ -217,13 +262,17 @@ Layer dimensionLayer()
 
 // --- Annotations ------------------------------------------------------------------------------
 
-void handles(Drawing& drawing, const core::Product& product)
+void handles(Drawing& drawing, const FurnitureComponent& root)
 {
+    const core::Product* product = productOf(root);
+    if (product == nullptr) {
+        return;
+    }
     const std::size_t layer = drawing.addLayer({std::string(viewLayers::kHandles), 8,
                                                 {60, 60, 60}, LineType::Continuous,
                                                 LineWeight::Thin});
-    for (const core::FrontPanel* front : core::findAll<core::FrontPanel>(product)) {
-        const auto geometry = front->handleGeometry(product.rules());
+    for (const core::FrontPanel* front : core::findAll<core::FrontPanel>(root)) {
+        const auto geometry = front->handleGeometry(product->rules());
         if (!geometry) {
             continue;
         }
@@ -263,7 +312,7 @@ void sectionTrace(Drawing& drawing, const Bounds& bounds, Real xc, Real h)
     }
 }
 
-void frontDimensions(Drawing& drawing, const core::Product& product, const Bounds& b, Real h,
+void frontDimensions(Drawing& drawing, const FurnitureComponent& product, const Bounds& b, Real h,
                      bool interior)
 {
     const std::size_t dims = drawing.addLayer(dimensionLayer());
@@ -326,13 +375,14 @@ void frontDimensions(Drawing& drawing, const core::Product& product, const Bound
     }
 }
 
-void sectionDimensions(Drawing& drawing, const core::Product& product,
+void sectionDimensions(Drawing& drawing, const FurnitureComponent& root,
                        const std::vector<Item>& items, const Bounds& b, Real h)
 {
     const std::size_t dims = drawing.addLayer(dimensionLayer());
     drawing.dimension(dims, {b.min, Vec2(b.max.x, b.min.y), -3.0 * h, "", h, h});
     drawing.dimension(dims, {b.min, Vec2(b.min.x, b.max.y), 3.0 * h, "", h, h});
-    if (const core::Carcass* carcass = product.carcass()) {
+    const auto* product = dynamic_cast<const core::Product*>(&root);
+    if (const core::Carcass* carcass = product != nullptr ? product->carcass() : nullptr) {
         const Rect side = projectSide(carcass->leftSide().box());
         drawing.dimension(dims, {Vec2(side.min.x, b.max.y), Vec2(side.max.x, b.max.y), 2.0 * h,
                                  "", h, h});
@@ -351,6 +401,50 @@ void sectionDimensions(Drawing& drawing, const core::Product& product,
     }
 }
 
+/// The plan's openings in the worktops (a sink, a hob), seen through from above.
+void worktopCutouts(Drawing& drawing, const FurnitureComponent& root)
+{
+    const std::size_t layer = drawing.addLayer(visibleLayer());
+    for (const core::Worktop* worktop : core::findAll<core::Worktop>(root.root())) {
+        // Panel x along X, panel y along Z, both from the box minimum (Worktop::automaticOpenings).
+        const core::Placement place = worktop->placement();
+        const Aabb& box = worktop->box();
+        for (const core::PanelCutout& opening : worktop->panel()->cutouts()) {
+            Polyline outline;
+            outline.closed = true;
+            for (const Vec2& p : core::openingOutline(opening)) {
+                const core::Vec3 at = place.point(core::Vec3(box.min().x + p.x, box.max().y, box.min().z + p.y));
+                outline.points.emplace_back(at.x, -at.z);
+            }
+            drawing.add(layer, outline);
+        }
+    }
+}
+
+/// The plan's dimensions: the back wall along the top, a side run along its wall.
+void planDimensions(Drawing& drawing, const FurnitureComponent& root, const Bounds& b, Real h)
+{
+    const std::size_t dims = drawing.addLayer(dimensionLayer());
+    drawing.dimension(dims, {Vec2(b.min.x, b.max.y), b.max, 3.0 * h, "", h, h});
+    const core::Product* product = productOf(root);
+    const core::Kitchen* kitchen = product != nullptr ? product->kitchen() : nullptr;
+    if (kitchen == nullptr) {
+        drawing.dimension(dims, {b.min, Vec2(b.min.x, b.max.y), 3.0 * h, "", h, h});
+        return;
+    }
+    for (const core::Side side : {core::Side::Left, core::Side::Right}) {
+        if (const core::KitchenRun* run = kitchen->sideRun(side)) {
+            const Rect r = projectPlan(run->productBox());
+            // Walking up the left wall / down the right wall: the dimension stays outside.
+            if (side == core::Side::Left) {
+                drawing.dimension(dims, {Vec2(r.min.x, r.min.y), Vec2(r.min.x, r.max.y), 3.0 * h, "", h, h});
+            } else {
+                drawing.dimension(dims, {Vec2(r.max.x, r.max.y), Vec2(r.max.x, r.min.y), 3.0 * h, "", h, h});
+            }
+        }
+    }
+}
+
 Bounds boundsOf(const std::vector<Item>& items)
 {
     Bounds b;
@@ -363,25 +457,32 @@ Bounds boundsOf(const std::vector<Item>& items)
 
 } // namespace
 
-Real sectionPlaneX(const core::Product& product)
+Real sectionPlaneX(const FurnitureComponent& root)
 {
     const core::Section* first = nullptr;
-    for (const core::Section* section : core::findAll<core::Section>(product)) {
+    for (const core::Section* section : core::findAll<core::Section>(root)) {
         if (section->subsections().empty()
             && (first == nullptr || section->box().min().x < first->box().min().x)) {
             first = section;
         }
     }
-    const Aabb box = first != nullptr ? first->box() : core::panelBounds(product);
+    Aabb box;
+    if (first != nullptr) {
+        box = first->box();
+    } else {
+        for (const FurnitureComponent* c : core::collectPanels(root)) {
+            box.expand(c->box()); // the root's own coordinates
+        }
+    }
     return box.min().x + 0.4 * box.size().x;
 }
 
-Bounds viewExtent(const core::Product& product, ProductView view)
+Bounds viewExtent(const FurnitureComponent& root, ProductView view)
 {
-    return boundsOf(collectItems(product, view));
+    return boundsOf(collectItems(root, view));
 }
 
-Drawing drawProductView(const core::Product& product, ProductView view,
+Drawing drawProductView(const FurnitureComponent& product, ProductView view,
                         const ProductViewOptions& options)
 {
     Drawing drawing;
@@ -433,9 +534,14 @@ Drawing drawProductView(const core::Product& product, ProductView view,
     if (view == ProductView::FrontOpen) {
         sectionTrace(drawing, bounds, sectionPlaneX(product), h);
     }
+    if (view == ProductView::Plan) {
+        worktopCutouts(drawing, product);
+    }
     if (options.dimensions && !bounds.empty) {
         if (view == ProductView::Section) {
             sectionDimensions(drawing, product, items, bounds, h);
+        } else if (view == ProductView::Plan) {
+            planDimensions(drawing, product, bounds, h);
         } else {
             frontDimensions(drawing, product, bounds, h, view == ProductView::FrontOpen);
         }

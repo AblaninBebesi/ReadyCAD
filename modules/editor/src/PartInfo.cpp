@@ -1,5 +1,7 @@
 #include "readycad/editor/PartInfo.hpp"
 
+#include "readycad/core/model/Queries.hpp"
+
 namespace rc::editor {
 
 PartInfo describe(const core::FurnitureComponent& component, const core::ConstructionRules& rules)
@@ -8,6 +10,10 @@ PartInfo describe(const core::FurnitureComponent& component, const core::Constru
     info.kind = component.kind();
     info.name = component.name();
     info.size = component.size();
+    if (component.kind() == core::ComponentKind::Kitchen) {
+        // An L or a U kitchen reaches beyond its back run: the room it takes.
+        info.size = core::Size3D::fromVec3(core::panelBounds(component).size());
+    }
     info.position = component.position();
 
     if (const core::Panel* panel = component.panel()) {

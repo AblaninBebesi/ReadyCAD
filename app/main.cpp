@@ -23,7 +23,7 @@ void printUsage()
 {
     std::puts("ReadyCAD [options]\n"
               "  --open <file.rcproj>      open a project\n"
-              "  --catalog <0..4>          start with a catalogue model (4: kitchen)\n"
+              "  --catalog <0..6>          start with a catalogue model (4: kitchen, 5: L, 6: U)\n"
               "  --holes                   show drilled holes in the 3D view\n"
               "  --no-fronts               hide doors and drawer fronts\n"
               "  --select <Kind>[:n]       select the first (n-th) part of a kind, e.g. Door:2\n"

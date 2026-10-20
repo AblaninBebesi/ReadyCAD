@@ -148,6 +148,9 @@ constexpr std::pair<core::CarcassTop, TextId> kTopStyles[] = {
     {core::CarcassTop::FlatRails, TextId::TopStyleFlatRails},
     {core::CarcassTop::UprightRails, TextId::TopStyleUprightRails},
 };
+/// A new run on a side wall: long enough for its cabinets beyond the corner.
+constexpr Real kSideRunLength = 1800.0;
+
 constexpr std::pair<core::CabinetModule, TextId> kModules[] = {
     {core::CabinetModule::BaseDoors, TextId::ModuleBaseDoors},
     {core::CabinetModule::BaseDrawers, TextId::ModuleBaseDrawers},
@@ -189,9 +192,11 @@ bool drawProductRows(UiState& s)
     }
 
     core::Size3D d = doc.product().dimensions();
-    const bool kitchen = doc.product().kitchen() != nullptr;
+    const core::Kitchen* k = doc.product().kitchen();
+    const bool kitchen = k != nullptr;
+    const bool corners = kitchen && k->runs().size() > 1;
     const std::pair<TextId, Real*> dims[] = {
-        {kitchen ? TextId::KitchenLength : TextId::Width, &d.width},
+        {kitchen ? (corners ? TextId::BackWallLength : TextId::KitchenLength) : TextId::Width, &d.width},
         {kitchen ? TextId::TotalHeight : TextId::Height, &d.height},
         {kitchen ? TextId::BaseDepth : TextId::Depth, &d.depth}};
     const Real maxLength = kitchen ? 6000.0 : 3000.0;
@@ -351,19 +356,141 @@ bool drawKitchenRows(UiState& s)
     }
     PropertyTable::textRow(tr(TextId::WorktopHeight),
                            mm(kitchen->worktop().box().max().y) + " mm");
+
+    // The side walls: one makes an L kitchen, both a U kitchen.
+    for (const core::Side side : {core::Side::Left, core::Side::Right}) {
+        const core::KitchenRun* sideRun = kitchen->sideRun(side);
+        PropertyTable::row(tr(side == core::Side::Left ? TextId::RunLeft : TextId::RunRight));
+        ImGui::PushID(side == core::Side::Left ? "left" : "right");
+        bool present = sideRun != nullptr;
+        if (ImGui::Checkbox("##present", &present)) {
+            ImGui::PopID();
+            const std::optional<Real> length = present ? std::optional<Real>(kSideRunLength) : std::nullopt;
+            run(s, [&] { ed::setSideRun(doc, side, length); });
+            return true;
+        }
+        if (sideRun != nullptr) {
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            Real length = sideRun->length();
+            const bool changed = dragMm("##length", length, 600.0, 6000.0);
+            const bool released = ImGui::IsItemDeactivatedAfterEdit();
+            if (changed) {
+                ImGui::PopID();
+                run(s, [&] { ed::setSideRun(doc, side, length); });
+                return true;
+            }
+            if (released) {
+                doc.endMerge();
+            }
+        }
+        ImGui::PopID();
+    }
     return false;
 }
 
-/// "Add a cabinet": a module of the given row level (both levels if nullopt), its width.
-bool drawAddCabinet(UiState& s, std::optional<core::RowLevel> level)
+/// A run on a side wall: its length.
+bool drawRunRows(UiState& s, const core::KitchenRun& kitchenRun)
+{
+    if (kitchenRun.wall() == core::KitchenWall::Back) {
+        return false; // as long as the product is wide: the product's own rows
+    }
+    ed::Document& doc = *s.document;
+    PropertyTable table("run");
+    if (!table.isOpen()) {
+        return false;
+    }
+    const core::Side side = kitchenRun.wall() == core::KitchenWall::Left ? core::Side::Left : core::Side::Right;
+    PropertyTable::row(tr(TextId::Length));
+    Real length = kitchenRun.length();
+    if (dragMm("##length", length, 600.0, 6000.0)) {
+        run(s, [&] { ed::setSideRun(doc, side, length); });
+        return true;
+    }
+    if (ImGui::IsItemDeactivatedAfterEdit()) {
+        doc.endMerge();
+    }
+    return false;
+}
+
+/// A width or a filler of a corner cabinet; true when it was changed.
+bool cornerSizeRow(UiState& s, TextId label, const core::Carcass& cabinet, bool filler)
+{
+    ed::Document& doc = *s.document;
+    const core::ComponentId id = cabinet.id();
+    PropertyTable::row(tr(label));
+    ImGui::PushID(static_cast<int>(id.value * 2 + (filler ? 1 : 0)));
+    Real value = filler ? cabinet.blindFiller().value_or(0.0) : cabinet.box().size().x;
+    const bool changed = filler ? dragMm("##v", value, 0.0, 300.0) : dragMm("##v", value, 300.0, 2000.0);
+    const bool released = ImGui::IsItemDeactivatedAfterEdit();
+    ImGui::PopID();
+    if (changed) {
+        run(s, [&] {
+            if (filler) {
+                ed::setBlindFiller(doc, id, value);
+            } else {
+                ed::setCabinetWidth(doc, id, value);
+            }
+        });
+        return true;
+    }
+    if (released) {
+        doc.endMerge();
+    }
+    return false;
+}
+
+/// A kitchen corner: the widths and fillers of its two blind corner cabinets.
+bool drawCornerRows(UiState& s, const core::KitchenCorner& corner)
+{
+    PropertyTable table("corner");
+    if (!table.isOpen()) {
+        return false;
+    }
+    return cornerSizeRow(s, TextId::CornerBaseWidth, corner.baseCabinet(), false)
+        || cornerSizeRow(s, TextId::CornerBaseFiller, corner.baseCabinet(), true)
+        || cornerSizeRow(s, TextId::CornerWallWidth, corner.wallCabinet(), false)
+        || cornerSizeRow(s, TextId::CornerWallFiller, corner.wallCabinet(), true);
+}
+
+/// "Add a cabinet": a module of the given row level (both levels if nullopt), its width, and
+/// the wall it goes to (chosen here if nullopt and the kitchen has more than one).
+bool drawAddCabinet(UiState& s, std::optional<core::RowLevel> level, std::optional<core::KitchenWall> wall)
 {
     if (level && core::levelOf(s.newCabinet) != *level) {
         s.newCabinet = *level == core::RowLevel::Base ? core::CabinetModule::BaseDoors
                                                       : core::CabinetModule::WallDoors;
     }
+    const core::Kitchen* kitchen = s.document->product().kitchen();
+    if (kitchen == nullptr) {
+        return false;
+    }
+    const std::vector<core::KitchenRun*> all = kitchen->runs();
+    const std::vector<const core::KitchenRun*> runs(all.begin(), all.end());
+    const auto hasRun = [&](core::KitchenWall w) {
+        return std::any_of(runs.begin(), runs.end(), [w](const core::KitchenRun* r) { return r->wall() == w; });
+    };
+    if (!hasRun(s.newCabinetWall)) {
+        s.newCabinetWall = core::KitchenWall::Back; // its run was taken away
+    }
     PropertyTable table("addCabinet");
     if (!table.isOpen()) {
         return false;
+    }
+    if (!wall && runs.size() > 1) {
+        PropertyTable::row(tr(TextId::KindKitchenRun));
+        const auto wallText = [](core::KitchenWall w) {
+            return tr(w == core::KitchenWall::Back ? TextId::RunBack
+                      : w == core::KitchenWall::Left ? TextId::RunLeft : TextId::RunRight);
+        };
+        if (ImGui::BeginCombo("##wall", wallText(s.newCabinetWall))) {
+            for (const core::KitchenRun* r : runs) {
+                if (ImGui::Selectable(wallText(r->wall()), r->wall() == s.newCabinetWall)) {
+                    s.newCabinetWall = r->wall();
+                }
+            }
+            ImGui::EndCombo();
+        }
     }
     PropertyTable::row(tr(TextId::AddCabinet));
     const char* preview = "?";
@@ -387,7 +514,8 @@ bool drawAddCabinet(UiState& s, std::optional<core::RowLevel> level)
     if (ImGui::Button(tr(TextId::AddCabinet))) {
         const core::CabinetModule module = s.newCabinet;
         const Real width = s.newCabinetWidth;
-        run(s, [&] { ed::addCabinet(*s.document, module, width); });
+        const core::KitchenWall target = wall.value_or(s.newCabinetWall);
+        run(s, [&] { ed::addCabinet(*s.document, module, width, target); });
         return true;
     }
     return false;
@@ -490,6 +618,12 @@ bool drawCarcassEditor(UiState& s, core::Carcass& carcass)
     }
     if (carcass.parent() != nullptr && carcass.parent()->kind() == ComponentKind::CabinetRow) {
         return drawCabinetRows(s, carcass);
+    }
+    if (carcass.parent() != nullptr && carcass.parent()->kind() == ComponentKind::KitchenCorner) {
+        ImGui::SeparatorText(tr(TextId::KitchenHeader));
+        PropertyTable table("cornerCabinet");
+        return table.isOpen()
+            && (cornerSizeRow(s, TextId::Width, carcass, false) || cornerSizeRow(s, TextId::Filler, carcass, true));
     }
     return false;
 }
@@ -1067,9 +1201,16 @@ bool drawEditor(UiState& s, core::FurnitureComponent& c)
     case ComponentKind::Carcass:
         return drawCarcassEditor(s, static_cast<core::Carcass&>(c));
     case ComponentKind::Kitchen:
-        return drawKitchenRows(s) || drawAddCabinet(s, std::nullopt);
+        return drawKitchenRows(s) || drawAddCabinet(s, std::nullopt, std::nullopt);
+    case ComponentKind::KitchenRun: {
+        const auto& kitchenRun = static_cast<core::KitchenRun&>(c);
+        return drawRunRows(s, kitchenRun) || drawAddCabinet(s, std::nullopt, kitchenRun.wall());
+    }
+    case ComponentKind::KitchenCorner:
+        return drawCornerRows(s, static_cast<core::KitchenCorner&>(c));
     case ComponentKind::CabinetRow:
-        return drawAddCabinet(s, static_cast<core::CabinetRow&>(c).level());
+        return drawAddCabinet(s, static_cast<core::CabinetRow&>(c).level(),
+                              static_cast<const core::KitchenRun*>(c.parent())->wall());
     case ComponentKind::Section:
         return drawSectionEditor(s, static_cast<core::Section&>(c));
     case ComponentKind::Shelf:
@@ -1144,7 +1285,7 @@ void drawTreeNode(UiState& s, core::FurnitureComponent& c)
     }
     const bool openByDefault =
         c.kind() == ComponentKind::Product || c.kind() == ComponentKind::Kitchen
-        || c.kind() == ComponentKind::CabinetRow
+        || c.kind() == ComponentKind::KitchenRun || c.kind() == ComponentKind::CabinetRow
         || (!inKitchen && (c.kind() == ComponentKind::Carcass || c.kind() == ComponentKind::Section));
     if (openByDefault) {
         ImGui::SetNextItemOpen(true, ImGuiCond_Once);
@@ -1555,7 +1696,7 @@ void drawParametersWindow(UiState& state)
             changed = drawConstructionRows(state, *carcass);
         } else if (product.kitchen() != nullptr) {
             ImGui::SeparatorText(tr(TextId::KitchenSizes));
-            changed = drawKitchenRows(state) || drawAddCabinet(state, std::nullopt);
+            changed = drawKitchenRows(state) || drawAddCabinet(state, std::nullopt, std::nullopt);
         }
         if (!changed) {
             ImGui::SeparatorText(tr(TextId::DecorHeader));

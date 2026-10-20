@@ -1109,7 +1109,7 @@ On aşamalık planda olmayan bir genişletme. Birlikte alınan kararlar:
 * mutfakta baza gerekir;
 * sunta veya MDF tezgah kesim planına alınabilir ya da dışında kalabilir; bunu kullanıcı seçer;
 * kuşakların nasıl olacağına ben karar veriyorum; kararım aşağıda;
-* köşe modülleri henüz yok («Henüz yapılmadı» bölümüne bakın).
+* köşe mutfakları sonradan eklendi, bkz. «Köşe mutfakları (desenlerden sonra)».
 
 ### Bir üründe birden çok gövde
 
@@ -1287,7 +1287,6 @@ Listeye ayaklar (bazalı her modüle 4, genişliğin her ek metresi için 2 daha
 | **Mutfak yolculuğu**: 3 m, ek modüller, başka bir evye, 4100 × 620 plakadan CNC'de kesilen tezgah; projeler, kesimli çizim, programda tezgah konturundan önce kesimler; rastgele kullanıcı mutfak kurar | `tests/integration/KitchenJourneyTests.cpp`, `tests/integration/RobustnessTests.cpp` |
 
 Henüz yapılmadı:
-* köşe modülleri (L mutfak);
 * boy dolapları (fırın, buzdolabı), aspiratör üstü dolap, ankastre cihaz nişleri;
 * plakadan uzun tezgah: ek modellenmez, elle kesilir;
 * çekmece raylarının delikleri delinmez (dolaplarda da);
@@ -1486,3 +1485,117 @@ Aşama 2'den beri damar yönü saydığı eksen. Düz renk ve mermer döndürül
 | Kataloğun bütün resimleri okunur ve karedir; eksik veya bozuk dosya çökertmez | `render/tests/ImageTests.cpp` |
 
 Proje biçimi sürüm 4, atölye profili sürüm 2. Eski dosyalar açılır.
+
+## Köşe mutfakları (desenlerden sonra)
+
+L mutfak, arka duvarda ve bir yan duvarda dolap dizisidir; U mutfak her iki yan duvarda da.
+Köşe, mobilya atölyelerinde alışıldığı gibi **kör köşe dolabıyla** çözülür: alt ve üst. Katlanır
+kapaklı L köşe dolabı bu aşamanın ikinci bölümüdür. Danışman planın tamamını onayladı.
+
+![L mutfak](images/corner-kitchen.png)
+
+### Kendi koordinatlarında dizi
+
+Aşamanın ana kararı. Her dizi (`KitchenRun`) düz mutfak gibi kendi koordinatlarında
+yerleştirilir: boyu X boyunca, kapakları +Z yönünde, duvar Z = 0'da. Mutfak onu `Placement` ile
+duvarına koyar: düşey Y ekseni çevresinde çeyrek tur döndürme ve kaydırma. Sol dizi bir tur
+döner (+X'e bakar), sağ dizi üç tur (−X'e bakar).
+
+Neden:
+* dolapların formülleri, delikler, kesim listesi, kesim planı, CNC programları ve parça
+  çizimleri parçanın hangi duvarda durduğunu bilmez. `detailing`, `nesting`, `cam`
+  modüllerinde tek satır değişmedi;
+* 90°'nin katı kadar döndürme modelin temel özelliğini korur: her şey eksenlere paraleldir.
+  Parçanın kutusu yine tam bir kutudur, kutularla çakışma denetimi de tam kalır;
+* oda koordinatlarına yalnızca üç kullanıcı ihtiyaç duyar: 3B sahne, çakışma denetimi (iki
+  duvarın parçaları köşede buluşur) ve üstten görünüş. `FurnitureComponent::placement()`
+  üst bileşenlerin yerleşimlerini toplar, `productBox()` kutuyu ürün koordinatlarında verir.
+
+Buradan bilinçli bir sınır çıkar: kapağı 45° olan çapraz köşe dolapları yapılmaz, bu özelliği
+bozarlar.
+
+| Ne | Nerede |
+|-----|-----|
+| `Placement`: çeyrek turlar ve kaydırma; nokta, yön, kutu, eksen, iç içe yerleşim | `core/Placement.hpp` |
+| `FurnitureComponent::placement()`, `productBox()`, `ownPlacement()` | `core/model/FurnitureComponent.hpp` |
+| `KitchenRun`: duvar, alt ve üst dizi, tezgah, yan duvarın boyu; arka dizide köşeler | `core/model/Kitchen.hpp` |
+| `KitchenCorner`: arka dizinin ucu, alt ve üst kör köşe dolabı | aynı yerde |
+| `Carcass::setBlindCorner(filler)`, `BlindPanel` (kör panel) | `Carcass.hpp`, `Parts.hpp` |
+| `KitchenFrame`: yükseklikler, derinlikler, `cornerBase` / `cornerWall`; `CornerFrame`; `plinthBeyondStart/End` | `core/model/LayoutSlot.hpp` |
+| `makeCorner()`, `KitchenBuilder::sideWall()`, duvarı belirtilen modüller | `core/builders/KitchenBuilder.hpp` |
+
+### Köşe
+
+```
+   arka duvar                         sağ duvar
+  ─────────────────────────────────┐
+   …│      köşe dolabı 1100        │
+    │  kapak │dolgu│  gizli 578    │
+  ──┴────────┴─────┼───────────────┤
+                   │ yan dizi      │
+```
+
+* Köşe dolapları arka dizinin ucunda durur: alt 1100 mm, üst 800 mm.
+* Yan dizi, köşe dolabının gizli bölümünün bittiği yerde başlar: arka dizinin dolap
+  derinliği ve kapak kalınlığı kadar (560 + 18 = 578 mm, üst dolaplarda 320 + 18 = 338 mm).
+  İki değeri de mutfağın tek bir fonksiyonu hesaplar (`KitchenFrame::cornerBase`,
+  `cornerWall`). Bu yüzden köşe dolabı ile yan dizi hiçbir ölçü değişikliğinde birbirinden
+  ayrılamaz.
+* Köşe dolabının ön yüzü:
+  * kapak açık bölümde, menteşeleri köşeden uzak tarafta;
+  * kapakla aynı hizada kör panel — gizli bölümün ve 50 mm dolgunun üstünde. Dolgu, iki
+    duvarın kapakları ve kulpları birbirine çarpmasın diye vardır;
+  * kapak, panelden bir kapak aralığı önce biter. Bunun için gövde kendi bölmesinin kapak
+    taşmasını azaltır (taşma eksi olabilir); raflar ise tam genişlikte kalır: kör bölüme
+    eşya konur.
+* Baza köşeyi döner. Köşe dolabının bazası yan duvar bazasının arka yüzüne kadar uzanır (yan
+  duvardan 560 − 40 − 18 = 502 mm). Yan dizinin ilk bazası köşe dolabı bazasının ön yüzüne kadar
+  geri uzanır (kendi gövdesinden 18 + 40 = 58 mm öteye). Bu olmasa iç köşede bir boşluk kalırdı.
+* Tezgah: arka tezgah yan duvara kadar gider, yan tezgah onun ön kenarından başlar — alın
+  alına ek. Duvardaki uçlarda ve ekte bant yoktur (`KitchenFrame::startClosed`, `endClosed`).
+  45° ek özel ekipman ister ve yapılmaz.
+
+### Çizimler
+
+* Üstten görünüş (`ProductView::Plan`): ekli tezgahlar, evye ve ocak kesimleri, duvar boyları.
+  Üst dolaplar bu görünüşte yoktur. Köşe mutfağında bu görünüş PDF'in kapağında ve ayrı
+  «Yerleşim planı» sayfasındadır.
+* Açınımlar: «Montaj çizimi — Arka duvar», «— Sağ duvar» vb. Düz mutfaktaki üç görünüşün aynısı,
+  her dizi için kendi koordinatlarında: montajcı duvarı karşısında durarak böyle görür.
+  Görünüşler herhangi bir alt ağacı kabul eder — ürünün tamamını ya da bir diziyi.
+
+![Üstten görünüş](images/corner-plan.png)
+
+### Proje dosyası, sürüm 5
+
+Arka dizi, eskiden düz mutfak nasıl yazılıyorsa öyle yazılır; bu yüzden eski dosyalar düz
+mutfak olarak okunur. Yan dizi `"left"` / `"right"` altındadır: boy, köşe
+(`"corner": {"base", "wall"}`), tezgah ve diziler. Köşe gövdesinde `"blindFiller"` vardır, kör
+panelinin kendi seçimleri de (`"parts": {"blindPanel": …}`).
+
+### Arayüz
+
+* «Mutfak»: «Sol duvar» ve «Sağ duvar» — onay kutusu ve duvarın boyu. Yeni duvar köşesiyle ve
+  her dizide bir dolapla gelir. «Dolap ekle» içindeki «Duvar», dolabın nereye ekleneceğini
+  seçer.
+* «Köşe»: alt ve üst dolabın genişlikleri ve dolguları. Köşe dolabı taşınmaz, silinmez ve
+  otomatik genişliğe geçmez.
+* Ağaç: Mutfak → Arka duvar (Alt dolaplar, Tezgah, Üst dolaplar, Sağ köşe → Kör köşe alt dolabı,
+  Kör köşe üst dolabı) → Sağ duvar.
+* Katalog: «Mutfak (L)» — arka duvar 3000, sağ duvar 2400; «Mutfak (U)» — 3200, yan duvarlar
+  2000'er.
+
+![U mutfak](images/corner-kitchen-u.png)
+
+### Testler
+
+| Ne | Dosya |
+|-----|------|
+| Döndürmeler: noktalar, kutular, eksenler, iç içe yerleşim | `core/tests/CornerKitchenTests.cpp` |
+| L mutfak: köşe dolapları, kör panel ve kapak, kendi ve ortak koordinatlarda yan dizi, tezgahlar ve bantları, bazalar | aynı dosya |
+| U mutfak: iki köşe, sol dizi, ölçü değişikliği; yan diziler köşeleriyle gelir ve gider | aynı dosya |
+| Kataloğun bütün modelleri (artık yedi) çakışmasız, ölçü değiştikten sonra da | `core/tests/ParametricTests.cpp` |
+| L ve U kaydedilir ve okunur | `storage/tests/StorageTests.cpp` |
+| Düzenleyici: duvarlar, doğru duvara dolap, köşe dolapları, geri alma, çok kısa duvarın reddi | `editor/tests/OperationsTests.cpp` |
+| 3B: yan dizi kendi duvarına döndürülür, damar, sahne sınırları | `render/tests/SceneTests.cpp` |
+| Üstten görünüş ve açınımlar | `export/tests/ProductViewTests.cpp` |

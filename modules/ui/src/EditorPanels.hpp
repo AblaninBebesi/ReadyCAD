@@ -119,6 +119,7 @@ struct UiState {
     // Kitchens: the "add a cabinet" form
     core::CabinetModule newCabinet = core::CabinetModule::BaseDoors;
     core::Real newCabinetWidth = 600.0;
+    core::KitchenWall newCabinetWall = core::KitchenWall::Back;
 };
 
 /// Runs a model operation; on an exception shows the error popup. Returns true if it succeeded.

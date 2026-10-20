@@ -321,3 +321,65 @@ TEST_CASE("A part's shape: accepted when it can be made, refused otherwise", "[e
     doc.undo();
     CHECK(wall()->shape().empty());
 }
+
+TEST_CASE("Corner kitchens: side walls, corner cabinets, undoable", "[editor][operations][corner]")
+{
+    Document doc = Document::fromCatalog(CatalogItem::Kitchen);
+    const auto kitchen = [&doc] { return doc.product().kitchen(); };
+    setDimensions(doc, {3400, 2120, 560});
+
+    // A right wall: an L kitchen, with its corner and one cabinet of each row.
+    setSideRun(doc, Side::Right, 2000.0);
+    REQUIRE(kitchen()->runs().size() == 2);
+    const KitchenRun* right = kitchen()->sideRun(Side::Right);
+    CHECK(right->length() == Approx(2000.0));
+    CHECK(right->baseRow().cabinets().size() == 1);
+    CHECK(right->wallRow().cabinets().size() == 1);
+    REQUIRE(kitchen()->backRun().corner(Side::Right) != nullptr);
+
+    // Cabinets go to the wall asked for.
+    addCabinet(doc, CabinetModule::BaseDrawers, 400.0, KitchenWall::Right);
+    CHECK(kitchen()->sideRun(Side::Right)->baseRow().cabinets().size() == 2);
+    CHECK(kitchen()->baseRow().cabinets().size() == 5);
+    CHECK_THROWS_AS(addCabinet(doc, CabinetModule::BaseDoors, 400.0, KitchenWall::Left),
+                    std::invalid_argument);
+
+    // A corner cabinet: its width and filler change, it does not move, leave, or go automatic.
+    const Carcass& base = kitchen()->backRun().corner(Side::Right)->baseCabinet();
+    const ComponentId id = base.id();
+    const Real door = base.interior().doors().at(0)->box().size().x;
+    setBlindFiller(doc, id, 80.0);
+    CHECK(kitchen()->backRun().corner(Side::Right)->baseCabinet().interior().doors().at(0)->box().size().x
+          == Approx(door - 30.0));
+    setCabinetWidth(doc, id, 1200.0);
+    CHECK(kitchen()->backRun().corner(Side::Right)->baseCabinet().box().size().x == Approx(1200.0));
+    CHECK_THROWS_AS(setCabinetWidth(doc, id, std::nullopt), std::invalid_argument);
+    CHECK_THROWS_AS(moveCabinet(doc, id, -1), std::invalid_argument);
+    CHECK_THROWS_AS(removeComponent(doc, id), std::logic_error);
+    CHECK_THROWS_AS(setCutout(doc, id, WorktopCutout::standard(CutoutKind::Sink)), std::invalid_argument);
+    CHECK_THROWS_AS(setBlindFiller(doc, kitchen()->baseRow().cabinets()[0]->id(), 50.0),
+                    std::invalid_argument);
+
+    // Both walls: a U kitchen — the back wall needs room for a second corner cabinet first.
+    CHECK_THROWS_AS(setSideRun(doc, Side::Left, 1800.0), ConstructionError);
+    setDimensions(doc, {4800, 2120, 560});
+    setSideRun(doc, Side::Left, 1800.0);
+    CHECK(kitchen()->runs().size() == 3);
+    setSideRun(doc, Side::Right, 2400.0);
+    CHECK(kitchen()->sideRun(Side::Right)->baseRow().cabinets().size() == 2);
+    CHECK(kitchen()->sideRun(Side::Right)->length() == Approx(2400.0));
+
+    // Taken away again: the run, its cabinets and its corner; one undo brings them back.
+    setSideRun(doc, Side::Right, std::nullopt);
+    CHECK(kitchen()->sideRun(Side::Right) == nullptr);
+    CHECK(kitchen()->backRun().corner(Side::Right) == nullptr);
+    doc.undo();
+    REQUIRE(kitchen()->sideRun(Side::Right) != nullptr);
+    CHECK(kitchen()->sideRun(Side::Right)->baseRow().cabinets().size() == 2);
+    CHECK(kitchen()->backRun().corner(Side::Right)->baseCabinet().blindFiller() == Approx(80.0));
+
+    // A side wall too short for its cabinets is refused.
+    const std::string before = rc::storage::saveProduct(doc.product());
+    CHECK_THROWS_AS(setSideRun(doc, Side::Left, 500.0), ConstructionError); // shorter than the corner
+    CHECK(rc::storage::saveProduct(doc.product()) == before);
+}

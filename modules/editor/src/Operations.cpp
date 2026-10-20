@@ -30,14 +30,28 @@ core::Kitchen& requireKitchen(Product& product)
     return *kitchen;
 }
 
-/// A cabinet of a kitchen row.
-core::Carcass& requireCabinet(Product& product, ComponentId id)
+/// A cabinet of a kitchen: of a row, or of a corner when `corners`.
+core::Carcass& requireCabinet(Product& product, ComponentId id, bool corners = false)
 {
     auto& cabinet = require<core::Carcass>(product, id);
-    if (cabinet.parent() == nullptr || cabinet.parent()->kind() != core::ComponentKind::CabinetRow) {
-        throw std::invalid_argument("Not a cabinet of a kitchen");
+    const core::FurnitureComponent* parent = cabinet.parent();
+    const bool inRow = parent != nullptr && parent->kind() == core::ComponentKind::CabinetRow;
+    const bool inCorner = parent != nullptr && parent->kind() == core::ComponentKind::KitchenCorner;
+    if (!inRow && !(corners && inCorner)) {
+        throw std::invalid_argument("Not a cabinet of a kitchen row");
     }
     return cabinet;
+}
+
+core::KitchenRun& requireRun(core::Kitchen& kitchen, core::KitchenWall wall)
+{
+    core::KitchenRun* run = wall == core::KitchenWall::Back ? &kitchen.backRun()
+                          : kitchen.sideRun(wall == core::KitchenWall::Left ? core::Side::Left
+                                                                            : core::Side::Right);
+    if (run == nullptr) {
+        throw std::invalid_argument("The kitchen has no cabinets on that wall");
+    }
+    return *run;
 }
 
 /// Merge key unique per component, so dragging one value never merges with another part.
@@ -98,12 +112,36 @@ void setKitchenSizes(Document& doc, const core::Kitchen::Sizes& sizes)
         "Kitchen sizes", [&](Product& p) { requireKitchen(p).setSizes(sizes); }, "kitchen-sizes");
 }
 
-void addCabinet(Document& doc, core::CabinetModule module, core::Real width)
+void setSideRun(Document& doc, core::Side side, std::optional<core::Real> length)
+{
+    doc.edit(
+        "Side wall",
+        [&](Product& p) {
+            core::Kitchen& kitchen = requireKitchen(p);
+            if (!length) {
+                kitchen.setSideRun(side, nullptr, nullptr);
+                return;
+            }
+            if (core::KitchenRun* run = kitchen.sideRun(side)) {
+                run->setLength(*length);
+                return;
+            }
+            auto run = std::make_shared<core::KitchenRun>(side == core::Side::Left ? core::KitchenWall::Left
+                                                                                   : core::KitchenWall::Right);
+            run->setLength(*length);
+            run->baseRow().add(core::makeCabinet(core::CabinetModule::BaseDoors, std::nullopt, *length));
+            run->wallRow().add(core::makeCabinet(core::CabinetModule::WallDoors, std::nullopt, *length));
+            kitchen.setSideRun(side, std::move(run), core::makeCorner(side));
+        },
+        side == core::Side::Left ? "side-run-left" : "side-run-right");
+}
+
+void addCabinet(Document& doc, core::CabinetModule module, core::Real width, core::KitchenWall wall)
 {
     doc.edit("Add cabinet", [&](Product& p) {
-        core::Kitchen& kitchen = requireKitchen(p);
-        core::CabinetRow& row = core::levelOf(module) == core::RowLevel::Base ? kitchen.baseRow()
-                                                                              : kitchen.wallRow();
+        core::KitchenRun& run = requireRun(requireKitchen(p), wall);
+        core::CabinetRow& row = core::levelOf(module) == core::RowLevel::Base ? run.baseRow()
+                                                                              : run.wallRow();
         row.add(core::makeCabinet(module, width, width));
     });
 }
@@ -111,8 +149,29 @@ void addCabinet(Document& doc, core::CabinetModule module, core::Real width)
 void setCabinetWidth(Document& doc, ComponentId cabinet, std::optional<core::Real> width)
 {
     doc.edit(
-        "Cabinet width", [&](Product& p) { requireCabinet(p, cabinet).setFixedWidth(width); },
+        "Cabinet width",
+        [&](Product& p) {
+            core::Carcass& c = requireCabinet(p, cabinet, true);
+            if (!width && c.parent()->kind() == core::ComponentKind::KitchenCorner) {
+                throw std::invalid_argument("A corner cabinet has a width of its own");
+            }
+            c.setFixedWidth(width);
+        },
         key("cabinet-width", cabinet));
+}
+
+void setBlindFiller(Document& doc, ComponentId cabinet, core::Real filler)
+{
+    doc.edit(
+        "Filler",
+        [&](Product& p) {
+            core::Carcass& c = require<core::Carcass>(p, cabinet);
+            if (!c.blindFiller()) {
+                throw std::invalid_argument("Not a blind corner cabinet");
+            }
+            c.setBlindCorner(filler);
+        },
+        key("filler", cabinet));
 }
 
 void moveCabinet(Document& doc, ComponentId cabinet, int steps)

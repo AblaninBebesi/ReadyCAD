@@ -16,4 +16,6 @@ Kitchen: cut-outs on the `CUTOUT` layer, dimensioned as a chain along the part.
 
 Shapes: real outlines and blanks of shaped parts, band marks along the banded sides, notch dimensions, the features on the part page.
 
-**Stages:** 6, 7, 9, kitchen, shapes
+Corner kitchens: views of any subtree (a kitchen run in its own coordinates), `ProductView::Plan` (worktops, joints, cut-outs, wall lengths); the PDF of a corner kitchen has a plan page and an assembly page per wall.
+
+**Stages:** 6, 7, 9, kitchen, shapes, corner kitchens

@@ -11,6 +11,10 @@ enum class ProductView {
     Front,     ///< from the front, with doors, drawer fronts and handles
     FrontOpen, ///< from the front without fronts: shelves, partitions, drawer boxes; trace of A-A
     Section,   ///< section A-A through the first compartment, seen from the left
+    /// From above, the whole product (a kitchen without its wall cabinets): the base cabinets
+    /// under the worktops, the worktops' joints and cut-outs, the lengths of the walls. The back
+    /// wall at the top of the drawing, the room below it.
+    Plan,
 };
 
 struct ProductViewOptions {
@@ -32,14 +36,17 @@ inline constexpr std::string_view kText = "TEXT";
 
 /// Hidden edges are removed: a panel edge is drawn only where no part entirely in front of it
 /// covers it (all parts are boxes, so this is exact for furniture).
-[[nodiscard]] Drawing drawProductView(const core::Product& product, ProductView view,
+///
+/// `root`: the product, or a kitchen run — its elevation, seen standing in front of its wall, in
+/// its own coordinates. The plan is always that of the whole product.
+[[nodiscard]] Drawing drawProductView(const core::FurnitureComponent& root, ProductView view,
                                       const ProductViewOptions& options = {});
 
 /// Extent of the view's geometry without dimensions and texts (to choose the scale).
-[[nodiscard]] Bounds viewExtent(const core::Product& product, ProductView view);
+[[nodiscard]] Bounds viewExtent(const core::FurnitureComponent& root, ProductView view);
 
 /// X of the section plane A-A: inside the first compartment, off its centre so that it does
 /// not fall into the gap between two doors.
-[[nodiscard]] Real sectionPlaneX(const core::Product& product);
+[[nodiscard]] Real sectionPlaneX(const core::FurnitureComponent& root);
 
 } // namespace rc::exporting

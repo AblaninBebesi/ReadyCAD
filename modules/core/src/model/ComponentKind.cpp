@@ -11,6 +11,8 @@ std::string_view toString(ComponentKind kind) noexcept
     case ComponentKind::DrawerStack:   return "DrawerStack";
     case ComponentKind::Drawer:        return "Drawer";
     case ComponentKind::Kitchen:       return "Kitchen";
+    case ComponentKind::KitchenRun:    return "KitchenRun";
+    case ComponentKind::KitchenCorner: return "KitchenCorner";
     case ComponentKind::CabinetRow:    return "CabinetRow";
     case ComponentKind::SideWall:      return "SideWall";
     case ComponentKind::TopPanel:      return "TopPanel";
@@ -27,6 +29,7 @@ std::string_view toString(ComponentKind kind) noexcept
     case ComponentKind::DrawerBoxEnd:  return "DrawerBoxEnd";
     case ComponentKind::DrawerBottom:  return "DrawerBottom";
     case ComponentKind::Worktop:       return "Worktop";
+    case ComponentKind::BlindPanel:    return "BlindPanel";
     }
     return "Unknown";
 }

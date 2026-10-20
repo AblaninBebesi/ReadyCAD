@@ -16,6 +16,8 @@ std::span<const CatalogItem> catalogItems() noexcept
         CatalogItem::ChestOfDrawers,
         CatalogItem::Bookcase,
         CatalogItem::Kitchen,
+        CatalogItem::KitchenL,
+        CatalogItem::KitchenU,
     };
     return kItems;
 }
@@ -69,6 +71,51 @@ std::shared_ptr<Product> createProduct(CatalogItem item, const ConstructionRules
             .add(CabinetModule::WallDoors, 400)
             .add(CabinetModule::WallDoors, 600)
             .add(CabinetModule::WallDoors)
+            .build();
+
+    case CatalogItem::KitchenL:
+        // 3 m on the back wall, 2.4 m on the right one. The hob is not the first cabinet of the
+        // side run: its worktop starts there, at the back run's edge, and needs material around
+        // the cut-out.
+        return KitchenBuilder()
+            .rules(rules)
+            .length(3000)
+            .sideWall(Side::Right, 2400)
+            .add(CabinetModule::BaseDoors, 400)
+            .add(CabinetModule::Sink, 600)
+            .add(CabinetModule::BaseDrawers, 400)
+            .add(CabinetModule::BaseDoors)
+            .add(CabinetModule::WallDoors, 600)
+            .add(CabinetModule::WallDoors, 600)
+            .add(CabinetModule::WallDoors)
+            .add(CabinetModule::BaseDrawers, 400, KitchenWall::Right)
+            .add(CabinetModule::Hob, 600, KitchenWall::Right)
+            .add(CabinetModule::BaseDoors, std::nullopt, KitchenWall::Right)
+            .add(CabinetModule::WallDoors, 600, KitchenWall::Right)
+            .add(CabinetModule::WallDoors, std::nullopt, KitchenWall::Right)
+            .build();
+
+    case CatalogItem::KitchenU:
+        // 3.2 m between two side walls of 2 m: the sink in the middle of the back wall, the
+        // drawers at the left, the hob at the right.
+        return KitchenBuilder()
+            .rules(rules)
+            .length(3200)
+            .sideWall(Side::Left, 2000)
+            .sideWall(Side::Right, 2000)
+            .add(CabinetModule::Sink, 600)
+            .add(CabinetModule::BaseDoors)
+            .add(CabinetModule::WallDoors)
+            .add(CabinetModule::WallDoors)
+            .add(CabinetModule::BaseDoors, std::nullopt, KitchenWall::Left)
+            .add(CabinetModule::BaseDrawers, 600, KitchenWall::Left)
+            .add(CabinetModule::WallDoors, std::nullopt, KitchenWall::Left)
+            .add(CabinetModule::WallDoors, std::nullopt, KitchenWall::Left)
+            .add(CabinetModule::BaseDrawers, 400, KitchenWall::Right)
+            .add(CabinetModule::Hob, 600, KitchenWall::Right)
+            .add(CabinetModule::BaseDoors, std::nullopt, KitchenWall::Right)
+            .add(CabinetModule::WallDoors, std::nullopt, KitchenWall::Right)
+            .add(CabinetModule::WallDoors, std::nullopt, KitchenWall::Right)
             .build();
     }
     throw std::invalid_argument("Unknown CatalogItem");

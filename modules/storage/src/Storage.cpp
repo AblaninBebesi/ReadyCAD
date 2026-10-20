@@ -209,6 +209,9 @@ std::vector<std::pair<const char*, PanelComponent*>> namedParts(const Carcass& c
     if (Plinth* plinth = carcass.plinth()) {
         named.emplace_back("plinth", plinth);
     }
+    if (BlindPanel* blind = carcass.blindPanel()) {
+        named.emplace_back("blindPanel", blind);
+    }
     return named;
 }
 
@@ -236,6 +239,9 @@ json writeCarcass(const Carcass& carcass)
     if (carcass.cutout()) {
         out["cutout"] = *carcass.cutout();
     }
+    if (carcass.blindFiller()) {
+        out["blindFiller"] = *carcass.blindFiller();
+    }
     if (!parts.empty()) {
         out["parts"] = parts;
     }
@@ -243,20 +249,41 @@ json writeCarcass(const Carcass& carcass)
     return out;
 }
 
-json writeKitchen(const Kitchen& kitchen)
+/// The worktop and the rows of a run, into `out`.
+void writeRun(const KitchenRun& run, json& out)
 {
-    json out;
-    out["sizes"] = kitchen.sizes();
     json worktop = json::object();
-    writePanelChoices(kitchen.worktop(), worktop);
+    writePanelChoices(run.worktop(), worktop);
     out["worktop"] = worktop;
-    for (const auto& [key, row] : {std::pair{"base", &kitchen.baseRow()},
-                                   std::pair{"wall", &kitchen.wallRow()}}) {
+    for (const auto& [key, row] : {std::pair{"base", &run.baseRow()},
+                                   std::pair{"wall", &run.wallRow()}}) {
         json cabinets = json::array();
         for (const Carcass* cabinet : row->cabinets()) {
             cabinets.push_back(writeCarcass(*cabinet));
         }
         out[key] = cabinets;
+    }
+}
+
+/// The back run at the top, as a straight kitchen has always been written (older files read as
+/// straight kitchens); a side run under "left" / "right" with the corner where it meets it.
+json writeKitchen(const Kitchen& kitchen)
+{
+    json out;
+    out["sizes"] = kitchen.sizes();
+    writeRun(kitchen.backRun(), out);
+    for (const auto& [key, side] : {std::pair{"left", Side::Left}, std::pair{"right", Side::Right}}) {
+        const KitchenRun* run = kitchen.sideRun(side);
+        if (run == nullptr) {
+            continue;
+        }
+        const KitchenCorner& corner = *kitchen.backRun().corner(side);
+        json sideRun;
+        sideRun["length"] = run->length();
+        sideRun["corner"] = {{"base", writeCarcass(corner.baseCabinet())},
+                             {"wall", writeCarcass(corner.wallCabinet())}};
+        writeRun(*run, sideRun);
+        out[key] = sideRun;
     }
     return out;
 }
@@ -381,6 +408,7 @@ void readCarcass(const json& in, Carcass& carcass)
     if (in.contains("cutout") && !in.at("cutout").is_null()) {
         carcass.setCutout(in.at("cutout").get<WorktopCutout>());
     }
+    carcass.setBlindCorner(readOptionalReal(in, "blindFiller")); // before its parts: the blind panel
     if (in.contains("parts")) {
         const json& parts = in.at("parts");
         for (const auto& [key, part] : namedParts(carcass)) {
@@ -392,19 +420,38 @@ void readCarcass(const json& in, Carcass& carcass)
     readSection(in.at("interior"), carcass.interior());
 }
 
-void readKitchen(const json& in, Kitchen& kitchen)
+void readRun(const json& in, KitchenRun& run)
 {
-    kitchen.setSizes(in.value("sizes", json::object()).get<Kitchen::Sizes>());
     // Always read: a worktop starts out of the cutting plan, so for it a missing "cutting" key
     // means "in the plan".
-    readPanelChoices(in.value("worktop", json::object()), kitchen.worktop());
-    for (const auto& [key, row] : {std::pair{"base", &kitchen.baseRow()},
-                                   std::pair{"wall", &kitchen.wallRow()}}) {
+    readPanelChoices(in.value("worktop", json::object()), run.worktop());
+    for (const auto& [key, row] : {std::pair{"base", &run.baseRow()},
+                                   std::pair{"wall", &run.wallRow()}}) {
         for (const json& cabinet : in.value(key, json::array())) {
             auto carcass = std::make_shared<Carcass>();
             row->add(carcass);
             readCarcass(cabinet, *carcass);
         }
+    }
+}
+
+void readKitchen(const json& in, Kitchen& kitchen)
+{
+    kitchen.setSizes(in.value("sizes", json::object()).get<Kitchen::Sizes>());
+    readRun(in, kitchen.backRun());
+    for (const auto& [key, side] : {std::pair{"left", Side::Left}, std::pair{"right", Side::Right}}) {
+        if (!in.contains(key)) {
+            continue;
+        }
+        const json& sideRun = in.at(key);
+        auto run = std::make_shared<KitchenRun>(side == Side::Left ? KitchenWall::Left : KitchenWall::Right);
+        run->setLength(sideRun.at("length").get<Real>());
+        auto base = std::make_shared<Carcass>();
+        auto wall = std::make_shared<Carcass>();
+        readCarcass(sideRun.at("corner").at("base"), *base);
+        readCarcass(sideRun.at("corner").at("wall"), *wall);
+        kitchen.setSideRun(side, run, std::make_shared<KitchenCorner>(side, base, wall));
+        readRun(sideRun, *run);
     }
 }
 

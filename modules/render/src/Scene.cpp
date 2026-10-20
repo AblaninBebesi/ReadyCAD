@@ -35,6 +35,7 @@ ItemCategory categoryOf(ComponentKind kind)
         return ItemCategory::Interior;
     case ComponentKind::Door:
     case ComponentKind::DrawerFront:
+    case ComponentKind::BlindPanel:
         return ItemCategory::Front;
     case ComponentKind::DrawerBoxSide:
     case ComponentKind::DrawerBoxEnd:
@@ -83,27 +84,30 @@ glm::vec3 faceNormal(const detailing::PanelFrame& frame, core::PanelFace face)
 
 bool isFrontPart(ComponentKind kind)
 {
-    return kind == ComponentKind::Door || kind == ComponentKind::DrawerFront;
+    return kind == ComponentKind::Door || kind == ComponentKind::DrawerFront
+        || kind == ComponentKind::BlindPanel;
 }
 
 /// A shaped panel as a prism: its face (outline less openings) triangulated at both sides,
-/// walls along the outline and around the openings, edges where the outline turns.
-ScenePrism prismOf(const core::FurnitureComponent& c)
+/// walls along the outline and around the openings, edges where the outline turns. `place`:
+/// where the panel's coordinates are in the product (a kitchen run on a side wall).
+ScenePrism prismOf(const core::FurnitureComponent& c, const core::Placement& place)
 {
     const core::Panel& panel = *c.panel();
     const detailing::PanelFrame frame(c);
     const core::Vec3 size = frame.extents();
-    const auto world = [&frame](core::Vec2 p, core::Real z) {
-        return toFloat(frame.toWorld(core::Vec3(p.x, p.y, z)));
+    const auto world = [&frame, &place](core::Vec2 p, core::Real z) {
+        return toFloat(place.point(frame.toWorld(core::Vec3(p.x, p.y, z))));
     };
-    const auto direction = [&frame](core::Vec2 d) {
+    const auto direction = [&frame, &place](core::Vec2 d) {
         core::Vec3 v(0.0);
         v[core::index(frame.lengthAxis())] = d.x;
         v[core::index(frame.widthAxis())] = d.y;
-        return toFloat(v);
+        return toFloat(place.direction(v));
     };
-    glm::vec3 up(0.0f);
-    up[core::index(frame.thicknessAxis())] = 1.0f;
+    core::Vec3 thickness(0.0);
+    thickness[core::index(frame.thicknessAxis())] = 1.0;
+    const glm::vec3 up = toFloat(place.direction(thickness));
 
     std::vector<core::Vec2> outer = panel.outline().empty()
                                         ? std::vector<core::Vec2>{{0.0, 0.0}, {size.x, 0.0},
@@ -204,7 +208,7 @@ Scene buildScene(const core::Product& product, const SceneOptions& options)
     const core::FurnitureComponent* selected =
         options.selection ? product.find(*options.selection) : nullptr;
     if (selected != nullptr && !selected->hasPanel() && selected->kind() != ComponentKind::Product) {
-        scene.highlight = selected->box();
+        scene.highlight = selected->productBox();
     }
 
     product.visit([&](const core::FurnitureComponent& c) {
@@ -216,6 +220,13 @@ Scene buildScene(const core::Product& product, const SceneOptions& options)
         }
         const bool isSelected = selected != nullptr && (selected == &c || selected->isAncestorOf(c));
         const ItemCategory category = categoryOf(c.kind());
+        // A part of a kitchen run on a side wall: its coordinates turned onto that wall.
+        const core::Placement place = c.placement();
+        const auto axisVector = [&place](core::Axis axis) {
+            glm::vec3 v(0.0f);
+            v[core::index(place.axis(axis))] = 1.0f;
+            return v;
+        };
         // The decor of its material: its picture along the grain, or its colour; without a decor
         // the colour of its kind of part.
         SceneSurface surface;
@@ -224,19 +235,18 @@ Scene buildScene(const core::Product& product, const SceneOptions& options)
             plain = glm::vec4(decor->r / 255.0f, decor->g / 255.0f, decor->b / 255.0f, 1.0f);
             surface.texture = decor->texture;
             const detailing::PanelFrame frame(c);
-            surface.grain = glm::vec3(0.0f);
-            surface.grain[core::index(frame.lengthAxis())] = 1.0f;
-            surface.across = glm::vec3(0.0f);
-            surface.across[core::index(frame.widthAxis())] = 1.0f;
+            surface.grain = axisVector(frame.lengthAxis());
+            surface.across = axisVector(frame.widthAxis());
         }
         if (isSelected) {
             surface.tint = glm::mix(glm::vec4(1.0f), kSelectedTint, 0.55f);
         }
         const glm::vec4 color = isSelected ? glm::mix(plain, kSelectedTint, 0.55f) : plain;
+        const core::Aabb placed = place.box(c.box());
         if (c.panel()->outline().empty() && c.panel()->cutouts().empty()) {
             SceneBox box;
-            box.min = toFloat(c.box().min());
-            box.max = toFloat(c.box().max());
+            box.min = toFloat(placed.min());
+            box.max = toFloat(placed.max());
             box.category = category;
             box.color = color;
             box.component = c.id();
@@ -244,7 +254,7 @@ Scene buildScene(const core::Product& product, const SceneOptions& options)
             box.surface = surface;
             scene.boxes.push_back(box);
         } else {
-            ScenePrism prism = prismOf(c);
+            ScenePrism prism = prismOf(c, place);
             prism.category = category;
             prism.color = color;
             prism.component = c.id();
@@ -252,20 +262,21 @@ Scene buildScene(const core::Product& product, const SceneOptions& options)
             prism.surface = surface;
             scene.prisms.push_back(std::move(prism));
         }
-        scene.bounds.expand(c.box());
+        scene.bounds.expand(placed);
 
         // Handle: a bar standing out of the front's outer face.
         if (const auto* front = dynamic_cast<const core::FrontPanel*>(&c)) {
             if (const auto handle = front->handleGeometry(rules)) {
                 const auto& m = *handle->model;
                 const bool alongY = handle->along == core::Axis::Y;
-                const glm::vec3 half(static_cast<float>((alongY ? m.width : m.length) / 2.0),
-                                     static_cast<float>((alongY ? m.length : m.width) / 2.0), 0.0f);
-                const glm::vec3 center = toFloat(handle->center);
+                const core::Vec3 half((alongY ? m.width : m.length) / 2.0,
+                                      (alongY ? m.length : m.width) / 2.0, 0.0);
+                const core::Vec3& center = handle->center;
+                const core::Aabb local(center - half, center + half + core::Vec3(0.0, 0.0, m.projection));
+                const core::Aabb onWall = place.box(local);
                 SceneBox bar;
-                bar.min = glm::vec3(center.x - half.x, center.y - half.y, center.z);
-                bar.max = glm::vec3(center.x + half.x, center.y + half.y,
-                                    center.z + static_cast<float>(m.projection));
+                bar.min = toFloat(onWall.min());
+                bar.max = toFloat(onWall.max());
                 bar.category = ItemCategory::Handle;
                 bar.color = isSelected ? glm::mix(colorOf(ItemCategory::Handle), kSelectedTint, 0.4f)
                                        : colorOf(ItemCategory::Handle);
@@ -279,8 +290,8 @@ Scene buildScene(const core::Product& product, const SceneOptions& options)
             const detailing::PanelFrame frame(c);
             for (const core::Drilling& d : c.panel()->drillings()) {
                 SceneHole hole;
-                hole.normal = faceNormal(frame, d.face);
-                hole.center = toFloat(frame.toWorld(d.position)) + hole.normal * 0.3f; // no z-fight
+                hole.normal = toFloat(place.direction(core::Vec3(faceNormal(frame, d.face))));
+                hole.center = toFloat(place.point(frame.toWorld(d.position))) + hole.normal * 0.3f; // no z-fight
                 hole.radius = static_cast<float>(d.diameter / 2.0);
                 scene.holes.push_back(hole);
             }

@@ -14,6 +14,7 @@ Carcass::Carcass()
     , back_(std::make_shared<BackPanel>())
     , interior_(std::make_shared<Section>())
     , plinth_(std::make_shared<Plinth>())
+    , blindPanel_(std::make_shared<BlindPanel>())
 {
     adopt(left_);
     adopt(right_);
@@ -128,6 +129,26 @@ void Carcass::setCutout(std::optional<WorktopCutout> cutout)
     requestLayout();
 }
 
+void Carcass::setBlindCorner(std::optional<Real> filler)
+{
+    if (filler && !(*filler >= 0.0)) {
+        throw std::invalid_argument("Carcass: the filler must not be negative");
+    }
+    const bool wasBlind = blindFiller_.has_value();
+    blindFiller_ = filler;
+    if (filler && !wasBlind) {
+        adopt(blindPanel_);
+    } else if (!filler && wasBlind) {
+        detachChildren([this](const FurnitureComponent& c) { return &c == blindPanel_.get(); });
+    }
+    requestLayout();
+}
+
+BlindPanel* Carcass::blindPanel() const noexcept
+{
+    return blindFiller_ ? blindPanel_.get() : nullptr;
+}
+
 Rail* Carcass::frontRail() const noexcept
 {
     return frontRail_.get();
@@ -178,6 +199,7 @@ void Carcass::layoutChildren(const LayoutSlot& slot)
     frame_.backThickness = back_->thickness(slot);
 
     LayoutSlot partSlot = slot.withBox(outer);
+    partSlot.corner = nullptr; // for this carcass only, not for its parts
     partSlot.frame = &frame_;
     partSlot.frontZ = outer.max().z;
     for (PanelComponent* part : frameParts()) {
@@ -186,7 +208,8 @@ void Carcass::layoutChildren(const LayoutSlot& slot)
     back_->layout(partSlot);
     if (Plinth* plinth = this->plinth()) {
         LayoutSlot plinthSlot = partSlot;
-        plinthSlot.box = Aabb(whole.min(), Vec3(whole.max().x, outer.min().y, whole.max().z));
+        plinthSlot.box = Aabb(Vec3(whole.min().x - slot.plinthBeyondStart, whole.min().y, whole.min().z),
+                              Vec3(whole.max().x + slot.plinthBeyondEnd, outer.min().y, whole.max().z));
         plinth->layout(plinthSlot);
     }
 
@@ -206,6 +229,29 @@ void Carcass::layoutChildren(const LayoutSlot& slot)
     interiorSlot.overlays.right = (outer.max().x - edgeGap) - opening.max().x;
     interiorSlot.overlays.bottom = opening.min().y - (outer.min().y + edgeGap);
     interiorSlot.overlays.top = (outer.max().y - edgeGap) - opening.max().y;
+
+    // 4. A blind corner cabinet: the fronts stop a front gap before the part the other wall's
+    //    cabinets hide and the filler; the blind panel covers that, flush with them.
+    if (BlindPanel* blind = blindPanel()) {
+        const bool right = slot.corner == nullptr || slot.corner->blindEnd == Side::Right;
+        const Real hidden = slot.corner != nullptr ? slot.corner->hidden : 0.0;
+        const Real width = std::clamp(hidden + *blindFiller_, 0.0, outer.size().x);
+        const Real gap = slot.r().frontGap;
+        Real from = outer.min().x + edgeGap;
+        Real to = outer.max().x - edgeGap;
+        if (right) {
+            from = outer.max().x - width;
+            interiorSlot.overlays.right = (from - gap) - opening.max().x;
+        } else {
+            to = outer.min().x + width;
+            interiorSlot.overlays.left = opening.min().x - (to + gap);
+        }
+        LayoutSlot blindSlot = partSlot.withBox(Aabb(Vec3(from, outer.min().y + edgeGap, outer.max().z),
+                                                     Vec3(to, outer.max().y - edgeGap, outer.max().z)));
+        blindSlot.frame = nullptr;
+        blind->layout(blindSlot);
+    }
+    interiorSlot.corner = nullptr;
     interior_->layout(interiorSlot);
 }
 

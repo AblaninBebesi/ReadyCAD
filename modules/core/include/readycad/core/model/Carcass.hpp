@@ -54,6 +54,16 @@ public:
     [[nodiscard]] const std::optional<WorktopCutout>& cutout() const noexcept { return cutout_; }
     void setCutout(std::optional<WorktopCutout> cutout);
 
+    /// Kör köşe dolabı: a cabinet in a kitchen corner whose end runs on behind the cabinets of
+    /// the other wall — the kitchen tells which end and how far (LayoutSlot::corner). Its
+    /// fronts cover only the open part; a blind panel closes the rest, `filler` of it showing
+    /// between the door and the other wall's fronts so that the door and its handle open clear
+    /// of them. nullopt: an ordinary cabinet. Throws std::invalid_argument for a filler < 0.
+    [[nodiscard]] const std::optional<Real>& blindFiller() const noexcept { return blindFiller_; }
+    void setBlindCorner(std::optional<Real> filler);
+    /// nullptr for an ordinary cabinet.
+    [[nodiscard]] BlindPanel* blindPanel() const noexcept;
+
     [[nodiscard]] SideWall& leftSide() const noexcept { return *left_; }
     [[nodiscard]] SideWall& rightSide() const noexcept { return *right_; }
     /// The top panel. Part of the carcass only with CarcassTop::Panel.
@@ -91,6 +101,7 @@ private:
     CarcassFrame frame_;
     std::optional<Real> fixedWidth_;
     std::optional<WorktopCutout> cutout_;
+    std::optional<Real> blindFiller_;
 
     std::shared_ptr<SideWall> left_;
     std::shared_ptr<SideWall> right_;
@@ -101,6 +112,7 @@ private:
     std::shared_ptr<BackPanel> back_;
     std::shared_ptr<Section> interior_;
     std::shared_ptr<Plinth> plinth_; // in the tree only with a plinth
+    std::shared_ptr<BlindPanel> blindPanel_; // in the tree only in a blind corner cabinet
 };
 
 } // namespace rc::core

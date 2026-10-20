@@ -562,8 +562,40 @@ const Material& Worktop::defaultMaterial(const ConstructionRules& r) const
 
 EdgeBand Worktop::defaultEdge(EdgeSide side, const LayoutSlot& slot) const
 {
-    // Width axis is Z: L1 lies against the wall, the front edge and the ends are visible.
-    return side == EdgeSide::L1 ? EdgeBand{} : slot.r().visibleEdge;
+    // Width axis is Z: L1 lies against the wall, the front edge is visible, and so is an end —
+    // unless it meets a side wall or the other worktop at a corner.
+    const KitchenFrame* k = slot.kitchen;
+    const bool closed = side == EdgeSide::L1
+                     || (k != nullptr && side == EdgeSide::W1 && k->startClosed)
+                     || (k != nullptr && side == EdgeSide::W2 && k->endClosed);
+    return closed ? EdgeBand{} : slot.r().visibleEdge;
+}
+
+// ---------------------------------------------------------------------------------------------
+// BlindPanel
+// ---------------------------------------------------------------------------------------------
+
+BlindPanel::BlindPanel() : PanelComponent(Axis::Z, Axis::Y) {}
+
+Vec3 BlindPanel::updateSize(const LayoutSlot& slot)
+{
+    const Vec3 zone = slot.box.size();
+    return {zone.x, zone.y, thickness(slot)};
+}
+
+Vec3 BlindPanel::updatePosition(const LayoutSlot& slot, const Vec3&)
+{
+    return {slot.box.min().x, slot.box.min().y, slot.frontZ};
+}
+
+const Material& BlindPanel::defaultMaterial(const ConstructionRules& r) const
+{
+    return r.frontMaterial;
+}
+
+EdgeBand BlindPanel::defaultEdge(EdgeSide, const LayoutSlot& slot) const
+{
+    return slot.r().visibleEdge; // a front: every edge is seen, like a door's
 }
 
 // ---------------------------------------------------------------------------------------------

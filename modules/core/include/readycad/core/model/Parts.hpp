@@ -9,8 +9,6 @@
 
 namespace rc::core {
 
-enum class Side { Left, Right };
-
 // =============================================================================================
 // Carcass parts. They need slot.frame (the enclosing Carcass) and throw std::logic_error
 // when laid out anywhere else.
@@ -311,6 +309,21 @@ protected:
     Vec3 updateSize(const LayoutSlot& slot) override;
     Vec3 updatePosition(const LayoutSlot& slot, const Vec3& size) override;
     std::vector<PanelCutout> automaticOpenings(const LayoutSlot& slot) const override;
+    const Material& defaultMaterial(const ConstructionRules& r) const override;
+    EdgeBand defaultEdge(EdgeSide side, const LayoutSlot& slot) const override;
+};
+
+/// Kör panel: the fixed front of a blind corner cabinet over the part of it that the cabinets of
+/// the other wall hide, flush with its doors; the strip of it that shows between the door and
+/// the other wall's fronts is the filler (dolgu). Covers its slot box, standing at slot.frontZ.
+class BlindPanel final : public PanelComponent {
+public:
+    BlindPanel();
+    [[nodiscard]] ComponentKind kind() const noexcept override { return ComponentKind::BlindPanel; }
+
+protected:
+    Vec3 updateSize(const LayoutSlot& slot) override;
+    Vec3 updatePosition(const LayoutSlot& slot, const Vec3& size) override;
     const Material& defaultMaterial(const ConstructionRules& r) const override;
     EdgeBand defaultEdge(EdgeSide side, const LayoutSlot& slot) const override;
 };

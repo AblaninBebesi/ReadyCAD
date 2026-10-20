@@ -48,6 +48,18 @@ const FurnitureComponent& FurnitureComponent::root() const noexcept
     return *node;
 }
 
+Placement FurnitureComponent::placement() const noexcept
+{
+    // From the innermost frame outwards.
+    Placement result;
+    for (const FurnitureComponent* node = this; node != nullptr; node = node->parent_) {
+        if (const Placement* own = node->ownPlacement()) {
+            result = result.within(*own);
+        }
+    }
+    return result;
+}
+
 bool FurnitureComponent::canAccept(const FurnitureComponent&) const
 {
     return false;

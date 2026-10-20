@@ -71,6 +71,22 @@ std::shared_ptr<Carcass> makeCabinet(CabinetModule module, std::optional<Real> w
     return cabinet;
 }
 
+std::shared_ptr<KitchenCorner> makeCorner(Side end, Real filler)
+{
+    // One door: what shows of a blind corner cabinet is about as wide as an ordinary one-door
+    // cabinet. Hinged away from the corner, where its wall is.
+    const HingeSide hinge = end == Side::Right ? HingeSide::Left : HingeSide::Right;
+    auto base = makeCabinet(CabinetModule::BaseDoors, KitchenCorner::kBaseWidth, 400.0);
+    auto wall = makeCabinet(CabinetModule::WallDoors, KitchenCorner::kWallWidth, 400.0);
+    for (Carcass* cabinet : {base.get(), wall.get()}) {
+        cabinet->setBlindCorner(filler);
+        for (Door* door : cabinet->interior().doors()) {
+            door->setHinge(hinge);
+        }
+    }
+    return std::make_shared<KitchenCorner>(end, std::move(base), std::move(wall));
+}
+
 KitchenBuilder& KitchenBuilder::name(std::string name)
 {
     name_ = std::move(name);
@@ -107,45 +123,88 @@ KitchenBuilder& KitchenBuilder::sizes(const Kitchen::Sizes& sizes)
     return *this;
 }
 
-KitchenBuilder& KitchenBuilder::add(CabinetModule module, std::optional<Real> width)
+KitchenBuilder& KitchenBuilder::add(CabinetModule module, std::optional<Real> width, KitchenWall wall)
 {
-    modules_.push_back({module, width});
+    modules_.push_back({module, width, wall});
+    return *this;
+}
+
+KitchenBuilder& KitchenBuilder::sideWall(Side side, Real length)
+{
+    sideLengths_[side == Side::Left ? 0 : 1] = length;
     return *this;
 }
 
 std::shared_ptr<Product> KitchenBuilder::build() const
 {
-    // What an automatic cabinet of each row will be about: it decides one door or two.
-    Real fixed[2] = {0.0, 0.0};
-    int automatic[2] = {0, 0};
-    bool hasBase = false;
-    for (const Module& m : modules_) {
-        const auto row = static_cast<std::size_t>(levelOf(m.module));
-        if (m.width) {
-            if (!(*m.width > 0.0)) {
-                throw std::invalid_argument("KitchenBuilder: a cabinet width must be > 0");
-            }
-            fixed[row] += *m.width;
-        } else {
-            ++automatic[row];
-        }
-        hasBase = hasBase || levelOf(m.module) == RowLevel::Base;
-    }
-    if (!hasBase) {
-        throw std::invalid_argument("KitchenBuilder: a kitchen needs a base cabinet");
-    }
-
     auto product = std::make_shared<Product>(name_, rules_);
     auto kitchen = std::make_shared<Kitchen>();
     kitchen->setSizes(sizes_);
     product->add(kitchen);
+    for (const Side side : {Side::Left, Side::Right}) {
+        if (const std::optional<Real>& length = sideLengths_[side == Side::Left ? 0 : 1]) {
+            auto run = std::make_shared<KitchenRun>(side == Side::Left ? KitchenWall::Left
+                                                                       : KitchenWall::Right);
+            run->setLength(*length); // throws for <= 0
+            kitchen->setSideRun(side, std::move(run), makeCorner(side));
+        }
+    }
     for (const Module& m : modules_) {
-        const RowLevel level = levelOf(m.module);
-        const auto row = static_cast<std::size_t>(level);
-        const Real nominal =
-            m.width ? *m.width : (length_ - fixed[row]) / std::max(1, automatic[row]);
-        CabinetRow& target = level == RowLevel::Base ? kitchen->baseRow() : kitchen->wallRow();
-        target.add(makeCabinet(m.module, m.width, nominal));
+        const bool hasRun = m.wall == KitchenWall::Back
+                         || kitchen->sideRun(m.wall == KitchenWall::Left ? Side::Left : Side::Right);
+        if (!hasRun) {
+            throw std::invalid_argument("KitchenBuilder: a cabinet for a wall without a run");
+        }
+    }
+
+    for (KitchenRun* run : kitchen->runs()) {
+        // The length its rows have, about: what the corners leave. With it, what an automatic
+        // cabinet of each row will be about: it decides one door or two.
+        Real available[2] = {run->length(), run->length()};
+        if (run->wall() == KitchenWall::Back) {
+            available[0] = available[1] = length_;
+            for (const Side end : {Side::Left, Side::Right}) {
+                if (const KitchenCorner* c = run->corner(end)) {
+                    available[0] -= c->baseWidth();
+                    available[1] -= c->wallWidth();
+                }
+            }
+        } else {
+            available[0] -= depth_ + rules_.frontMaterial.thickness;
+            available[1] -= sizes_.wallDepth + rules_.frontMaterial.thickness;
+        }
+        Real fixed[2] = {0.0, 0.0};
+        int automatic[2] = {0, 0};
+        bool hasBase = false;
+        for (const Module& m : modules_) {
+            if (m.wall != run->wall()) {
+                continue;
+            }
+            const auto row = static_cast<std::size_t>(levelOf(m.module));
+            if (m.width) {
+                if (!(*m.width > 0.0)) {
+                    throw std::invalid_argument("KitchenBuilder: a cabinet width must be > 0");
+                }
+                fixed[row] += *m.width;
+            } else {
+                ++automatic[row];
+            }
+            hasBase = hasBase || levelOf(m.module) == RowLevel::Base;
+        }
+        if (!hasBase) {
+            throw std::invalid_argument("KitchenBuilder: every kitchen run needs a base cabinet");
+        }
+        for (const Module& m : modules_) {
+            if (m.wall != run->wall()) {
+                continue;
+            }
+            const RowLevel level = levelOf(m.module);
+            const auto row = static_cast<std::size_t>(level);
+            const Real nominal =
+                m.width ? *m.width : (available[row] - fixed[row]) / std::max(1, automatic[row]);
+            CabinetRow& target = level == RowLevel::Base ? run->baseRow() : run->wallRow();
+            target.add(makeCabinet(m.module, m.width, nominal));
+        }
     }
     product->setDimensions({length_, height_, depth_}); // first layout of the whole tree
     return product;

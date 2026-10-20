@@ -2,6 +2,7 @@
 
 #include "readycad/core/Aabb.hpp"
 #include "readycad/core/Panel.hpp"
+#include "readycad/core/Placement.hpp"
 #include "readycad/core/model/ComponentKind.hpp"
 #include "readycad/core/model/LayoutSlot.hpp"
 
@@ -30,7 +31,10 @@ struct ComponentId {
 ///
 /// Geometry: `box()` is in PRODUCT coordinates (origin = left-bottom-rear corner of the
 /// product, mm). Layout is recomputed top-down from the root after every change, so absolute
-/// coordinates are simpler than parent-relative ones and cost nothing.
+/// coordinates are simpler than parent-relative ones and cost nothing. The one exception is a
+/// subtree with coordinates of its own — a kitchen run on a side wall, laid out like a straight
+/// run with its front towards +Z: there `box()` is in the run's coordinates, and placement()
+/// turns them into the product's (productBox()).
 ///
 /// Layout is a Template Method (see layout()):
 ///   1. updateSize(slot)            — the component's OWN size formula;
@@ -88,6 +92,12 @@ public:
     [[nodiscard]] Vec3 position() const noexcept { return box_.min(); }
     [[nodiscard]] bool isLaidOut() const noexcept { return lastSlot_.has_value(); }
 
+    /// Where the coordinates of box() are in the product: the placements of this component and
+    /// its ancestors that have coordinates of their own; identity for almost everything.
+    [[nodiscard]] Placement placement() const noexcept;
+    /// box() in product coordinates: what 3D, collisions and the plan view need.
+    [[nodiscard]] Aabb productBox() const noexcept { return placement().box(box_); }
+
     // --- Layout -------------------------------------------------------------------------------
     /// Recomputes this node and, recursively, its whole subtree inside `slot`.
     void layout(const LayoutSlot& slot);
@@ -116,6 +126,10 @@ protected:
     virtual void updatePanel(const LayoutSlot& slot);
     /// Step 4. Default: every child gets this component's box as its slot.
     virtual void layoutChildren(const LayoutSlot& slot);
+
+    /// A component with coordinates of its own (a kitchen run on a side wall): where they are
+    /// in its parent's coordinates. Its box() and its subtree's are in its own. Default: none.
+    [[nodiscard]] virtual const Placement* ownPlacement() const noexcept { return nullptr; }
 
     /// Attaches a child without the canAccept() check and without relayout — for parts a
     /// composite creates itself. Call requestLayout() once after a batch of changes.

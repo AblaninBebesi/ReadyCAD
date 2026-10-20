@@ -8,4 +8,6 @@ Shapes: shaped panels are prisms (`ScenePrism`) — the face triangulated by ear
 
 Decors: `SceneSurface` (picture, grain and width axes, tint); the fragment shader lays the picture in product millimetres along the panel's length; `loadImage` (stb_image), textures loaded once, the decor's average colour when a picture is missing.
 
-**Stages:** 5, kitchen, shapes, decors
+Corner kitchens: every part placed by its `placement()` — boxes, prisms, handles, holes and grain axes of a side wall's cabinets turned onto their wall.
+
+**Stages:** 5, kitchen, shapes, decors, corner kitchens

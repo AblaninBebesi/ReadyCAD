@@ -14,6 +14,8 @@ enum class ComponentKind {
     DrawerStack,
     Drawer,
     Kitchen,
+    KitchenRun,
+    KitchenCorner,
     CabinetRow,
     // Carcass parts
     SideWall,
@@ -35,6 +37,7 @@ enum class ComponentKind {
     DrawerBottom,
     // Kitchen parts
     Worktop,
+    BlindPanel,
 };
 
 /// Stable English identifier, e.g. "SideWall" (logs, file format). Not for the UI.

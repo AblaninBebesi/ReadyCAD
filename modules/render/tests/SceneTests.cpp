@@ -3,6 +3,7 @@
 #include "readycad/core/builders/Catalog.hpp"
 #include "readycad/core/builders/WardrobeBuilder.hpp"
 #include "readycad/core/model/Queries.hpp"
+#include "readycad/core/model/Kitchen.hpp"
 #include "readycad/detailing/Detailing.hpp"
 #include "readycad/render/Scene.hpp"
 
@@ -216,4 +217,27 @@ TEST_CASE("Panels show the picture of their decor, along their length", "[render
     CHECK(boxOf(c.back().id()).surface.texture.empty());
     // The colour shown while a picture is missing: its average.
     CHECK(wall.color.r == Approx(167.0f / 255.0f));
+}
+
+TEST_CASE("A side wall's cabinets are turned onto their wall", "[render][scene][corner]")
+{
+    const auto product = createProduct(CatalogItem::KitchenL);
+    const render::Scene scene = render::buildScene(*product, {});
+    const KitchenRun& side = *product->kitchen()->sideRun(Side::Right);
+    const Carcass& first = *side.baseRow().cabinets().front();
+    const auto boxOf = [&](ComponentId id) {
+        return *std::find_if(scene.boxes.begin(), scene.boxes.end(),
+                             [&](const render::SceneBox& b) { return b.component == id; });
+    };
+    // Its left wall stands at the corner end of the run: along the right wall of the room.
+    const render::SceneBox wall = boxOf(first.leftSide().id());
+    CHECK(wall.min.z == Approx(578.0f));
+    CHECK(wall.max.z == Approx(596.0f));
+    CHECK(wall.max.x == Approx(3000.0f));
+    // The top rails of the side run: the grain along the run, which is along Z in the room.
+    const render::SceneBox rail = boxOf(first.frontRail()->id());
+    CHECK(rail.surface.grain == glm::vec3(0.0f, 0.0f, 1.0f));
+    // The scene's bounds take in the whole room.
+    CHECK(scene.bounds.max().z == Approx(2400.0));
+    CHECK(scene.bounds.max().x == Approx(3000.0));
 }

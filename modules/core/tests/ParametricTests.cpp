@@ -213,11 +213,17 @@ TEST_CASE("Every catalogue item is collision-free, also after resizing",
     product->setDimensions({base.width + delta, base.height + delta, base.depth + delta});
     requireNoOverlaps(*product);
 
-    // Carcass parts stay inside the product box; fronts stand in front of their carcass (a wall
-    // cabinet is not as deep as the product); a worktop may reach over the base fronts.
+    // Carcass parts stay inside the product box — in a kitchen, inside their run, in its own
+    // coordinates; fronts stand in front of their carcass (a wall cabinet is not as deep as the
+    // product); a worktop may reach over the base fronts.
     for (const FurnitureComponent* part : collectPanels(*product)) {
-        const bool isFront =
-            part->kind() == ComponentKind::Door || part->kind() == ComponentKind::DrawerFront;
+        const FurnitureComponent* frame = part->parent();
+        while (frame->kind() != ComponentKind::KitchenRun && frame->kind() != ComponentKind::Product) {
+            frame = frame->parent();
+        }
+        const bool isFront = part->kind() == ComponentKind::Door
+                          || part->kind() == ComponentKind::DrawerFront
+                          || part->kind() == ComponentKind::BlindPanel;
         if (isFront) {
             const FurnitureComponent* carcass = part->parent();
             while (carcass->kind() != ComponentKind::Carcass) {
@@ -225,10 +231,10 @@ TEST_CASE("Every catalogue item is collision-free, also after resizing",
             }
             CHECK(part->box().min().z == Approx(carcass->box().max().z));
         } else if (part->kind() == ComponentKind::Worktop) {
-            CHECK(part->box().min().x >= product->box().min().x - kEpsilon);
-            CHECK(part->box().max().x <= product->box().max().x + kEpsilon);
+            CHECK(part->box().min().x >= frame->box().min().x - kEpsilon);
+            CHECK(part->box().max().x <= frame->box().max().x + kEpsilon);
         } else {
-            CHECK(product->box().contains(part->box()));
+            CHECK(frame->box().contains(part->box()));
         }
     }
 }

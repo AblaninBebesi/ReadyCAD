@@ -55,17 +55,76 @@ void CabinetRow::layoutChildren(const LayoutSlot& slot)
                           Vec3(x + widths[i], box().max().y, box().max().z));
         LayoutSlot cabinetSlot = slot.withBox(column);
         cabinetSlot.frontZ = column.max().z;
+        cabinetSlot.plinthBeyondStart = i == 0 ? slot.plinthBeyondStart : 0.0;
+        cabinetSlot.plinthBeyondEnd = i + 1 == cabinets.size() ? slot.plinthBeyondEnd : 0.0;
         cabinets[i]->layout(cabinetSlot);
         x += widths[i];
     }
 }
 
 // ---------------------------------------------------------------------------------------------
-// Kitchen
+// KitchenCorner
 // ---------------------------------------------------------------------------------------------
 
-Kitchen::Kitchen()
-    : baseRow_(std::make_shared<CabinetRow>(RowLevel::Base))
+KitchenCorner::KitchenCorner(Side end, std::shared_ptr<Carcass> base, std::shared_ptr<Carcass> wall)
+    : end_(end), base_(std::move(base)), wall_(std::move(wall))
+{
+    if (!base_ || !wall_) {
+        throw std::invalid_argument("KitchenCorner: the cabinets must not be null");
+    }
+    adopt(base_);
+    adopt(wall_);
+}
+
+Real KitchenCorner::baseWidth() const noexcept
+{
+    return base_->fixedWidth().value_or(kBaseWidth);
+}
+
+Real KitchenCorner::wallWidth() const noexcept
+{
+    return wall_->fixedWidth().value_or(kWallWidth);
+}
+
+void KitchenCorner::layoutChildren(const LayoutSlot& slot)
+{
+    if (slot.kitchen == nullptr) {
+        throw std::logic_error("KitchenCorner must be laid out inside a kitchen run");
+    }
+    const KitchenFrame& k = *slot.kitchen;
+    const Vec3& lo = box().min();
+    const Vec3& hi = box().max();
+    const bool right = end_ == Side::Right;
+    // A column of the given width at the corner's end of the run.
+    const auto column = [&](Real width, Real fromY, Real toY, Real depth) {
+        const Real x0 = right ? hi.x - width : lo.x;
+        return Aabb(Vec3(x0, fromY, lo.z), Vec3(x0 + width, toY, lo.z + depth));
+    };
+
+    baseFrame_ = {end_, k.cornerBase};
+    LayoutSlot baseSlot = slot.withBox(column(baseWidth(), lo.y, k.baseTop, hi.z - lo.z));
+    baseSlot.frontZ = baseSlot.box.max().z;
+    baseSlot.corner = &baseFrame_;
+    // The plinth runs on to the back of the side run's plinth, which meets its face.
+    const ConstructionRules& r = slot.r();
+    const Real stop = -((hi.z - lo.z) - r.kitchen.plinthSetback - r.carcassMaterial.thickness);
+    (right ? baseSlot.plinthBeyondEnd : baseSlot.plinthBeyondStart) = stop;
+    base_->layout(baseSlot);
+
+    wallFrame_ = {end_, k.cornerWall};
+    LayoutSlot wallSlot = slot.withBox(column(wallWidth(), k.wallBottom, hi.y, k.wallDepth));
+    wallSlot.frontZ = wallSlot.box.max().z;
+    wallSlot.corner = &wallFrame_;
+    wall_->layout(wallSlot);
+}
+
+// ---------------------------------------------------------------------------------------------
+// KitchenRun
+// ---------------------------------------------------------------------------------------------
+
+KitchenRun::KitchenRun(KitchenWall wall)
+    : wall_(wall)
+    , baseRow_(std::make_shared<CabinetRow>(RowLevel::Base))
     , worktop_(std::make_shared<Worktop>())
     , wallRow_(std::make_shared<CabinetRow>(RowLevel::Wall))
 {
@@ -74,38 +133,111 @@ Kitchen::Kitchen()
     adopt(wallRow_);
 }
 
-void Kitchen::setSizes(const Sizes& sizes)
+KitchenCorner* KitchenRun::corner(Side end) const noexcept
 {
-    const bool positive = sizes.baseHeight > 0.0 && sizes.wallHeight > 0.0
-                       && sizes.wallDepth > 0.0 && sizes.worktopDepth > 0.0;
-    if (!positive) {
-        throw std::invalid_argument("Kitchen: sizes must be positive");
+    return corners_[end == Side::Left ? 0 : 1].get();
+}
+
+std::vector<Carcass*> KitchenRun::cabinets() const
+{
+    std::vector<Carcass*> all = baseRow_->cabinets();
+    const std::vector<Carcass*> wall = wallRow_->cabinets();
+    all.insert(all.end(), wall.begin(), wall.end());
+    for (const Side end : {Side::Left, Side::Right}) {
+        if (const KitchenCorner* c = corner(end)) {
+            all.push_back(&c->baseCabinet());
+            all.push_back(&c->wallCabinet());
+        }
     }
-    sizes_ = sizes;
+    return all;
+}
+
+void KitchenRun::setLength(Real length)
+{
+    if (!(length > 0.0)) {
+        throw std::invalid_argument("KitchenRun: the length must be > 0");
+    }
+    length_ = length;
     requestLayout();
 }
 
-void Kitchen::layoutChildren(const LayoutSlot& slot)
+void KitchenRun::layoutChildren(const LayoutSlot& slot)
 {
+    if (slot.kitchen == nullptr) {
+        throw std::logic_error("KitchenRun must be laid out inside a kitchen");
+    }
+    const KitchenFrame& k = *slot.kitchen;
     const Vec3& lo = box().min();
     const Vec3& hi = box().max();
-    const ConstructionRules& r = slot.r();
-    const Real baseTop = lo.y + r.kitchen.plinthHeight + sizes_.baseHeight;
 
-    // 1. Base cabinets stand on the floor (each on its own plinth), as deep as the run.
-    baseRow_->layout(slot.withBox(Aabb(lo, Vec3(hi.x, baseTop, hi.z))));
+    // Where the rows may stand: the back run's corners take its ends; a side run's cabinets
+    // stop in front of the back run's at the corner end (the left run's end, the right run's
+    // start: both meet the back wall there).
+    Real baseFrom = lo.x;
+    Real baseTo = hi.x;
+    Real wallFrom = lo.x;
+    Real wallTo = hi.x;
+    switch (wall_) {
+    case KitchenWall::Back:
+        for (const Side end : {Side::Left, Side::Right}) {
+            KitchenCorner* c = corner(end);
+            if (c == nullptr) {
+                continue;
+            }
+            const Real width = std::max(c->baseWidth(), c->wallWidth());
+            const Real x0 = end == Side::Left ? lo.x : hi.x - width;
+            c->layout(slot.withBox(Aabb(Vec3(x0, lo.y, lo.z), Vec3(x0 + width, hi.y, hi.z))));
+            if (end == Side::Left) {
+                baseFrom += c->baseWidth();
+                wallFrom += c->wallWidth();
+            } else {
+                baseTo -= c->baseWidth();
+                wallTo -= c->wallWidth();
+            }
+        }
+        break;
+    case KitchenWall::Left:
+        baseTo -= k.cornerBase;
+        wallTo -= k.cornerWall;
+        break;
+    case KitchenWall::Right:
+        baseFrom += k.cornerBase;
+        wallFrom += k.cornerWall;
+        break;
+    }
+
+    // 1. Base cabinets stand on the floor (each on its own plinth), as deep as the run. At a
+    //    corner the side run's plinth reaches back to the face of the back run's.
+    LayoutSlot baseSlot = slot.withBox(Aabb(Vec3(baseFrom, lo.y, lo.z), Vec3(baseTo, k.baseTop, hi.z)));
+    const Real plinthReach = k.cornerBase - ((hi.z - lo.z) - slot.r().kitchen.plinthSetback);
+    if (wall_ == KitchenWall::Left) {
+        baseSlot.plinthBeyondEnd = plinthReach;
+    } else if (wall_ == KitchenWall::Right) {
+        baseSlot.plinthBeyondStart = plinthReach;
+    }
+    baseRow_->layout(baseSlot);
 
     // 2. Wall cabinets hang from the top line.
-    wallRow_->layout(slot.withBox(Aabb(Vec3(lo.x, hi.y - sizes_.wallHeight, lo.z),
-                                       Vec3(hi.x, hi.y, lo.z + sizes_.wallDepth))));
+    wallRow_->layout(slot.withBox(Aabb(Vec3(wallFrom, k.wallBottom, lo.z),
+                                       Vec3(wallTo, hi.y, lo.z + k.wallDepth))));
 
-    // 3. The worktop lies on the base cabinets, as long as they are, with the openings their
-    //    cabinets ask for: centred over the cabinet and in the worktop's depth. Without base
-    //    cabinets it has no length (and the editor refuses that).
+    // 3. The worktop lies on the base cabinets (the corners' too), as long as they are, with the
+    //    openings their cabinets ask for: centred over the cabinet and in the worktop's depth.
+    //    At a corner the back run's worktop runs on to the side wall, a side run's ends at the
+    //    back run's front edge. Without base cabinets it has no length (the editor refuses
+    //    that).
+    frame_ = k;
+    frame_.cutouts.clear();
     Real from = hi.x;
     Real to = lo.x;
-    frame_.cutouts.clear();
-    for (const Carcass* cabinet : baseRow_->cabinets()) {
+    const std::vector<Carcass*> row = baseRow_->cabinets();
+    std::vector<const Carcass*> base(row.begin(), row.end());
+    for (const Side end : {Side::Left, Side::Right}) {
+        if (const KitchenCorner* c = corner(end)) {
+            base.push_back(&c->baseCabinet());
+        }
+    }
+    for (const Carcass* cabinet : base) {
         from = std::min(from, cabinet->box().min().x);
         to = std::max(to, cabinet->box().max().x);
         if (cabinet->cutout()) {
@@ -113,23 +245,29 @@ void Kitchen::layoutChildren(const LayoutSlot& slot)
         }
     }
     if (to < from) {
-        from = to = lo.x;
+        from = to = baseFrom;
+    } else if (wall_ == KitchenWall::Left) {
+        to = hi.x - k.worktopDepth;
+    } else if (wall_ == KitchenWall::Right) {
+        from = lo.x + k.worktopDepth;
     }
+    frame_.startClosed = wall_ == KitchenWall::Right || corner(Side::Left) != nullptr;
+    frame_.endClosed = wall_ == KitchenWall::Left || corner(Side::Right) != nullptr;
     LayoutSlot worktopSlot = slot.withBox(
-        Aabb(Vec3(from, baseTop, lo.z), Vec3(to, baseTop, lo.z + sizes_.worktopDepth)));
+        Aabb(Vec3(from, k.baseTop, lo.z), Vec3(std::max(from, to), k.baseTop, lo.z + k.worktopDepth)));
     worktopSlot.kitchen = &frame_;
     worktop_->layout(worktopSlot);
 }
 
-PanelCutout Kitchen::planOf(const Carcass& cabinet) const
+PanelCutout KitchenRun::planOf(const Carcass& cabinet) const
 {
     const WorktopCutout& c = *cabinet.cutout();
-    const Real worktopFront = box().min().z + sizes_.worktopDepth;
+    const Real worktopFront = box().min().z + frame_.worktopDepth;
     return {Vec2(cabinet.box().center().x, worktopFront - c.frontOffset - c.depth / 2.0), c.width,
             c.depth, c.radius};
 }
 
-std::vector<const Carcass*> Kitchen::misplacedCutouts(const ConstructionRules& rules) const
+std::vector<const Carcass*> KitchenRun::misplacedCutouts(const ConstructionRules& rules) const
 {
     // Plan rectangles: x along X, y along Z.
     struct Rect {
@@ -183,6 +321,110 @@ std::vector<const Carcass*> Kitchen::misplacedCutouts(const ConstructionRules& r
         }
     }
     return misplaced;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Kitchen
+// ---------------------------------------------------------------------------------------------
+
+Kitchen::Kitchen() : backRun_(std::make_shared<KitchenRun>(KitchenWall::Back))
+{
+    adopt(backRun_);
+}
+
+void Kitchen::setSizes(const Sizes& sizes)
+{
+    const bool positive = sizes.baseHeight > 0.0 && sizes.wallHeight > 0.0
+                       && sizes.wallDepth > 0.0 && sizes.worktopDepth > 0.0;
+    if (!positive) {
+        throw std::invalid_argument("Kitchen: sizes must be positive");
+    }
+    sizes_ = sizes;
+    requestLayout();
+}
+
+KitchenRun* Kitchen::sideRun(Side side) const noexcept
+{
+    return sideRuns_[side == Side::Left ? 0 : 1].get();
+}
+
+std::vector<KitchenRun*> Kitchen::runs() const
+{
+    std::vector<KitchenRun*> all{backRun_.get()};
+    for (const Side side : {Side::Left, Side::Right}) {
+        if (KitchenRun* run = sideRun(side)) {
+            all.push_back(run);
+        }
+    }
+    return all;
+}
+
+void Kitchen::setSideRun(Side side, std::shared_ptr<KitchenRun> run, std::shared_ptr<KitchenCorner> corner)
+{
+    const KitchenWall wall = side == Side::Left ? KitchenWall::Left : KitchenWall::Right;
+    if (!run != !corner || (run && (run->wall() != wall || corner->end() != side))) {
+        throw std::invalid_argument("Kitchen: a side run needs its own wall and its corner");
+    }
+    std::shared_ptr<KitchenRun>& slot = sideRuns_[side == Side::Left ? 0 : 1];
+    std::shared_ptr<KitchenCorner>& cornerSlot = backRun_->corners_[side == Side::Left ? 0 : 1];
+    if (slot) {
+        detachChildren([&](const FurnitureComponent& c) { return &c == slot.get(); });
+        backRun_->detachChildren([&](const FurnitureComponent& c) { return &c == cornerSlot.get(); });
+    }
+    slot = std::move(run);
+    cornerSlot = std::move(corner);
+    if (slot) {
+        // The tree reads back, left, right; the corner after the back run's rows.
+        adoptAt(side == Side::Left ? 1 : children().size(), slot);
+        backRun_->adoptAt(side == Side::Left ? 3 : backRun_->children().size(), cornerSlot);
+    }
+    requestLayout();
+}
+
+std::vector<const Carcass*> Kitchen::misplacedCutouts(const ConstructionRules& rules) const
+{
+    std::vector<const Carcass*> all;
+    for (const KitchenRun* run : runs()) {
+        const std::vector<const Carcass*> some = run->misplacedCutouts(rules);
+        all.insert(all.end(), some.begin(), some.end());
+    }
+    return all;
+}
+
+void Kitchen::layoutChildren(const LayoutSlot& slot)
+{
+    const Vec3& lo = box().min();
+    const Vec3& hi = box().max();
+    const ConstructionRules& r = slot.r();
+    const Real depth = hi.z - lo.z;
+    const Real front = r.frontMaterial.thickness;
+    frame_.baseTop = lo.y + r.kitchen.plinthHeight + sizes_.baseHeight;
+    frame_.wallBottom = hi.y - sizes_.wallHeight;
+    frame_.wallDepth = sizes_.wallDepth;
+    frame_.worktopDepth = sizes_.worktopDepth;
+    frame_.cornerBase = depth + front;
+    frame_.cornerWall = sizes_.wallDepth + front;
+    frame_.cutouts.clear();
+
+    // The back run is the product box itself.
+    LayoutSlot runSlot = slot.withBox(box());
+    runSlot.kitchen = &frame_;
+    backRun_->placement_ = {};
+    backRun_->layout(runSlot);
+
+    // A side run in its own coordinates (X from 0 to its length, Z from its wall), turned onto
+    // its wall: the left run faces +X and ends at the back wall, the right run faces -X and
+    // starts there.
+    for (const Side side : {Side::Left, Side::Right}) {
+        KitchenRun* run = sideRun(side);
+        if (run == nullptr) {
+            continue;
+        }
+        const Real length = run->length();
+        run->placement_ = side == Side::Left ? Placement{1, Vec3(lo.x, 0.0, lo.z + length)}
+                                             : Placement{3, Vec3(hi.x, 0.0, lo.z)};
+        run->layout(runSlot.withBox(Aabb(Vec3(0.0, lo.y, 0.0), Vec3(length, hi.y, depth))));
+    }
 }
 
 } // namespace rc::core

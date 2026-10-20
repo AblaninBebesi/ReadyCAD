@@ -8,4 +8,6 @@ Kitchen: carcass operations by carcass id; add, size, move and remove cabinets, 
 
 Shapes: `setShape`; a shape that does not fit or takes away material a hole or a groove needs is refused (`shapeConflicts()`).
 
-**Stages:** 5, 9, kitchen, shapes
+Corner kitchens: `setSideRun`, `addCabinet` to a wall, `setBlindFiller`; corner cabinets keep their width and place.
+
+**Stages:** 5, 9, kitchen, shapes, corner kitchens

@@ -16,6 +16,8 @@ TextId kindText(ComponentKind kind) noexcept
     case ComponentKind::DrawerStack:   return TextId::KindDrawerStack;
     case ComponentKind::Drawer:        return TextId::KindDrawer;
     case ComponentKind::Kitchen:       return TextId::KindKitchen;
+    case ComponentKind::KitchenRun:    return TextId::KindKitchenRun;
+    case ComponentKind::KitchenCorner: return TextId::KindKitchenCorner;
     case ComponentKind::CabinetRow:    return TextId::KindCabinetRow;
     case ComponentKind::SideWall:      return TextId::KindSideWall;
     case ComponentKind::TopPanel:      return TextId::KindTopPanel;
@@ -32,6 +34,7 @@ TextId kindText(ComponentKind kind) noexcept
     case ComponentKind::DrawerBoxEnd:  return TextId::KindDrawerBoxEnd;
     case ComponentKind::DrawerBottom:  return TextId::KindDrawerBottom;
     case ComponentKind::Worktop:       return TextId::KindWorktop;
+    case ComponentKind::BlindPanel:    return TextId::KindBlindPanel;
     }
     return TextId::KindProduct;
 }
@@ -44,6 +47,8 @@ TextId catalogText(core::CatalogItem item) noexcept
     case core::CatalogItem::ChestOfDrawers:      return TextId::CatalogChestOfDrawers;
     case core::CatalogItem::Bookcase:            return TextId::CatalogBookcase;
     case core::CatalogItem::Kitchen:             return TextId::CatalogKitchen;
+    case core::CatalogItem::KitchenL:            return TextId::CatalogKitchenL;
+    case core::CatalogItem::KitchenU:            return TextId::CatalogKitchenU;
     }
     return TextId::CatalogWardrobe;
 }
@@ -92,16 +97,33 @@ TextId hardwareText(core::HardwareKind kind) noexcept
 
 namespace {
 
-/// Kind-specific words of the tree: a kitchen's rows and cabinets, front and rear rails.
+/// Kind-specific words of the tree: a kitchen's walls, corners, rows and cabinets, front and
+/// rear rails.
 TextId treeText(const core::FurnitureComponent& component) noexcept
 {
     const core::FurnitureComponent* parent = component.parent();
     switch (component.kind()) {
+    case ComponentKind::KitchenRun:
+        switch (static_cast<const core::KitchenRun&>(component).wall()) {
+        case core::KitchenWall::Back:  return TextId::RunBack;
+        case core::KitchenWall::Left:  return TextId::RunLeft;
+        case core::KitchenWall::Right: return TextId::RunRight;
+        }
+        break;
+    case ComponentKind::KitchenCorner:
+        return static_cast<const core::KitchenCorner&>(component).end() == core::Side::Left
+                   ? TextId::CornerLeft
+                   : TextId::CornerRight;
     case ComponentKind::CabinetRow:
         return static_cast<const core::CabinetRow&>(component).level() == core::RowLevel::Base
                    ? TextId::BaseCabinets
                    : TextId::WallCabinets;
     case ComponentKind::Carcass:
+        if (parent != nullptr && parent->kind() == ComponentKind::KitchenCorner) {
+            return &static_cast<const core::KitchenCorner*>(parent)->baseCabinet() == &component
+                       ? TextId::BlindBaseCabinet
+                       : TextId::BlindWallCabinet;
+        }
         if (parent != nullptr && parent->kind() == ComponentKind::CabinetRow) {
             return static_cast<const core::CabinetRow*>(parent)->level() == core::RowLevel::Base
                        ? TextId::BaseCabinet
