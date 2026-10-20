@@ -73,6 +73,10 @@ struct OptimizerSettings {
 
 struct NestingSettings {
     Machine machine = Machine::PanelSaw;
+    /// Remnants on stock are offered first (StockManager::offers). Off: the job takes full sheets
+    /// only — from stock, then to buy — and leaves the remnants for other jobs; the offcuts it
+    /// makes still go to the stock when the sheets are taken out of it.
+    bool useRemnants = true;
     PanelSawSettings saw;
     NestingCenterSettings router;
     OptimizerSettings optimizer;
@@ -195,7 +199,8 @@ struct NestingProgress {
 using ProgressCallback =
     std::function<void(const NestingProgress& progress, const NestingResult& best)>;
 
-/// Lays the parts out on sheets from `stock`, material by material, and improves the layouts
+/// Lays the parts out on sheets from `stock` (without its remnants when
+/// NestingSettings::useRemnants is off), material by material, and improves the layouts
 /// with the genetic algorithm. When `stop` is requested it finishes quickly with the best
 /// layouts found so far. Throws std::invalid_argument for invalid settings or parts.
 [[nodiscard]] NestingResult optimize(const std::vector<NestingPart>& parts,

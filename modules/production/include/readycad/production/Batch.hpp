@@ -17,6 +17,8 @@ struct BatchOptions {
     int quantity = 1;
     /// Machine of the cutting plan; nullopt: the one of the settings file.
     std::optional<nesting::Machine> machine;
+    /// Whether the cutting plan may take remnants from stock; nullopt: as in the settings file.
+    std::optional<bool> useRemnants;
     /// Folder of the stock and settings files; empty: the user's own (storage::userDataFolder).
     std::filesystem::path dataFolder;
     std::filesystem::path package; ///< where the package goes: must not exist or be empty

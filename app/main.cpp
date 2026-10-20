@@ -30,6 +30,7 @@ void printUsage()
               "  --pdf-dialog              open the PDF export settings\n"
               "  --nesting <saw|router>    compute the cutting plan for this machine\n"
               "  --count <n>               copies of the product in the cutting plan\n"
+              "  --no-remnants             cut full sheets only, leave the remnants on stock\n"
               "  --stock                   show the stock of sheets\n"
               "  --cut-list                show the cut list\n"
               "  --export-pdf <file.pdf>   write the PDF documents and exit\n"
@@ -101,6 +102,8 @@ int main(int argc, char** argv)
             config.nesting = machine == "router" ? 1 : 0;
         } else if (arg == "--count" && hasValue) {
             config.productCount = std::atoi(argv[++i]);
+        } else if (arg == "--no-remnants") {
+            config.noRemnants = true;
         } else if (arg == "--stock") {
             config.stockWindow = true;
         } else if (arg == "--cut-list") {
@@ -137,6 +140,9 @@ int main(int argc, char** argv)
         if (config.nesting >= 0) {
             batch.machine = config.nesting == 0 ? rc::nesting::Machine::PanelSaw
                                                 : rc::nesting::Machine::NestingCenter;
+        }
+        if (config.noRemnants) {
+            batch.useRemnants = false;
         }
         batch.dataFolder = config.dataFolder.value_or(std::filesystem::path{});
         batch.package = package;

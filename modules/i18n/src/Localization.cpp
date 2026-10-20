@@ -289,7 +289,12 @@ constexpr std::pair<TextId, std::string_view> kTurkish[] = {
     {T::Stacks, "istif"},
     {T::ConsumeTitle, "Stoktan düş###consume"},
     {T::ConsumeBody, "Bu kesim planındaki levhalar stoktan düşülecek ve yeni artıklar\n"
-                     "stoka eklenecek. Devam edilsin mi?"},
+                     "stoğa eklenecek. Devam edilsin mi?"},
+    {T::UseRemnants, "Stoktaki artıkları kullan"},
+    {T::UseRemnantsHint, "Kapalıysa yalnızca tam levhalar kullanılır: önce stoktakiler, sonra\n"
+                         "satın alınacaklar. Stoktaki artıklara dokunulmaz; bu işten çıkan yeni\n"
+                         "artıklar, levhalar stoktan düşülünce yine stoğa eklenir."},
+    {T::RemnantsNotUsed, "Stoktaki artıklar kullanılmadı"},
     {T::ConsumeDone, "Stok güncellendi."},
     {T::CacheMemory, "NFP önbelleği"},
     {T::PartsOnSheet, "Levhadaki parçalar"},

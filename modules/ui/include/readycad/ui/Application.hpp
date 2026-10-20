@@ -21,6 +21,9 @@ struct ApplicationConfig {
     /// Stage 7: compute the cutting plan at start (0 panel saw, 1 nesting centre, -1 no).
     int nesting = -1;
     int productCount = 1;                   // copies of the product in the cutting plan
+    /// The cutting plan without the remnants on stock, for this run (the settings file keeps
+    /// its own choice).
+    bool noRemnants = false;
     bool stockWindow = false;               // bring the stock window to the front
     bool cutListWindow = false;             // bring the cut list to the front
     bool cuttingSettings = false;           // open the cutting settings at start

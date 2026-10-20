@@ -53,6 +53,9 @@ int runBatch(const BatchOptions& options, std::ostream& out, std::ostream& err)
         if (options.machine) {
             settings.nesting.machine = *options.machine;
         }
+        if (options.useRemnants) {
+            settings.nesting.useRemnants = *options.useRemnants;
+        }
 
         out << i18n::text(i18n::TextId::SummaryCutting) << ": "
             << i18n::text(i18n::TextId::Computing) << std::endl;

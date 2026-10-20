@@ -248,6 +248,9 @@ struct Application::Impl {
             exportPdf(state);
         }
         state.productCount = std::clamp(config.productCount, 1, 100);
+        if (config.noRemnants) {
+            state.nestingSettings.useRemnants = false;
+        }
         if (config.nesting >= 0) {
             state.nestingSettings.machine = config.nesting == 0 ? nesting::Machine::PanelSaw
                                                                 : nesting::Machine::NestingCenter;

@@ -69,6 +69,27 @@ bool dragMm(const char* id, Real& value, Real min, Real max, const char* format 
                              ImGuiSliderFlags_AlwaysClamp);
 }
 
+float buttonWidth(const char* label)
+{
+    return ImGui::CalcTextSize(label, nullptr, true).x + ImGui::GetStyle().FramePadding.x * 2.0f;
+}
+
+float checkboxWidth(const char* label)
+{
+    return ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x
+         + ImGui::CalcTextSize(label, nullptr, true).x;
+}
+
+/// A toolbar that flows: the next item of `width` stays on this line while it fits the window,
+/// else it starts the next line — nothing is cut off at the right edge.
+void nextOnLine(float width)
+{
+    ImGui::SameLine();
+    if (ImGui::GetContentRegionAvail().x < width) {
+        ImGui::NewLine();
+    }
+}
+
 /// "Label | widget" row of a two-column settings table.
 void row(const char* label)
 {
@@ -332,6 +353,9 @@ void drawSheetList(UiState& state, const nesting::NestingResult& result, bool fr
     ImGui::Text("%s: %d   %s: %d", tr(TextId::FromStock), stock, tr(TextId::FromRemnant), remnants);
     ImGui::Text("%s: %d   %s: %d", tr(TextId::ToPurchase), purchase, tr(TextId::NewRemnants),
                 produced);
+    if (!result.settings.useRemnants) {
+        ImGui::TextDisabled("%s", tr(TextId::RemnantsNotUsed));
+    }
     if (result.settings.machine == nesting::Machine::PanelSaw && !result.layouts.empty()) {
         int stacks = 0;
         for (const nesting::SheetLayout& l : result.layouts) {
@@ -463,8 +487,10 @@ void drawSettingsPopup(UiState& state)
     ImGui::SameLine();
     if (ImGui::Button(tr(TextId::Defaults))) {
         const nesting::Machine machine = s.machine;
+        const bool useRemnants = s.useRemnants;
         s = {};
         s.machine = machine;
+        s.useRemnants = useRemnants;
     }
     ImGui::SameLine();
     if (ImGui::Button(tr(TextId::Cancel))) {
@@ -672,28 +698,33 @@ void drawNestingWindow(UiState& state)
     if (ImGui::InputInt("##count", &state.productCount)) {
         state.productCount = std::clamp(state.productCount, 1, 100);
     }
-    ImGui::EndDisabled();
-    ImGui::SameLine();
-    if (running) {
-        if (ImGui::Button(tr(TextId::Stop))) {
-            stopNesting(state);
-        }
-    } else if (ImGui::Button(tr(TextId::Calculate))) {
-        startNesting(state);
+    nextOnLine(checkboxWidth(tr(TextId::UseRemnants)));
+    if (ImGui::Checkbox(tr(TextId::UseRemnants), &state.nestingSettings.useRemnants)) {
+        saveSettingsFile(state);
     }
-    ImGui::SameLine();
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip)) {
+        ImGui::SetTooltip("%s", tr(TextId::UseRemnantsHint));
+    }
+    ImGui::EndDisabled();
+    const char* startStop = tr(running ? TextId::Stop : TextId::Calculate);
+    nextOnLine(buttonWidth(startStop));
+    if (ImGui::Button(startStop)) {
+        if (running) {
+            stopNesting(state);
+        } else {
+            startNesting(state);
+        }
+    }
+    nextOnLine(buttonWidth(tr(TextId::SettingsButton)));
     ImGui::BeginDisabled(running);
     if (ImGui::Button(tr(TextId::SettingsButton))) {
         state.openNestingSettings = true;
     }
     ImGui::EndDisabled();
-    if (!state.nesting || state.nesting->settings.machine == nesting::Machine::PanelSaw) {
-        ImGui::SameLine();
-        ImGui::Checkbox(tr(TextId::ShowCuts), &state.showSawCuts);
-    } else {
-        ImGui::SameLine();
-        ImGui::Checkbox(tr(TextId::ShowToolpath), &state.showToolpath);
-    }
+    const bool saw = !state.nesting || state.nesting->settings.machine == nesting::Machine::PanelSaw;
+    const char* show = tr(saw ? TextId::ShowCuts : TextId::ShowToolpath);
+    nextOnLine(checkboxWidth(show));
+    ImGui::Checkbox(show, saw ? &state.showSawCuts : &state.showToolpath);
 
     if (running) {
         const nesting::NestingProgress p = state.nestingRun->progress();

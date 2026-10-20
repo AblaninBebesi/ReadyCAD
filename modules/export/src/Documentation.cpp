@@ -854,6 +854,9 @@ void cuttingOverview(Composer& composer, const DocumentationInput& in, const Par
         {{txt(TextId::SheetsTotal), std::to_string(r.sheetCount())}},
         {{txt(TextId::Utilization), percent(r.utilization())}},
     };
+    if (!r.settings.useRemnants) {
+        facts.rows.push_back({{"", txt(TextId::RemnantsNotUsed)}});
+    }
     y -= drawTable(canvas, Vec2(min.x, y), std::min(width, 150.0), y - min.y, facts, 0).second
        + kGap;
 

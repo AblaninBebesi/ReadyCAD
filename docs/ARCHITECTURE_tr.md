@@ -516,6 +516,15 @@ kurallarına göre bir yerleşime dönüştürür.
   3. satın alınacak levhalar, adet sınırı olmadan. Ölçüleri bu malzemenin ilk tam levha
      kaydından alınır. Adedi 0 olan bir kayıt da olur: satın alınacak levhanın ölçüsünü
      belirtir. Kayıt yoksa 2800 × 2100 standart levha alınır.
+* Kesim planı penceresindeki «Stoktaki artıkları kullan» onay kutusu
+  (`NestingSettings::useRemnants`, varsayılan olarak açık). Kapatılırsa `optimize()`
+  artıkları `offers()` listesinden çıkarır: iş yalnızca tam levhalardan kesilir, önce
+  stoktakilerden, sonra satın alınacaklardan. Proje için yeni levha almaya hazır olunduğunda ve
+  artıklar başka işlere saklandığında böyle yapılır. Bu işten çıkan yeni artıklar, levhalar
+  stoktan düşülünce yine stoğa eklenir. Seçim makineyle birlikte `settings.json` dosyasında
+  saklanır, plan da onu `NestingResult::settings` içinde hatırlar: `OZET.txt` özeti ve PDF'teki
+  kesim sayfası «Stoktaki artıklar kullanılmadı» yazar. `--no-remnants` seçeneği aynısını tek
+  bir çalıştırma için yapar, ayar dosyası değişmez.
 * 300 × 200 mm'den küçük parçalar (`RemnantRules`) fire, büyükleri kullanılabilir artıktır.
 * `consume(result)` kesimden sonra çalışır: kullanılan levhaları stoktan düşer ve yeni
   artıkları notuyla ekler. İşlem ya tamamen yapılır ya da hiç yapılmaz. Stok değişmiş ve

@@ -69,6 +69,33 @@ TEST_CASE("The command line writes a production package without a window", "[pro
     CHECK(std::filesystem::is_directory(options.package / "KESIM"));
 }
 
+TEST_CASE("The command line can leave the remnants on stock", "[production][batch]")
+{
+    const rc::test::TempFolder temp("batch_remnants");
+    const storage::WorkshopFiles files = workshop(temp.path() / "atolye", nesting::Machine::PanelSaw);
+    nesting::StockManager stock = storage::loadStockFile(files.stock);
+    stock.add(nesting::Sheet{0, core::ConstructionRules{}.carcassMaterial, 2400, 1200, 2, true, "eski iş"});
+    storage::saveStockFile(stock, files.stock);
+    const std::string notUsed(i18n::text(i18n::TextId::RemnantsNotUsed));
+
+    BatchOptions options;
+    options.dataFolder = temp.path() / "atolye";
+    options.package = temp.path() / "paket";
+    std::ostringstream out;
+    std::ostringstream err;
+    REQUIRE(runBatch(options, out, err) == 0);
+    CHECK_THAT(out.str(), !ContainsSubstring(notUsed)); // the settings file: remnants are used
+
+    options.useRemnants = false; // --no-remnants
+    options.package = temp.path() / "paket_yeni_levha";
+    std::ostringstream fresh;
+    REQUIRE(runBatch(options, fresh, err) == 0);
+    CHECK_THAT(fresh.str(), ContainsSubstring(notUsed));
+    CHECK_THAT(rc::test::readFile(options.package / "OZET.txt"), ContainsSubstring(notUsed));
+    // Only for this run: the settings file keeps its own choice.
+    CHECK(storage::loadSettingsFile(files.settings).nesting.useRemnants);
+}
+
 TEST_CASE("A saved project goes through the command line", "[production][batch]")
 {
     const rc::test::TempFolder temp("batch_project");

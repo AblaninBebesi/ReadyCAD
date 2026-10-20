@@ -294,6 +294,10 @@ NestingResult optimize(const std::vector<NestingPart>& parts, const StockManager
         problem.parts = &result.parts;
         problem.settings = settings;
         problem.offers = stock.offers(result.parts[groups[g].front()].material);
+        if (!settings.useRemnants) {
+            std::erase_if(problem.offers,
+                          [](const SheetOffer& o) { return o.source == SheetSource::Remnant; });
+        }
         problem.remnantRules = stock.remnantRules;
         problem.turns.resize(result.parts.size());
         for (const std::size_t part : groups[g]) {

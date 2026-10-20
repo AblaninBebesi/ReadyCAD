@@ -14,4 +14,6 @@ Depends on `core`, `detailing`; Clipper2 is a private dependency. See docs/ARCHI
 
 Stage 9: `partsFromCutList` skips the rows left out of the cutting plan (the others keep their row number); `NestingPart` compares with `==`, so a plan can be checked against the current parts.
 
+`NestingSettings::useRemnants` (the "Stoktaki artıkları kullan" checkbox): off, a job takes full sheets only — from stock, then to buy — and leaves the remnants on stock for other jobs.
+
 **Stages:** 7, 9

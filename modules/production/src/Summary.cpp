@@ -201,6 +201,9 @@ std::string summaryText(const Order& order, const nesting::NestingResult* plan,
                             percent(u.utilization()), std::to_string(u.newRemnants)});
         }
         out += textTable(rows, {false, true, true, true, true, true, true});
+        if (!plan->settings.useRemnants) {
+            out += txt(TextId::RemnantsNotUsed) + ".\n";
+        }
         if (!plan->unplaced.empty()) {
             const detailing::PartSource source{doc.product(), cutList};
             out += "\n" + txt(TextId::Unplaced) + ":\n";

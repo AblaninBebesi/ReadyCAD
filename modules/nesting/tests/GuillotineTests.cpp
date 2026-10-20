@@ -178,6 +178,48 @@ TEST_CASE("Remnants on stock are used first and need no trim", "[nesting][saw]")
     CHECK(usage.front().purchase == 0);
 }
 
+TEST_CASE("Without remnants a job takes full sheets and leaves the remnants on stock",
+          "[nesting][saw][router][stock]")
+{
+    StockManager stock;
+    Sheet remnant;
+    remnant.material = kChipboard;
+    remnant.length = 1100;
+    remnant.width = 600;
+    remnant.remnant = true;
+    const SheetId id = stock.add(remnant);
+    stock.add(Sheet{0, kChipboard, 2800, 2100, 5, false, {}});
+    const std::vector<NestingPart> parts{part("1", 1000, 500, 1), part("2", 900, 400, 1)};
+
+    for (const Machine machine : {Machine::PanelSaw, Machine::NestingCenter}) {
+        INFO((machine == Machine::PanelSaw ? "saw" : "router"));
+        NestingSettings settings = sawSettings(4);
+        settings.machine = machine;
+        settings.useRemnants = false;
+        const NestingResult r = optimize(parts, stock, settings);
+        CHECK(r.unplaced.empty());
+        CHECK(std::none_of(r.layouts.begin(), r.layouts.end(),
+                           [](const SheetLayout& l) { return l.source == SheetSource::Remnant; }));
+        const auto usage = r.usage();
+        REQUIRE(usage.size() == 1);
+        CHECK(usage.front().remnants == 0);
+        CHECK(usage.front().stock == 1); // a full sheet on stock is as good as a new one
+        CHECK(usage.front().purchase == 0);
+        CHECK(r.settings.useRemnants == false); // the plan tells how it was made
+
+        // Taking the sheets out: the remnant stays, the offcuts of the full sheet join it.
+        StockManager after = stock;
+        after.consume(r, "Gardırop");
+        REQUIRE(after.find(id) != nullptr);
+        CHECK(after.find(id)->quantity == 1);
+        CHECK(after.offers(kChipboard).size() > stock.offers(kChipboard).size());
+    }
+
+    // With remnants (the default) the same job starts on the remnant.
+    const NestingResult usual = optimize(parts, stock, sawSettings(4));
+    CHECK(usual.usage().front().remnants == 1);
+}
+
 TEST_CASE("Automatic cut direction is never worse than a fixed one", "[nesting][saw]")
 {
     std::vector<NestingPart> parts{part("1", 2050, 640, 3), part("2", 900, 1300, 2),

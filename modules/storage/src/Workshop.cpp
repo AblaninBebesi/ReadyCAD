@@ -27,7 +27,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(NestingCenterSettings, toolDiame
                                                 margin)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(OptimizerSettings, populationSize, generations,
                                                 mutationRate, elites, threads, memoryLimitMb, seed)
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(NestingSettings, machine, saw, router, optimizer)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(NestingSettings, machine, useRemnants, saw, router,
+                                                optimizer)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(RemnantRules, minLength, minWidth)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(Sheet, id, material, length, width, quantity,
                                                 remnant, note)

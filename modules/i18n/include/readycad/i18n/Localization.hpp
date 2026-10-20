@@ -72,7 +72,8 @@ enum class TextId : std::size_t {
     Machine, MachinePanelSaw, MachineNestingCenter, ProductCount, Calculate, Stop,
     SettingsButton, Generation, Utilization, Computing, NestingStale, NestingEmpty, SheetsTotal,
     FromStock, FromRemnant, ToPurchase, NewRemnants, Unplaced, Remnant, SheetLabel, Stacks,
-    ConsumeTitle, ConsumeBody, ConsumeDone, CacheMemory, PartsOnSheet,
+    ConsumeTitle, ConsumeBody, ConsumeDone, CacheMemory, PartsOnSheet, UseRemnants,
+    UseRemnantsHint, RemnantsNotUsed,
     // Stock window
     ColSheetSize, ColKind, SheetFull, ColNote, AddSheet, StandardSheet, MinRemnant, StockFile,
     Length, StockEmpty,

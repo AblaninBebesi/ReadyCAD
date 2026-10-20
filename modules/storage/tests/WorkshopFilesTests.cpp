@@ -71,6 +71,7 @@ TEST_CASE("Cutting settings survive save and load", "[storage][settings]")
     AppSettings settings;
     NestingSettings& s = settings.nesting;
     s.machine = Machine::NestingCenter;
+    s.useRemnants = false;
     s.saw.kerf = 3.2;
     s.saw.maxStages = 4;
     s.saw.firstCuts = CutDirection::Auto;
@@ -83,6 +84,7 @@ TEST_CASE("Cutting settings survive save and load", "[storage][settings]")
 
     const NestingSettings l = loadSettings(saveSettings(settings)).nesting;
     CHECK(l.machine == Machine::NestingCenter);
+    CHECK_FALSE(l.useRemnants);
     CHECK(l.saw.kerf == 3.2);
     CHECK(l.saw.maxStages == 4);
     CHECK(l.saw.firstCuts == CutDirection::Auto);
@@ -98,6 +100,7 @@ TEST_CASE("Cutting settings survive save and load", "[storage][settings]")
         R"({"format": "readycad-settings", "version": 1, "nesting": {"saw": {"kerf": 4.0}}})");
     CHECK(partial.nesting.saw.kerf == 4.0);
     CHECK(partial.nesting.saw.trim == NestingSettings{}.saw.trim);
+    CHECK(partial.nesting.useRemnants); // a file from before the choice: remnants are used
     CHECK(partial.cnc == rc::cam::defaultProfile()); // a stage 7 file: the default machine
     CHECK_THROWS_AS(loadSettings(R"({"format": "readycad-settings", "version": 1,
                                      "nesting": {"saw": {"maxStages": 7}}})"),
