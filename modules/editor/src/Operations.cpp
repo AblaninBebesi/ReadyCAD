@@ -160,6 +160,17 @@ void setCabinetWidth(Document& doc, ComponentId cabinet, std::optional<core::Rea
         key("cabinet-width", cabinet));
 }
 
+void setWorktopJoint(Document& doc, ComponentId cabinet, bool joint)
+{
+    doc.edit("Worktop joint", [&](Product& p) {
+        core::Carcass& c = requireCabinet(p, cabinet);
+        if (static_cast<const core::CabinetRow*>(c.parent())->level() != core::RowLevel::Base) {
+            throw std::invalid_argument("Only a base cabinet carries the worktop");
+        }
+        c.setWorktopJoint(joint);
+    });
+}
+
 void setBlindFiller(Document& doc, ComponentId cabinet, core::Real filler)
 {
     doc.edit(

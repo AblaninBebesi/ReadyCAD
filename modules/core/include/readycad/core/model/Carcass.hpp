@@ -64,6 +64,12 @@ public:
     /// nullptr for an ordinary cabinet.
     [[nodiscard]] BlindPanel* blindPanel() const noexcept;
 
+    /// A base cabinet of a kitchen run: the worktop above it has a joint at its right side —
+    /// a worktop longer than the slabs it is cut from (rules.kitchen.worktopMaxLength) is
+    /// made of pieces. Ignored where the worktop ends anyway.
+    [[nodiscard]] bool worktopJoint() const noexcept { return worktopJoint_; }
+    void setWorktopJoint(bool joint);
+
     [[nodiscard]] SideWall& leftSide() const noexcept { return *left_; }
     [[nodiscard]] SideWall& rightSide() const noexcept { return *right_; }
     /// The top panel. Part of the carcass only with CarcassTop::Panel.
@@ -102,6 +108,7 @@ private:
     std::optional<Real> fixedWidth_;
     std::optional<WorktopCutout> cutout_;
     std::optional<Real> blindFiller_;
+    bool worktopJoint_ = false;
 
     std::shared_ptr<SideWall> left_;
     std::shared_ptr<SideWall> right_;

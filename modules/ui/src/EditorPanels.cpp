@@ -556,6 +556,12 @@ bool drawCabinetRows(UiState& s, core::Carcass& cabinet)
         }
 
         if (row->level() == core::RowLevel::Base) {
+            bool joint = cabinet.worktopJoint();
+            PropertyTable::row(tr(TextId::WorktopJoint));
+            if (ImGui::Checkbox("##joint", &joint)) {
+                run(s, [&] { ed::setWorktopJoint(doc, id, joint); });
+                return true;
+            }
             const std::optional<core::WorktopCutout> current = cabinet.cutout();
             int kind = current ? (current->kind == core::CutoutKind::Sink ? 1 : 2) : 0;
             PropertyTable::row(tr(TextId::WorktopCutoutLabel));
@@ -651,6 +657,8 @@ bool drawProfileRows(UiState& s)
         changed |= dragMm("##setback", rules.kitchen.plinthSetback, 0.0, 150.0);
         PropertyTable::row(tr(TextId::RailWidth));
         changed |= dragMm("##rail", rules.kitchen.railWidth, 50.0, 200.0);
+        PropertyTable::row(tr(TextId::WorktopMaxLength));
+        changed |= dragMm("##slab", rules.kitchen.worktopMaxLength, 1000.0, 6000.0);
     }
 
     if (changed) {
@@ -1912,7 +1920,7 @@ void drawWarningsWindow(UiState& state)
     if (ImGui::Begin(tr(TextId::WindowWarnings))) {
         ed::Document& doc = *state.document;
         const auto& warnings = doc.detailingReport().warnings;
-        if (warnings.empty() && doc.overlaps().empty()) {
+        if (warnings.empty() && doc.overlaps().empty() && doc.longWorktops().empty()) {
             ImGui::TextColored(ImVec4(0.45f, 0.85f, 0.45f, 1.0f), "%s", tr(TextId::NoWarnings));
         }
         // Parts in each other's space (a project of an older version): a click selects one.
@@ -1925,6 +1933,17 @@ void drawWarningsWindow(UiState& state)
             ImGui::Bullet();
             if (ImGui::Selectable(text.c_str())) {
                 clicked = o.first->id();
+            }
+            ImGui::PopID();
+        }
+        // Worktops longer than a slab: a click selects one (its joint goes on a base cabinet).
+        for (const core::Worktop* worktop : doc.longWorktops()) {
+            const std::string text = std::string(tr(TextId::LongWorktopWarning)) + ": "
+                                   + displayName(*worktop) + " " + mm(worktop->box().size().x) + " mm";
+            ImGui::PushID(worktop);
+            ImGui::Bullet();
+            if (ImGui::Selectable(text.c_str())) {
+                clicked = worktop->id();
             }
             ImGui::PopID();
         }

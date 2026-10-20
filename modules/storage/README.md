@@ -15,4 +15,6 @@ Shapes: project format 3 — `"shape"` of a part. Decors: project format 4, prof
 
 Corner kitchens: project format 5 — side runs under `"left"` / `"right"` with their corners, `blindFiller` of a carcass.
 
+`worktopJoint` of a carcass, `worktopPieces` (choices of the pieces after the first).
+
 **Stages:** 5, 7, 8, 9, kitchen, shapes, corner kitchens

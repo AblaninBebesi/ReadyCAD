@@ -1288,7 +1288,6 @@ Listeye ayaklar (bazalı her modüle 4, genişliğin her ek metresi için 2 daha
 
 Henüz yapılmadı:
 * boy dolapları (fırın, buzdolabı), aspiratör üstü dolap, ankastre cihaz nişleri;
-* plakadan uzun tezgah: ek modellenmez, elle kesilir;
 * çekmece raylarının delikleri delinmez (dolaplarda da);
 * tezgah arası paneli, kornişler.
 
@@ -1555,6 +1554,25 @@ bozarlar.
   alına ek. Duvardaki uçlarda ve ekte bant yoktur (`KitchenFrame::startClosed`, `endClosed`).
   45° ek özel ekipman ister ve yapılmaz.
 
+### Uzun tezgahın eki
+
+Aynı parça mekanizması plakadan uzun düz tezgahı da çözer. En uzun plakayı atölye kuralı
+`rules.kitchen.worktopMaxLength` belirler (4100 mm).
+* Ek bir alt dolaba bağlıdır: «Sağında tezgah eki» — ek onun sağ yanının üstündedir
+  (`Carcass::worktopJoint`). Dolap taşınınca ek de onunla gider; proje dosyası tek bir işaret
+  saklar.
+* Dizi her yerleşimde kendi tezgahını parçalara böler (`KitchenRun::worktops()`). Yeni parça
+  ilk parçanın seçimlerini alır (malzeme, kesim planı). Ekte bant yoktur; bir kesim, merkezinin
+  bulunduğu parçaya aittir.
+* Evyenin veya ocağın yanındaki bir ek, kesimin çevresinde 50 mm'den az tezgah bırakırdı.
+  Düzenleyici böyle bir değişikliği, yerine sığmayan kesimle aynı kuralla reddeder.
+* Plakadan uzun parça bir hata değil, bir uyarıdır. «Uyarılar» penceresinde (tıklama parçayı
+  seçer), paket özetinde ve PDF kapağında «Plakadan uzun tezgah, ek gerekir» yazar: atölye daha
+  uzun bir plaka alabilir.
+* Tezgahın zaten bittiği yerde (dizinin son dolabından sonra) işaret bir şey yapmaz. Sağında
+  köşe olan arka dizide son dolaptan sonra ek olabilir: tezgah köşe dolabının üstünde devam
+  eder.
+
 ### Çizimler
 
 * Üstten görünüş (`ProductView::Plan`): ekli tezgahlar, evye ve ocak kesimleri, duvar boyları.
@@ -1599,3 +1617,4 @@ panelinin kendi seçimleri de (`"parts": {"blindPanel": …}`).
 | Düzenleyici: duvarlar, doğru duvara dolap, köşe dolapları, geri alma, çok kısa duvarın reddi | `editor/tests/OperationsTests.cpp` |
 | 3B: yan dizi kendi duvarına döndürülür, damar, sahne sınırları | `render/tests/SceneTests.cpp` |
 | Üstten görünüş ve açınımlar | `export/tests/ProductViewTests.cpp` |
+| Ekler: parçalar, bantlar, kendi parçasındaki kesim, evyenin yanında ek, son dolaptan sonra, köşeden önce; dosyada parçaların seçimleri; düzenleyici | `core/tests/CornerKitchenTests.cpp`, `storage/tests/StorageTests.cpp`, `editor/tests/OperationsTests.cpp` |

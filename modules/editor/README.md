@@ -10,4 +10,6 @@ Shapes: `setShape`; a shape that does not fit or takes away material a hole or a
 
 Corner kitchens: `setSideRun`, `addCabinet` to a wall, `setBlindFiller`; corner cabinets keep their width and place.
 
+`setWorktopJoint`; `Document::longWorktops()`.
+
 **Stages:** 5, 9, kitchen, shapes, corner kitchens

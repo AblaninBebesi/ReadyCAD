@@ -125,12 +125,54 @@ void KitchenCorner::layoutChildren(const LayoutSlot& slot)
 KitchenRun::KitchenRun(KitchenWall wall)
     : wall_(wall)
     , baseRow_(std::make_shared<CabinetRow>(RowLevel::Base))
-    , worktop_(std::make_shared<Worktop>())
+    , worktops_{std::make_shared<Worktop>()}
     , wallRow_(std::make_shared<CabinetRow>(RowLevel::Wall))
 {
     adopt(baseRow_);
-    adopt(worktop_);
+    adopt(worktops_.front());
     adopt(wallRow_);
+}
+
+std::vector<Worktop*> KitchenRun::worktops() const
+{
+    std::vector<Worktop*> pieces;
+    for (const auto& piece : worktops_) {
+        pieces.push_back(piece.get());
+    }
+    return pieces;
+}
+
+std::vector<const Carcass*> KitchenRun::jointCabinets() const
+{
+    // Not where the worktop ends anyway: after the last cabinet of a run — unless the back
+    // run's worktop goes on over a corner there.
+    const std::vector<Carcass*> row = baseRow_->cabinets();
+    const bool lastToo = wall_ == KitchenWall::Back && corner(Side::Right) != nullptr;
+    std::vector<const Carcass*> joints;
+    for (std::size_t i = 0; i < row.size(); ++i) {
+        if (row[i]->worktopJoint() && (i + 1 < row.size() || lastToo)) {
+            joints.push_back(row[i]);
+        }
+    }
+    return joints;
+}
+
+void KitchenRun::updateWorktops()
+{
+    const std::size_t pieces = jointCabinets().size() + 1;
+    while (worktops_.size() < pieces) {
+        auto piece = std::make_shared<Worktop>();
+        piece->setMaterialOverride(worktops_.front()->materialOverride());
+        piece->setInCuttingPlan(worktops_.front()->inCuttingPlan());
+        // After the last piece: the tree reads base row, worktop pieces, wall row.
+        adoptAt(worktops_.size() + 1, piece);
+        worktops_.push_back(std::move(piece));
+    }
+    while (worktops_.size() > pieces) {
+        const Worktop* last = worktops_.back().get();
+        detachChildren([last](const FurnitureComponent& c) { return &c == last; });
+        worktops_.pop_back();
+    }
 }
 
 KitchenCorner* KitchenRun::corner(Side end) const noexcept
@@ -237,11 +279,12 @@ void KitchenRun::layoutChildren(const LayoutSlot& slot)
             base.push_back(&c->baseCabinet());
         }
     }
+    std::vector<PanelCutout> cutouts;
     for (const Carcass* cabinet : base) {
         from = std::min(from, cabinet->box().min().x);
         to = std::max(to, cabinet->box().max().x);
         if (cabinet->cutout()) {
-            frame_.cutouts.push_back(planOf(*cabinet));
+            cutouts.push_back(planOf(*cabinet));
         }
     }
     if (to < from) {
@@ -253,10 +296,35 @@ void KitchenRun::layoutChildren(const LayoutSlot& slot)
     }
     frame_.startClosed = wall_ == KitchenWall::Right || corner(Side::Left) != nullptr;
     frame_.endClosed = wall_ == KitchenWall::Left || corner(Side::Right) != nullptr;
-    LayoutSlot worktopSlot = slot.withBox(
-        Aabb(Vec3(from, k.baseTop, lo.z), Vec3(std::max(from, to), k.baseTop, lo.z + k.worktopDepth)));
-    worktopSlot.kitchen = &frame_;
-    worktop_->layout(worktopSlot);
+
+    // 4. Its pieces, split at the joints: a joint is a closed end of both pieces, a cut-out
+    //    belongs to the piece its centre is on.
+    updateWorktops();
+    std::vector<Real> ends;
+    for (const Carcass* cabinet : jointCabinets()) {
+        ends.push_back(std::clamp(cabinet->box().max().x, from, std::max(from, to)));
+    }
+    std::sort(ends.begin(), ends.end());
+    ends.push_back(std::max(from, to));
+    pieceFrames_.assign(worktops_.size(), frame_);
+    Real x0 = from;
+    for (std::size_t i = 0; i < worktops_.size(); ++i) {
+        const Real x1 = ends[i];
+        KitchenFrame& f = pieceFrames_[i];
+        f.startClosed = i == 0 ? frame_.startClosed : true;
+        f.endClosed = i + 1 == worktops_.size() ? frame_.endClosed : true;
+        for (const PanelCutout& c : cutouts) {
+            const bool last = i + 1 == worktops_.size();
+            if (c.center.x >= x0 && (c.center.x < x1 || last)) {
+                f.cutouts.push_back(c);
+            }
+        }
+        LayoutSlot worktopSlot = slot.withBox(
+            Aabb(Vec3(x0, k.baseTop, lo.z), Vec3(x1, k.baseTop, lo.z + k.worktopDepth)));
+        worktopSlot.kitchen = &f;
+        worktops_[i]->layout(worktopSlot);
+        x0 = x1;
+    }
 }
 
 PanelCutout KitchenRun::planOf(const Carcass& cabinet) const
@@ -281,7 +349,16 @@ std::vector<const Carcass*> KitchenRun::misplacedCutouts(const ConstructionRules
     };
     auto planOfBox = [](const Aabb& b) { return Rect{Vec2(b.min().x, b.min().z), Vec2(b.max().x, b.max().z)}; };
     const Real margin = rules.kitchen.cutoutMargin;
-    const Rect worktop = planOfBox(worktop_->box());
+    // The worktop piece a cut-out is in: the one its centre is on.
+    const auto pieceOf = [this, &planOfBox](const Rect& r) {
+        const Real x = (r.lo.x + r.hi.x) / 2.0;
+        for (const auto& piece : worktops_) {
+            if (x < piece->box().max().x) {
+                return planOfBox(piece->box());
+            }
+        }
+        return planOfBox(worktops_.back()->box());
+    };
 
     std::vector<const Carcass*> cabinets;
     std::vector<Rect> cutouts;
@@ -298,6 +375,7 @@ std::vector<const Carcass*> KitchenRun::misplacedCutouts(const ConstructionRules
     for (std::size_t i = 0; i < cutouts.size(); ++i) {
         const Rect& r = cutouts[i];
         const Carcass& cabinet = *cabinets[i];
+        const Rect worktop = pieceOf(r);
         bool ok = r.lo.x >= worktop.lo.x + margin - kEpsilon
                && r.hi.x <= worktop.hi.x - margin + kEpsilon
                && r.lo.y >= worktop.lo.y + margin - kEpsilon
@@ -379,6 +457,19 @@ void Kitchen::setSideRun(Side side, std::shared_ptr<KitchenRun> run, std::shared
         backRun_->adoptAt(side == Side::Left ? 3 : backRun_->children().size(), cornerSlot);
     }
     requestLayout();
+}
+
+std::vector<const Worktop*> Kitchen::longWorktops(const ConstructionRules& rules) const
+{
+    std::vector<const Worktop*> pieces;
+    for (const KitchenRun* run : runs()) {
+        for (const Worktop* piece : run->worktops()) {
+            if (piece->box().size().x > rules.kitchen.worktopMaxLength + kEpsilon) {
+                pieces.push_back(piece);
+            }
+        }
+    }
+    return pieces;
 }
 
 std::vector<const Carcass*> Kitchen::misplacedCutouts(const ConstructionRules& rules) const

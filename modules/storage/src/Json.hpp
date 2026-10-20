@@ -138,7 +138,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(ConstructionRules::Handles, cata
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(ConstructionRules::Cutting, premillAllowance,
                                                 rounding, edgeTrimAllowance)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(ConstructionRules::Kitchen, plinthHeight,
-                                                plinthSetback, railWidth, cutoutMargin)
+                                                plinthSetback, railWidth, cutoutMargin,
+                                                worktopMaxLength)
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
     ConstructionRules, carcassMaterial, backMaterial, frontMaterial, drawerBoxMaterial,

@@ -88,6 +88,13 @@ public:
         return misplacedCutouts_;
     }
 
+    /// Worktop pieces longer than the slabs they are cut from (Kitchen::longWorktops): a joint
+    /// is needed. Resizing a kitchen may make one; the warnings show them.
+    [[nodiscard]] const std::vector<const core::Worktop*>& longWorktops() const noexcept
+    {
+        return longWorktops_;
+    }
+
     /// Parts whose notches, shaped corners or openings cannot be made (detailing). Like
     /// overlaps(): an edit never adds one, an older file may bring some.
     [[nodiscard]] const std::vector<detailing::ShapeConflict>& shapeConflicts() const noexcept
@@ -155,6 +162,7 @@ private:
     std::vector<detailing::CutListRow> cutList_;
     std::vector<core::Overlap> overlaps_;
     std::vector<const core::Carcass*> misplacedCutouts_;
+    std::vector<const core::Worktop*> longWorktops_;
     std::vector<detailing::ShapeConflict> shapeConflicts_;
     std::vector<detailing::EdgeBandUsage> edgeUsage_;
     std::vector<detailing::HardwareItem> hardware_;

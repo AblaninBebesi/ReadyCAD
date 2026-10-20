@@ -144,6 +144,12 @@ void Carcass::setBlindCorner(std::optional<Real> filler)
     requestLayout();
 }
 
+void Carcass::setWorktopJoint(bool joint)
+{
+    worktopJoint_ = joint;
+    requestLayout();
+}
+
 BlindPanel* Carcass::blindPanel() const noexcept
 {
     return blindFiller_ ? blindPanel_.get() : nullptr;

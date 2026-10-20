@@ -479,11 +479,19 @@ void summaryPage(Composer& composer, const DocumentationInput& in, const std::st
     // Detailing warnings, as many as fit.
     canvas.text(Vec2(min.x, y), txt(TextId::Warnings), kBody, true, HAlign::Left, VAlign::Top);
     y -= kBody + 2.5;
-    if (in.detailing.warnings.empty()) {
+    std::vector<std::string> warnings;
+    if (const core::Kitchen* kitchen = in.product.kitchen()) {
+        for (const core::Worktop* worktop : kitchen->longWorktops(in.product.rules())) {
+            warnings.push_back(txt(TextId::LongWorktopWarning) + ": " + i18n::displayName(*worktop)
+                               + " " + mm(worktop->box().size().x) + " mm");
+        }
+    }
+    warnings.insert(warnings.end(), in.detailing.warnings.begin(), in.detailing.warnings.end());
+    if (warnings.empty()) {
         canvas.text(Vec2(min.x, y), canvas.fit(txt(TextId::NoWarnings), columnWidth, kTable, false),
                     kTable, false, HAlign::Left, VAlign::Top);
     }
-    for (const std::string& warning : in.detailing.warnings) {
+    for (const std::string& warning : warnings) {
         if (y < min.y + 2.0 * kTable) {
             break;
         }

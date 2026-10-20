@@ -383,3 +383,33 @@ TEST_CASE("Corner kitchens: side walls, corner cabinets, undoable", "[editor][op
     CHECK_THROWS_AS(setSideRun(doc, Side::Left, 500.0), ConstructionError); // shorter than the corner
     CHECK(rc::storage::saveProduct(doc.product()) == before);
 }
+
+TEST_CASE("Worktop joints: on base cabinets, never through a cut-out", "[editor][operations][worktop]")
+{
+    Document doc = Document::fromCatalog(CatalogItem::Kitchen);
+    setDimensions(doc, {4600, 2120, 560});
+    const auto kitchen = [&doc] { return doc.product().kitchen(); };
+    REQUIRE(doc.longWorktops().size() == 1); // 4600 from one slab: warned, not refused
+
+    // Doors 400 | sink 600 | drawers 400 | hob 600 | doors 2000 | doors 600: next to the sink
+    // and the hob a joint would leave too little worktop around their cut-outs; after the long
+    // doors it is clear of both.
+    addCabinet(doc, CabinetModule::BaseDoors, 600.0);
+    setWorktopJoint(doc, kitchen()->baseRow().cabinets()[4]->id(), true);
+    REQUIRE(kitchen()->backRun().worktops().size() == 2);
+    CHECK(kitchen()->backRun().worktops()[0]->box().size().x == Approx(4000.0));
+    CHECK(doc.longWorktops().empty());
+    CHECK(doc.undoDescription() == "Worktop joint");
+
+    // Right after the sink: no worktop left around its cut-out.
+    const std::string before = rc::storage::saveProduct(doc.product());
+    CHECK_THROWS_AS(setWorktopJoint(doc, kitchen()->baseRow().cabinets()[1]->id(), true),
+                    ConstructionError);
+    CHECK(rc::storage::saveProduct(doc.product()) == before);
+    // Wall cabinets carry no worktop.
+    CHECK_THROWS_AS(setWorktopJoint(doc, kitchen()->wallRow().cabinets()[0]->id(), true),
+                    std::invalid_argument);
+
+    doc.undo();
+    CHECK(kitchen()->backRun().worktops().size() == 1);
+}

@@ -133,6 +133,10 @@ std::vector<std::string> attentionLines(const editor::Document& document)
     for (const core::Carcass* cabinet : document.misplacedCutouts()) {
         lines.push_back(txt(TextId::CutoutWarning) + ": " + i18n::displayName(*cabinet));
     }
+    for (const core::Worktop* worktop : document.longWorktops()) {
+        lines.push_back(txt(TextId::LongWorktopWarning) + ": " + i18n::displayName(*worktop) + " "
+                        + i18n::mm(worktop->box().size().x) + " mm");
+    }
     for (const detailing::ShapeConflict& c : document.shapeConflicts()) {
         lines.push_back(txt(TextId::ShapeWarning) + ": " + i18n::displayName(*c.part));
     }

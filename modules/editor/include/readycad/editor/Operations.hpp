@@ -53,6 +53,9 @@ void setCutout(Document& doc, core::ComponentId cabinet,
                std::optional<core::WorktopCutout> cutout);
 /// The filler of a blind corner cabinet (Carcass::setBlindCorner).
 void setBlindFiller(Document& doc, core::ComponentId cabinet, core::Real filler);
+/// A joint of the worktop at the right side of a base cabinet of a row (Carcass::worktopJoint).
+/// A joint through a sink or a hob cut-out is refused like any cut-out without worktop around it.
+void setWorktopJoint(Document& doc, core::ComponentId cabinet, bool joint);
 
 // --- Sections -------------------------------------------------------------------------------
 void splitSection(Document& doc, core::ComponentId section, core::Axis axis, int count);

@@ -14,4 +14,6 @@ Decors: `Decor`, `defaultDecorCatalog()`, `withDecor()` (the decor's name in the
 
 Corner kitchens: `Placement` (quarter turns about Y); `FurnitureComponent::placement()` / `productBox()`; `KitchenRun` (a wall's rows and worktop in its own coordinates), `KitchenCorner`, blind corner cabinets (`Carcass::setBlindCorner`, `BlindPanel`), `makeCorner()`, `KitchenBuilder::sideWall()`; catalogue "Mutfak (L)", "Mutfak (U)"; collisions in product coordinates.
 
+Worktop joints: `Carcass::worktopJoint`, `KitchenRun::worktops()` (pieces split at the joints), `Kitchen::longWorktops()`, `rules.kitchen.worktopMaxLength`.
+
 **Stages:** 1 (math), 2 (component tree), 3 (parametrics), 9 (per-part thickness, cutting plan flag), kitchen, shapes, decors, corner kitchens

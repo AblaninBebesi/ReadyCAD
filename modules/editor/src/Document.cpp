@@ -238,6 +238,9 @@ void Document::refresh()
     hardware_ = detailing::hardwareList(*product_);
     overlaps_ = core::findOverlaps(*product_, kOverlapTolerance);
     misplacedCutouts_ = misplacedCutoutsOf(*product_);
+    const core::Kitchen* kitchen = product_->kitchen();
+    longWorktops_ = kitchen != nullptr ? kitchen->longWorktops(product_->rules())
+                                       : std::vector<const core::Worktop*>{};
     shapeConflicts_ = detailing::findShapeConflicts(*product_);
     if (selection_ && product_->find(*selection_) == nullptr) {
         selection_.reset();

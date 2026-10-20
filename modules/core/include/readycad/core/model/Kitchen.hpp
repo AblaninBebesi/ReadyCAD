@@ -105,7 +105,15 @@ public:
 
     [[nodiscard]] CabinetRow& baseRow() const noexcept { return *baseRow_; }
     [[nodiscard]] CabinetRow& wallRow() const noexcept { return *wallRow_; }
-    [[nodiscard]] Worktop& worktop() const noexcept { return *worktop_; }
+    /// The worktop — its first piece, the whole of it without joints.
+    [[nodiscard]] Worktop& worktop() const noexcept { return *worktops_.front(); }
+    /// The pieces of the worktop from left to right, split at the joints its base cabinets ask
+    /// for (Carcass::worktopJoint).
+    [[nodiscard]] std::vector<Worktop*> worktops() const;
+    /// Makes as many worktop pieces as the joints ask for: a new piece takes the first one's
+    /// material and cutting plan choices. Every layout calls it; reading a file too, before it
+    /// gives the pieces their choices.
+    void updateWorktops();
     /// The corner at an end of the back run; nullptr without a side run there.
     [[nodiscard]] KitchenCorner* corner(Side end) const noexcept;
     /// Every cabinet of the run, base and wall, the corners' included.
@@ -132,14 +140,18 @@ private:
     /// The cut-out of a cabinet in plan: centre in run X / Z, size along X / Z.
     [[nodiscard]] PanelCutout planOf(const Carcass& cabinet) const;
 
+    /// Base cabinets at whose right side the worktop has a joint.
+    [[nodiscard]] std::vector<const Carcass*> jointCabinets() const;
+
     KitchenWall wall_;
     Real length_ = 1800.0;
     Placement placement_; // set by the kitchen before every layout
     std::shared_ptr<CabinetRow> baseRow_;
-    std::shared_ptr<Worktop> worktop_;
+    std::vector<std::shared_ptr<Worktop>> worktops_; // at least one
     std::shared_ptr<CabinetRow> wallRow_;
     std::shared_ptr<KitchenCorner> corners_[2]; // at the left and the right end (back run only)
-    KitchenFrame frame_; // the worktop's: cut-outs and closed ends, rebuilt on every layout
+    KitchenFrame frame_;                   // what the run got, with its worktop's closed ends
+    std::vector<KitchenFrame> pieceFrames_; // each piece's: cut-outs and closed ends
 };
 
 /// Mutfak: kitchen runs against the walls of a room — a straight kitchen on the back wall, an
@@ -194,6 +206,8 @@ public:
 
     /// KitchenRun::misplacedCutouts() of every run.
     [[nodiscard]] std::vector<const Carcass*> misplacedCutouts(const ConstructionRules& rules) const;
+    /// Worktop pieces longer than the slabs (rules.kitchen.worktopMaxLength): they need a joint.
+    [[nodiscard]] std::vector<const Worktop*> longWorktops(const ConstructionRules& rules) const;
 
 protected:
     void layoutChildren(const LayoutSlot& slot) override;

@@ -64,6 +64,7 @@ struct ConstructionRules {
         Real plinthSetback = 40.0; // plinth face behind the carcass front edge: room for the feet
         Real railWidth = 100.0;    // kuşak: depth of a flat rail, height of an upright one
         Real cutoutMargin = 50.0;  // worktop left around a sink or hob cut-out, to the edges
+        Real worktopMaxLength = 4100.0; // the longest worktop slab: a longer worktop needs a joint
     } kitchen;
 
     // --- System 32 --------------------------------------------------------------------------

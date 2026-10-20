@@ -196,3 +196,73 @@ TEST_CASE("Corners stay clear when the kitchen changes", "[core][kitchen][corner
     CHECK(product->kitchen()->sideRun(Side::Right)->wallRow().cabinets().front()->box().min().x
           == Approx(578.0));
 }
+
+TEST_CASE("A worktop longer than a slab is made of pieces at its cabinets' joints",
+          "[core][kitchen][worktop]")
+{
+    // 4800 mm: doors 1200, sink 600, drawers 600, doors (automatic, 2400).
+    auto product = KitchenBuilder()
+                       .length(4800)
+                       .add(CabinetModule::BaseDoors, 1200)
+                       .add(CabinetModule::Sink, 600)
+                       .add(CabinetModule::BaseDrawers, 600)
+                       .add(CabinetModule::BaseDoors)
+                       .build();
+    Kitchen& k = *product->kitchen();
+    const ConstructionRules& rules = product->rules();
+    REQUIRE(k.backRun().worktops().size() == 1);
+    REQUIRE(k.longWorktops(rules).size() == 1); // 4800 > 4100: a joint is needed
+
+    // A joint at the right side of the drawers: two pieces, both from a slab.
+    Carcass& drawers = *k.baseRow().cabinets()[2];
+    drawers.setWorktopJoint(true);
+    const std::vector<Worktop*> pieces = k.backRun().worktops();
+    REQUIRE(pieces.size() == 2);
+    CHECK_THAT(pieces[0]->box(), IsBox({0, 820, 0}, {2400, 858, 600}));
+    CHECK_THAT(pieces[1]->box(), IsBox({2400, 820, 0}, {4800, 858, 600}));
+    CHECK(k.longWorktops(rules).empty());
+    // No edge band at the joint; the sink's opening on the piece it is on.
+    CHECK(pieces[0]->panel()->edge(EdgeSide::W1).present());
+    CHECK_FALSE(pieces[0]->panel()->edge(EdgeSide::W2).present());
+    CHECK_FALSE(pieces[1]->panel()->edge(EdgeSide::W1).present());
+    CHECK(pieces[0]->panel()->cutouts().size() == 1);
+    CHECK(pieces[1]->panel()->cutouts().empty());
+    CHECK(k.misplacedCutouts(rules).empty());
+    requireNoOverlaps(*product);
+
+    // A joint right next to the sink leaves too little worktop around its cut-out.
+    Carcass& sink = *k.baseRow().cabinets()[1];
+    sink.setWorktopJoint(true);
+    REQUIRE(k.backRun().worktops().size() == 3);
+    REQUIRE(k.misplacedCutouts(rules).size() == 1);
+    CHECK(k.misplacedCutouts(rules).front() == &sink);
+    sink.setWorktopJoint(false);
+
+    // The last cabinet has no joint to give: the worktop ends there anyway.
+    k.baseRow().cabinets().back()->setWorktopJoint(true);
+    CHECK(k.backRun().worktops().size() == 2);
+
+    // A new piece takes the first one's choices; a piece that goes keeps nothing behind.
+    drawers.setWorktopJoint(false);
+    REQUIRE(k.backRun().worktops().size() == 1);
+    k.worktop().setInCuttingPlan(true);
+    drawers.setWorktopJoint(true);
+    CHECK(k.backRun().worktops()[1]->inCuttingPlan());
+}
+
+TEST_CASE("A joint before the corner: the back worktop in two pieces", "[core][kitchen][worktop][corner]")
+{
+    const auto product = createProduct(CatalogItem::KitchenL);
+    Kitchen& k = *product->kitchen();
+    // The last cabinet of the back row: the worktop goes on over the corner cabinet.
+    k.baseRow().cabinets().back()->setWorktopJoint(true);
+    const std::vector<Worktop*> pieces = k.backRun().worktops();
+    REQUIRE(pieces.size() == 2);
+    CHECK(pieces[0]->box().max().x == Approx(1900.0));
+    CHECK_THAT(pieces[1]->box(), IsBox({1900, 820, 0}, {3000, 858, 600}));
+    CHECK_FALSE(pieces[1]->panel()->edge(EdgeSide::W2).present()); // at the right wall
+    requireNoOverlaps(*product);
+    // The side run's last cabinet ends under the back worktop: no joint there.
+    k.sideRun(Side::Right)->baseRow().cabinets().back()->setWorktopJoint(true);
+    CHECK(k.sideRun(Side::Right)->worktops().size() == 1);
+}

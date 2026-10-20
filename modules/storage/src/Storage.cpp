@@ -242,6 +242,9 @@ json writeCarcass(const Carcass& carcass)
     if (carcass.blindFiller()) {
         out["blindFiller"] = *carcass.blindFiller();
     }
+    if (carcass.worktopJoint()) {
+        out["worktopJoint"] = true;
+    }
     if (!parts.empty()) {
         out["parts"] = parts;
     }
@@ -255,6 +258,17 @@ void writeRun(const KitchenRun& run, json& out)
     json worktop = json::object();
     writePanelChoices(run.worktop(), worktop);
     out["worktop"] = worktop;
+    // The pieces after the first one, where the worktop has joints.
+    const std::vector<Worktop*> pieces = run.worktops();
+    if (pieces.size() > 1) {
+        json more = json::array();
+        for (std::size_t i = 1; i < pieces.size(); ++i) {
+            json choices = json::object();
+            writePanelChoices(*pieces[i], choices);
+            more.push_back(choices);
+        }
+        out["worktopPieces"] = more;
+    }
     for (const auto& [key, row] : {std::pair{"base", &run.baseRow()},
                                    std::pair{"wall", &run.wallRow()}}) {
         json cabinets = json::array();
@@ -409,6 +423,7 @@ void readCarcass(const json& in, Carcass& carcass)
         carcass.setCutout(in.at("cutout").get<WorktopCutout>());
     }
     carcass.setBlindCorner(readOptionalReal(in, "blindFiller")); // before its parts: the blind panel
+    carcass.setWorktopJoint(in.value("worktopJoint", false));
     if (in.contains("parts")) {
         const json& parts = in.at("parts");
         for (const auto& [key, part] : namedParts(carcass)) {
@@ -432,6 +447,13 @@ void readRun(const json& in, KitchenRun& run)
             row->add(carcass);
             readCarcass(cabinet, *carcass);
         }
+    }
+    // The cabinets' joints decide the pieces; then their own choices.
+    run.updateWorktops();
+    const std::vector<Worktop*> pieces = run.worktops();
+    const json more = in.value("worktopPieces", json::array());
+    for (std::size_t i = 1; i < pieces.size() && i - 1 < more.size(); ++i) {
+        readPanelChoices(more.at(i - 1), *pieces[i]);
     }
 }
 

@@ -5,6 +5,7 @@
 #include "readycad/core/builders/Catalog.hpp"
 #include "readycad/core/builders/WardrobeBuilder.hpp"
 #include "readycad/core/Decor.hpp"
+#include "readycad/core/model/Kitchen.hpp"
 #include "readycad/core/model/Drawer.hpp"
 #include "readycad/core/model/Queries.hpp"
 #include "readycad/storage/Storage.hpp"
@@ -323,4 +324,27 @@ TEST_CASE("Decors survive save and load; an older profile gets the default catal
                        {"name": "Suntalam 18", "type": "chipboard", "thickness": 18, "hasGrain": true}}})");
     CHECK(old.carcassMaterial.decor.empty());
     CHECK(old.decors == defaultDecorCatalog());
+}
+
+TEST_CASE("Worktop joints and the pieces' own choices survive save and load",
+          "[storage][project][kitchen][worktop]")
+{
+    const auto kitchen = createProduct(CatalogItem::KitchenU);
+    Kitchen& k = *kitchen->kitchen();
+    k.baseRow().cabinets().front()->setWorktopJoint(true);
+    REQUIRE(k.backRun().worktops().size() == 2);
+    k.backRun().worktops()[1]->setInCuttingPlan(true);
+    k.backRun().worktops()[1]->setName("Tezgah (sağ parça)");
+    k.sideRun(Side::Left)->baseRow().cabinets().front()->setWorktopJoint(true);
+
+    const std::string saved = saveProduct(*kitchen);
+    const auto loaded = loadProduct(saved);
+    CHECK(saveProduct(*loaded) == saved);
+    const Kitchen& l = *loaded->kitchen();
+    REQUIRE(l.backRun().worktops().size() == 2);
+    CHECK(l.backRun().worktops()[1]->inCuttingPlan());
+    CHECK(l.backRun().worktops()[1]->name() == "Tezgah (sağ parça)");
+    CHECK_FALSE(l.backRun().worktops()[0]->inCuttingPlan());
+    CHECK(l.sideRun(Side::Left)->worktops().size() == 2);
+    CHECK(l.baseRow().cabinets().front()->worktopJoint());
 }
