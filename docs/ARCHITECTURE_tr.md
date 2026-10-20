@@ -1488,8 +1488,8 @@ Proje biçimi sürüm 4, atölye profili sürüm 2. Eski dosyalar açılır.
 ## Köşe mutfakları (desenlerden sonra)
 
 L mutfak, arka duvarda ve bir yan duvarda dolap dizisidir; U mutfak her iki yan duvarda da.
-Köşe, mobilya atölyelerinde alışıldığı gibi **kör köşe dolabıyla** çözülür: alt ve üst. Katlanır
-kapaklı L köşe dolabı bu aşamanın ikinci bölümüdür. Danışman planın tamamını onayladı.
+Köşe, mobilya atölyelerinde alışıldığı gibi iki seçenekle çözülür: **kör köşe dolabı** ve
+**katlanır kapaklı L köşe dolabı** (aşamanın ikinci bölümü). Danışman planın tamamını onayladı.
 
 ![L mutfak](images/corner-kitchen.png)
 
@@ -1553,6 +1553,66 @@ bozarlar.
 * Tezgah: arka tezgah yan duvara kadar gider, yan tezgah onun ön kenarından başlar — alın
   alına ek. Duvardaki uçlarda ve ekte bant yoktur (`KitchenFrame::startClosed`, `endClosed`).
   45° ek özel ekipman ister ve yapılmaz.
+
+### L köşe dolabı (ikinci bölüm)
+
+```
+   arka duvar                      sağ duvar
+  ─────────────────────────────┬─┐
+   │yan  │  arka kol            │ │ arkalık 2
+   │     │                      │ │
+   └─────┴───── kapak 1 ────┐   │ │
+                   katlanma▶│yan │ │
+                   kapak 2  │kol │ │
+                            ├────┤ │ uç yan panel
+                            │ yan dizi …
+```
+
+Bir kol arka duvar boyunca, diğeri yan duvar boyunca uzanır; köşede dikme yoktur, bütün hacme
+erişilir. Varsayılan kollar altta 900 × 900, üstte 600 × 600'dür ve değiştirilebilir.
+`CornerCabinet` arka dizinin ucunda, onun koordinatlarında durur; kutusu L'nin dış ölçüsüdür.
+
+| Parça | Nasıl yapılır |
+|--------|-------------|
+| Arka kolun ucundaki yan panel, arka duvar boyunca arkalık, arka kolun altındaki baza | gövde formülleriyle sıradan `SideWall`, `BackPanel`, `Plinth`: arka kol sıradan bir `CarcassFrame` ile tarif edilir |
+| Yan kolun uç yan paneli | `EndWall` — dizinin enine duran yan panel (kalınlığı Z'de), kesim listesi için yönü var |
+| L biçimli alt tabla (yan paneller onun üstünde durur) ve üst tabla (yan panellerin arasında), L raflar (0–3) | `CornerPanel` / `CornerShelf`: otomatik köşe kesimli dikdörtgen |
+| Yan duvar boyunca arkalık, yan kolun bazası | kalınlığı X'te olan `CornerPanel` |
+| Arka koldaki kapak | sıradan `Door`, kulpsuz |
+| Yan koldaki kapak | `FoldingDoor`: kendi koordinatlarında bir kapak |
+
+* **L paneller, kesimler aşamasının kesimidir.** Köşe kesimini (`CornerNotch`) dolabın kendisi,
+  kullanıcının kesimlerinden önce `PanelComponent::automaticShape()` ile verir. Gerisi zaten
+  vardır: DXF'te kontur, CNC'de gerçek konturla yerleşim, panel ebatlamada «testereden sonra»,
+  3B'de prizma. İç kenarlar (kesimin kenarları) elle bantlanır: düz kenar bantlama makinesi iç
+  köşeyi dönemez. Ölçüyü etkilemez, bant boş açıklığa gelir.
+* **Katlanır kapak.** Birinci kapak arka kolun yan paneline asılır: sıradan menteşeler ve
+  taban plakaları. İkincisi birinciye katlanır menteşelerle asılır: ikinci kapakta, katlanma
+  kenarında, birincinin menteşe yüksekliklerinde kaplar. Birinci kapağa plakaları montajcı
+  menteşenin şablonuyla takar. Kulp yalnızca ikinci kapaktadır: ondan çekince ikisi de açılır.
+* **İkinci kapak, kendi koordinatlarında sıradan bir kapaktır.** Yan duvarın dizisi gibi çeyrek
+  tur döndürülmüştür: `FoldingDoor::ownPlacement()`. Bu yüzden kulpu, kapları, 3B'si ve
+  çizimleri her kapağınki gibidir. Aynı `Placement` mekanizması, yalnızca tek bir parça için.
+* **Yan dizi ikinci kolun ucunda başlar.** Bu köşe için `KitchenFrame::cornerBase` ikinci kolun
+  boyuna eşittir. Yan dizinin bazası kolun bazasını ek uzatma olmadan sürdürür.
+* **Kontura göre çakışma.** L panelin kutusu, kapakların durduğu kesilmiş köşeyi de kapsar. Bu
+  yüzden çakışma denetimi artık şekilli parçanın konturunu hesaba katar. Ortak bölge parçanın
+  koordinatlarına çevrilir ve konturuyla kırpılır (Sutherland–Hodgman). Kesişim alanı sıfırsa
+  çakışma yoktur. Bu, kesimler aşamasının kesimleri için de doğrudur: boru kesimindeki raf artık
+  çakışma sayılmaz.
+* **Delikler.** Konfirmatları genel birleşim araması koyar: ikinci kapak dışındaki bütün
+  parçalar arka dizinin koordinatlarındadır. Raf pimleri her uç yan panelde ikişer, derinliği
+  boyunca sıralanır. Donanımda alt dolabın altında 6 ayak, üst dolapta 2 askı ve ayrı bir satır
+  olarak «Katlanır kapak menteşesi» vardır.
+* **Seçim.** «Köşe» içinde «Köşe tipi» vardır: «Kör köşe» veya «L köşe (katlanır kapak)». L
+  için alt ve üst dolabın kolları; dolabın kendisinde kollar ve raf sayısı. Kapaklarının
+  menteşe yönü değiştirilmez, parçaları silinmez. Katalogda «Mutfak (U)» artık L köşeli,
+  «Mutfak (L)» kör köşelidir.
+* **Proje dosyası.** Köşede `"type": "L"`, dolapta kollar, raf sayısı, parçaların seçimleri ve
+  ikinci kapağın kulpu.
+* Bu arada düzeltildi: kör köşe üst dolabı donanım listesinde askı almıyordu.
+
+![L köşe dolabı: kapaklı ve kapaksız](images/corner-l-cabinet.png)
 
 ### Uzun tezgahın eki
 
@@ -1618,3 +1678,10 @@ panelinin kendi seçimleri de (`"parts": {"blindPanel": …}`).
 | 3B: yan dizi kendi duvarına döndürülür, damar, sahne sınırları | `render/tests/SceneTests.cpp` |
 | Üstten görünüş ve açınımlar | `export/tests/ProductViewTests.cpp` |
 | Ekler: parçalar, bantlar, kendi parçasındaki kesim, evyenin yanında ek, son dolaptan sonra, köşeden önce; dosyada parçaların seçimleri; düzenleyici | `core/tests/CornerKitchenTests.cpp`, `storage/tests/StorageTests.cpp`, `editor/tests/OperationsTests.cpp` |
+| L köşe dolabı: her parça (önceden elle hesaplandı), ayna gibi sol köşe, kollar ve raflar, kör köşeye dönüş, katalogdaki U mutfak | `core/tests/CornerKitchenTests.cpp` |
+| Delikleri: konfirmatlar, iki uçta raf pimleri, menteşeler, katlanır menteşeler, kulp; donanım | `detailing/tests/KitchenDetailingTests.cpp` |
+| Dosyası, düzenleyici (köşe tipi, kollar, raflar, değişmeyen kapaklar), 3B (ikinci kapak ve kulpu), açınım | `storage/…`, `editor/…`, `render/tests/SceneTests.cpp`, `export/tests/ProductViewTests.cpp` |
+| Rastgele kullanıcı L ve U mutfakları düzenler: duvarlar, köşe tipi, kollar, raflar, dolgular, ekler, her duvara dolap | `tests/integration/RobustnessTests.cpp` |
+
+Uzun çalıştırma: 80 oturum × 80 düzenleme (20'si köşe mutfaklarında), 6400 düzenlemeden 4977'si
+kabul edildi, tek bir ihlal yok.

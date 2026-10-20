@@ -16,6 +16,7 @@ enum class ComponentKind {
     Kitchen,
     KitchenRun,
     KitchenCorner,
+    CornerCabinet,
     CabinetRow,
     // Carcass parts
     SideWall,

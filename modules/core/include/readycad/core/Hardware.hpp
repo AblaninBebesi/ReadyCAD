@@ -26,6 +26,7 @@ enum class HardwareKind {
     Leg,        // adjustable leg under a base cabinet
     PlinthClip, // holds the plinth on a front leg
     Hanger,     // cabinet hanger of a wall cabinet
+    FoldingHinge, // joins the two doors of an L corner cabinet
 };
 
 struct HandleModel {

@@ -160,6 +160,34 @@ void setCabinetWidth(Document& doc, ComponentId cabinet, std::optional<core::Rea
         key("cabinet-width", cabinet));
 }
 
+void setCornerType(Document& doc, core::Side end, core::CornerType type)
+{
+    doc.edit("Corner type", [&](Product& p) {
+        core::Kitchen& kitchen = requireKitchen(p);
+        const core::KitchenCorner* corner = kitchen.backRun().corner(end);
+        if (corner == nullptr) {
+            throw std::invalid_argument("The kitchen has no corner there");
+        }
+        if (corner->type() != type) {
+            kitchen.setCorner(end, core::makeCorner(end, type));
+        }
+    });
+}
+
+void setCornerLegs(Document& doc, ComponentId cabinet, core::Real alongBack, core::Real alongSide)
+{
+    doc.edit(
+        "Corner legs",
+        [&](Product& p) { require<core::CornerCabinet>(p, cabinet).setLegs(alongBack, alongSide); },
+        key("corner-legs", cabinet));
+}
+
+void setCornerShelves(Document& doc, ComponentId cabinet, int count)
+{
+    doc.edit("Corner shelves",
+             [&](Product& p) { require<core::CornerCabinet>(p, cabinet).setShelfCount(count); });
+}
+
 void setWorktopJoint(Document& doc, ComponentId cabinet, bool joint)
 {
     doc.edit("Worktop joint", [&](Product& p) {
@@ -265,7 +293,13 @@ void setShelfElevation(Document& doc, ComponentId shelf, std::optional<core::Rea
 
 void setHinge(Document& doc, ComponentId door, core::HingeSide side)
 {
-    doc.edit("Hinge side", [&](Product& p) { require<core::Door>(p, door).setHinge(side); });
+    doc.edit("Hinge side", [&](Product& p) {
+        core::Door& d = require<core::Door>(p, door);
+        if (d.parent() != nullptr && d.parent()->kind() == core::ComponentKind::CornerCabinet) {
+            throw std::logic_error("The doors of an L corner cabinet fold together at the corner");
+        }
+        d.setHinge(side);
+    });
 }
 
 void setHandle(Document& doc, ComponentId front, std::optional<core::HandlePlacement> placement)
@@ -308,11 +342,14 @@ void removeComponent(Document& doc, ComponentId component)
             throw std::invalid_argument("Component not found");
         }
         const core::ComponentKind kind = node->kind();
+        const core::ComponentKind parent = node->parent()->kind();
         const bool cabinet = kind == core::ComponentKind::Carcass
-                          && node->parent()->kind() == core::ComponentKind::CabinetRow;
-        const bool removable = kind == core::ComponentKind::Shelf
-                            || kind == core::ComponentKind::Door
-                            || kind == core::ComponentKind::DrawerStack || cabinet;
+                          && parent == core::ComponentKind::CabinetRow;
+        // Shelves, doors and drawers of a compartment; an L corner cabinet's are its own.
+        const bool inSection = parent == core::ComponentKind::Section
+                            && (kind == core::ComponentKind::Shelf || kind == core::ComponentKind::Door
+                                || kind == core::ComponentKind::DrawerStack);
+        const bool removable = inSection || cabinet;
         if (!removable) {
             throw std::logic_error("This part belongs to the construction and cannot be removed");
         }

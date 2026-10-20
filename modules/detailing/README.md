@@ -10,4 +10,6 @@ Kitchen: detailing carcass by carcass (no joint to the neighbouring cabinet), ra
 
 Shapes: `FlatPart::contour` and `blank` of shaped parts; `findShapeConflicts` — holes and grooves must stay in material.
 
-**Stages:** 4, 6, 9, kitchen, shapes
+L corner cabinets: joints, shelf supports in both end walls, the first door on its wall, folding hinge cups in the second; folding hinges, legs and hangers in the hardware list (and the hangers of a blind wall corner cabinet).
+
+**Stages:** 4, 6, 9, kitchen, shapes, corner kitchens

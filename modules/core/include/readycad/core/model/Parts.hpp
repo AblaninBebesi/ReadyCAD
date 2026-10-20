@@ -15,13 +15,16 @@ namespace rc::core {
 // =============================================================================================
 
 /// Боковина. Full carcass depth; its height depends on whether top/bottom overlay it.
-class SideWall final : public PanelComponent {
+class SideWall : public PanelComponent {
 public:
     explicit SideWall(Side side);
     [[nodiscard]] ComponentKind kind() const noexcept override { return ComponentKind::SideWall; }
     [[nodiscard]] Side side() const noexcept { return side_; }
 
 protected:
+    /// For a side wall that stands across the run (EndWall).
+    SideWall(Side side, Axis thicknessAxis, Axis lengthAxis);
+
     Vec3 updateSize(const LayoutSlot& slot) override;
     Vec3 updatePosition(const LayoutSlot& slot, const Vec3& size) override;
     const Material& defaultMaterial(const ConstructionRules& r) const override;
@@ -137,7 +140,7 @@ enum class ShelfMount {
 ///  * Confirmat — tight between the walls, with its own front/back offsets.
 /// Unlike FixedShelf, a shelf never divides its section: shelves of both mounts can be mixed
 /// in one compartment behind one door.
-class Shelf final : public PanelComponent {
+class Shelf : public PanelComponent {
 public:
     /// elevation: fixed distance from the section bottom to the shelf's underside;
     /// nullopt = distributed evenly with the other automatic shelves.
@@ -161,6 +164,14 @@ private:
     std::optional<Real> elevation_;
     ShelfMount mount_;
 };
+
+/// How far a shelf keeps from what is around it, by its mount (rules.shelfSideGap, ...).
+struct ShelfOffsets {
+    Real side;  // from a side wall
+    Real front; // behind the carcass front edge
+    Real back;  // in front of the back panel
+};
+[[nodiscard]] ShelfOffsets shelfOffsets(ShelfMount mount, const ConstructionRules& r) noexcept;
 
 /// Стационарная полка: structural, fills the opening completely (fixed with confirmats).
 /// Divides a Section vertically into sub-sections.
@@ -246,7 +257,7 @@ enum class HingeSide { Left, Right };
 
 /// Накладной распашной фасад (дверь). Default handle: vertical, mid-height, 40 mm from the
 /// opening edge (the edge opposite the hinges).
-class Door final : public FrontPanel {
+class Door : public FrontPanel {
 public:
     explicit Door(HingeSide hinge = HingeSide::Left);
     [[nodiscard]] ComponentKind kind() const noexcept override { return ComponentKind::Door; }
@@ -326,6 +337,86 @@ protected:
     Vec3 updatePosition(const LayoutSlot& slot, const Vec3& size) override;
     const Material& defaultMaterial(const ConstructionRules& r) const override;
     EdgeBand defaultEdge(EdgeSide side, const LayoutSlot& slot) const override;
+};
+
+// =============================================================================================
+// Parts of an L corner cabinet (CornerCabinet.hpp): the cabinet computes where each one goes;
+// the slot box is the part itself.
+// =============================================================================================
+
+/// The end of the second leg of an L corner cabinet: a side wall standing across the run, its
+/// thickness along Z. `side`: its hand, as seen in front of the side wall's run.
+class EndWall final : public SideWall {
+public:
+    explicit EndWall(Side side);
+
+protected:
+    Vec3 updateSize(const LayoutSlot& slot) override;
+    Vec3 updatePosition(const LayoutSlot& slot, const Vec3& size) override;
+    EdgeBand defaultEdge(EdgeSide side, const LayoutSlot& slot) const override;
+};
+
+/// The notch that makes a rectangular panel an L (set by its cabinet before every layout).
+class LShapedPart {
+public:
+    void setNotch(std::optional<CornerNotch> notch) noexcept { notch_ = notch; }
+
+protected:
+    [[nodiscard]] std::vector<ShapeFeature> notchFeature() const;
+
+private:
+    std::optional<CornerNotch> notch_;
+};
+
+/// The L-shaped shelf of an L corner cabinet, on supports at both ends or on confirmats. Its
+/// inner edges are the notch: banded by hand, as no edgebander follows an inner corner.
+class CornerShelf final : public Shelf, public LShapedPart {
+public:
+    CornerShelf();
+
+protected:
+    Vec3 updateSize(const LayoutSlot& slot) override;
+    Vec3 updatePosition(const LayoutSlot& slot, const Vec3& size) override;
+    std::vector<ShapeFeature> automaticShape(const LayoutSlot& slot) const override;
+    EdgeBand defaultEdge(EdgeSide side, const LayoutSlot& slot) const override;
+};
+
+/// A panel of an L corner cabinet without a formula of its own: the L-shaped bottom and top,
+/// the back and the plinth of the second leg.
+class CornerPanel final : public PanelComponent, public LShapedPart {
+public:
+    enum class Role { Bottom, Top, Back, Plinth };
+
+    CornerPanel(Role role, Axis thicknessAxis, Axis lengthAxis);
+    [[nodiscard]] ComponentKind kind() const noexcept override;
+    [[nodiscard]] Role role() const noexcept { return role_; }
+
+protected:
+    Vec3 updateSize(const LayoutSlot& slot) override;
+    Vec3 updatePosition(const LayoutSlot& slot, const Vec3& size) override;
+    std::vector<ShapeFeature> automaticShape(const LayoutSlot& slot) const override;
+    const Material& defaultMaterial(const ConstructionRules& r) const override;
+    EdgeBand defaultEdge(EdgeSide side, const LayoutSlot& slot) const override;
+
+private:
+    Role role_;
+};
+
+/// Katlanır kapak: the second door of an L corner cabinet, on the second leg's front, hung on
+/// the first door with folding hinges. A door in coordinates of its own — the second leg's,
+/// turned a quarter towards the side wall — so its handle, its hinge cups and its drawings are
+/// those of any door. Its hinge side is the folding edge, at the corner.
+class FoldingDoor final : public Door {
+public:
+    explicit FoldingDoor(HingeSide fold);
+    /// Where its coordinates are in the cabinet's (set by the cabinet before every layout).
+    void setPlacement(const Placement& placement) noexcept { placement_ = placement; }
+
+protected:
+    [[nodiscard]] const Placement* ownPlacement() const noexcept override { return &placement_; }
+
+private:
+    Placement placement_;
 };
 
 // =============================================================================================

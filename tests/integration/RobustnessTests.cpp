@@ -6,6 +6,7 @@
 //
 // The random sequences are reproducible: a failure names its seed and step.
 
+#include "readycad/core/model/CornerCabinet.hpp"
 #include "readycad/core/model/Drawer.hpp"
 #include "readycad/core/model/Queries.hpp"
 #include "readycad/editor/Operations.hpp"
@@ -15,6 +16,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
 #include <cmath>
 #include <filesystem>
 #include <functional>
@@ -72,6 +74,8 @@ struct Targets {
     std::vector<core::FrontPanel*> fronts;
     std::vector<core::PanelComponent*> panels;
     std::vector<core::FurnitureComponent*> removable; ///< and some that are not
+    std::vector<core::Carcass*> blindCorners;          ///< blind corner cabinets
+    std::vector<core::CornerCabinet*> lCorners;        ///< L corner cabinets
 };
 
 Targets targetsOf(core::Product& product)
@@ -85,6 +89,13 @@ Targets targetsOf(core::Product& product)
                 t.cabinets.push_back(static_cast<core::Carcass*>(&c));
                 t.removable.push_back(&c);
             }
+            if (c.parent()->kind() == core::ComponentKind::KitchenCorner) {
+                t.blindCorners.push_back(static_cast<core::Carcass*>(&c));
+                t.removable.push_back(&c); // cannot be removed: refused
+            }
+            break;
+        case core::ComponentKind::CornerCabinet:
+            t.lCorners.push_back(static_cast<core::CornerCabinet*>(&c));
             break;
         case core::ComponentKind::Section:
             t.sections.push_back(static_cast<core::Section*>(&c));
@@ -132,7 +143,7 @@ public:
     std::string edit(editor::Document& doc)
     {
         Targets t = targetsOf(doc.product());
-        switch (number(0, 18)) {
+        switch (number(0, 19)) {
         case 0: {
             // Sometimes impossible on purpose: zero or negative sizes are refused.
             const core::Size3D size{number(0, 9) == 0 ? -100.0 : number(300, 2800) * 1.0,
@@ -318,7 +329,59 @@ public:
                 editor::setShape(doc, p->id(), shape);
             }
             return "shape";
-        case 17:
+        case 17: {
+            // Corner kitchens: side walls, the corner's type and sizes, worktop joints. Refused
+            // on a wardrobe, often refused in a kitchen (no room for the cabinets).
+            const core::Side side = coin() ? core::Side::Left : core::Side::Right;
+            const auto walls = std::array{core::KitchenWall::Back, core::KitchenWall::Left, core::KitchenWall::Right};
+            switch (number(0, 7)) {
+            case 0:
+                editor::setSideRun(doc, side,
+                                   number(0, 4) == 0 ? std::nullopt
+                                                     : std::optional<core::Real>(number(400, 3500)));
+                break;
+            case 1:
+                editor::setCornerType(doc, side, coin() ? core::CornerType::Blind : core::CornerType::LShaped);
+                break;
+            case 2:
+                if (core::CornerCabinet* l = any(t.lCorners)) {
+                    editor::setCornerLegs(doc, l->id(), number(300, 1500), number(300, 1500));
+                }
+                break;
+            case 3:
+                if (core::CornerCabinet* l = any(t.lCorners)) {
+                    editor::setCornerShelves(doc, l->id(), number(0, 4)); // 4: refused
+                }
+                break;
+            case 4:
+                if (core::Carcass* blind = any(t.blindCorners)) {
+                    if (coin()) {
+                        editor::setBlindFiller(doc, blind->id(), number(0, 300));
+                    } else {
+                        editor::setCabinetWidth(doc, blind->id(),
+                                                number(0, 5) == 0 ? std::nullopt
+                                                                  : std::optional<core::Real>(number(400, 1600)));
+                    }
+                }
+                break;
+            case 5:
+                if (core::Carcass* cabinet = any(t.cabinets)) {
+                    editor::setWorktopJoint(doc, cabinet->id(), coin());
+                }
+                break;
+            case 6:
+                editor::addCabinet(doc, static_cast<core::CabinetModule>(number(0, 5)), number(300, 900),
+                                   walls[static_cast<std::size_t>(number(0, 2))]);
+                break;
+            default:
+                if (core::Carcass* blind = any(t.blindCorners)) {
+                    editor::removeComponent(doc, blind->id()); // a corner cabinet: refused
+                }
+                break;
+            }
+            return "corner";
+        }
+        case 18:
             doc.undo();
             return "undo";
         default:
@@ -431,6 +494,12 @@ TEST_CASE("Random edits of a kitchen never break it", "[integration][robustness]
     }
 }
 
+TEST_CASE("Random edits of corner kitchens never break them", "[integration][robustness][corner]")
+{
+    CHECK(randomSession(21, 40, 20, core::CatalogItem::KitchenL) > 15);
+    CHECK(randomSession(22, 40, 20, core::CatalogItem::KitchenU) > 15);
+}
+
 TEST_CASE("Random edits, long run", "[.][soak]")
 {
     int accepted = 0;
@@ -440,5 +509,8 @@ TEST_CASE("Random edits, long run", "[.][soak]")
     for (unsigned seed = 101; seed <= 120; ++seed) {
         accepted += randomSession(seed, 80, 20, core::CatalogItem::Kitchen);
     }
-    WARN("accepted edits: " << accepted << " of " << 60 * 80);
+    for (unsigned seed = 201; seed <= 220; ++seed) {
+        accepted += randomSession(seed, 80, 20, seed % 2 == 0 ? core::CatalogItem::KitchenL : core::CatalogItem::KitchenU);
+    }
+    WARN("accepted edits: " << accepted << " of " << 80 * 80);
 }

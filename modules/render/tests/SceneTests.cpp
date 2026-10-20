@@ -3,6 +3,7 @@
 #include "readycad/core/builders/Catalog.hpp"
 #include "readycad/core/builders/WardrobeBuilder.hpp"
 #include "readycad/core/model/Queries.hpp"
+#include "readycad/core/model/CornerCabinet.hpp"
 #include "readycad/core/model/Kitchen.hpp"
 #include "readycad/detailing/Detailing.hpp"
 #include "readycad/render/Scene.hpp"
@@ -240,4 +241,27 @@ TEST_CASE("A side wall's cabinets are turned onto their wall", "[render][scene][
     // The scene's bounds take in the whole room.
     CHECK(scene.bounds.max().z == Approx(2400.0));
     CHECK(scene.bounds.max().x == Approx(3000.0));
+}
+
+TEST_CASE("The folding door of an L corner cabinet faces the room from the side leg",
+          "[render][scene][lcorner]")
+{
+    const auto product = createProduct(CatalogItem::KitchenU);
+    const CornerCabinet& l = *product->kitchen()->backRun().corner(Side::Right)->lCabinet(RowLevel::Base);
+    const render::Scene scene = render::buildScene(*product, {});
+    const auto fold = std::find_if(scene.boxes.begin(), scene.boxes.end(), [&](const render::SceneBox& b) {
+        return b.component == l.foldingDoor().id() && b.category == ItemCategory::Front;
+    });
+    REQUIRE(fold != scene.boxes.end());
+    CHECK(fold->min.x == Approx(3200.0f - 578.0f));
+    CHECK(fold->max.x == Approx(3200.0f - 560.0f));
+    // Its handle stands out of its face into the room: towards -X.
+    const auto handle = std::find_if(scene.boxes.begin(), scene.boxes.end(), [&](const render::SceneBox& b) {
+        return b.component == l.foldingDoor().id() && b.category == ItemCategory::Handle;
+    });
+    REQUIRE(handle != scene.boxes.end());
+    CHECK(handle->max.x <= fold->min.x + 1e-3f);
+    // The L-shaped bottom is a prism.
+    CHECK(std::any_of(scene.prisms.begin(), scene.prisms.end(),
+                      [&](const render::ScenePrism& p) { return p.component == l.bottom().id(); }));
 }

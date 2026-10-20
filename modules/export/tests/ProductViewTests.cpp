@@ -200,3 +200,21 @@ TEST_CASE("A corner kitchen: a plan of the room, an elevation per wall", "[expor
     // The open view leaves the blind panel out like the doors: the corner cabinet's shelf shows.
     CHECK(viewExtent(kitchen.backRun(), ProductView::FrontOpen).max.x == Approx(3000.0));
 }
+
+TEST_CASE("An L corner cabinet in the back wall's elevation: its folding door seen edge-on",
+          "[export][views][lcorner]")
+{
+    const auto product = core::createProduct(core::CatalogItem::KitchenU);
+    const core::KitchenRun& back = product->kitchen()->backRun();
+    // The back wall from wall to wall: the L cabinets at both ends, nothing turned elsewhere.
+    const Bounds front = viewExtent(back, ProductView::Front);
+    CHECK(front.min.x == Approx(0.0));
+    CHECK(front.max.x == Approx(3200.0));
+    const Drawing d = drawProductView(back, ProductView::Front);
+    CHECK(d.count<Line>() > 4);
+    // The folding door of the right corner stands across the back wall at 3200 - 560 - 18.
+    const std::vector<Line> visible = linesOn(d, viewLayers::kVisible);
+    CHECK(std::any_of(visible.begin(), visible.end(), [](const Line& l) {
+        return std::abs(l.a.x - 2622.0) < 1e-6 && std::abs(l.b.x - 2622.0) < 1e-6;
+    }));
+}

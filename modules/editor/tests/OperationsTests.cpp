@@ -345,14 +345,14 @@ TEST_CASE("Corner kitchens: side walls, corner cabinets, undoable", "[editor][op
                     std::invalid_argument);
 
     // A corner cabinet: its width and filler change, it does not move, leave, or go automatic.
-    const Carcass& base = kitchen()->backRun().corner(Side::Right)->baseCabinet();
+    const Carcass& base = *kitchen()->backRun().corner(Side::Right)->blindCabinet(RowLevel::Base);
     const ComponentId id = base.id();
     const Real door = base.interior().doors().at(0)->box().size().x;
     setBlindFiller(doc, id, 80.0);
-    CHECK(kitchen()->backRun().corner(Side::Right)->baseCabinet().interior().doors().at(0)->box().size().x
+    CHECK(kitchen()->backRun().corner(Side::Right)->blindCabinet(RowLevel::Base)->interior().doors().at(0)->box().size().x
           == Approx(door - 30.0));
     setCabinetWidth(doc, id, 1200.0);
-    CHECK(kitchen()->backRun().corner(Side::Right)->baseCabinet().box().size().x == Approx(1200.0));
+    CHECK(kitchen()->backRun().corner(Side::Right)->blindCabinet(RowLevel::Base)->box().size().x == Approx(1200.0));
     CHECK_THROWS_AS(setCabinetWidth(doc, id, std::nullopt), std::invalid_argument);
     CHECK_THROWS_AS(moveCabinet(doc, id, -1), std::invalid_argument);
     CHECK_THROWS_AS(removeComponent(doc, id), std::logic_error);
@@ -376,7 +376,7 @@ TEST_CASE("Corner kitchens: side walls, corner cabinets, undoable", "[editor][op
     doc.undo();
     REQUIRE(kitchen()->sideRun(Side::Right) != nullptr);
     CHECK(kitchen()->sideRun(Side::Right)->baseRow().cabinets().size() == 2);
-    CHECK(kitchen()->backRun().corner(Side::Right)->baseCabinet().blindFiller() == Approx(80.0));
+    CHECK(kitchen()->backRun().corner(Side::Right)->blindCabinet(RowLevel::Base)->blindFiller() == Approx(80.0));
 
     // A side wall too short for its cabinets is refused.
     const std::string before = rc::storage::saveProduct(doc.product());
@@ -412,4 +412,44 @@ TEST_CASE("Worktop joints: on base cabinets, never through a cut-out", "[editor]
 
     doc.undo();
     CHECK(kitchen()->backRun().worktops().size() == 1);
+}
+
+TEST_CASE("L corners: the corner type, legs and shelves; the folding doors stay as they are",
+          "[editor][operations][lcorner]")
+{
+    Document doc = Document::fromCatalog(CatalogItem::KitchenL);
+    const auto corner = [&doc] { return doc.product().kitchen()->backRun().corner(Side::Right); };
+    REQUIRE(corner()->type() == CornerType::Blind);
+
+    setCornerType(doc, Side::Right, CornerType::LShaped);
+    REQUIRE(corner()->type() == CornerType::LShaped);
+    CHECK(doc.product().kitchen()->sideRun(Side::Right)->baseRow().cabinets().front()->box().min().x
+          == Approx(900.0));
+    CHECK_THROWS_AS(setCornerType(doc, Side::Left, CornerType::LShaped), std::invalid_argument);
+
+    const ComponentId base = corner()->lCabinet(RowLevel::Base)->id();
+    setCornerLegs(doc, base, 1000.0, 900.0);
+    CHECK(corner()->lCabinet(RowLevel::Base)->legAlongBack() == Approx(1000.0));
+    setCornerShelves(doc, base, 2);
+    CHECK(corner()->lCabinet(RowLevel::Base)->shelfCount() == 2);
+    // Legs shorter than the cabinet is deep leave the doors without size.
+    CHECK_THROWS_AS(setCornerLegs(doc, base, 500.0, 900.0), ConstructionError);
+
+    // Its doors fold together and its parts belong to it.
+    const ComponentId door = corner()->lCabinet(RowLevel::Base)->door().id();
+    CHECK_THROWS_AS(setHinge(doc, door, HingeSide::Right), std::logic_error);
+    CHECK_THROWS_AS(removeComponent(doc, door), std::logic_error);
+    CHECK_THROWS_AS(removeComponent(doc, corner()->lCabinet(RowLevel::Base)->shelves()[0]->id()),
+                    std::logic_error);
+    // The handle of the folding door is the user's.
+    const ComponentId fold = corner()->lCabinet(RowLevel::Base)->foldingDoor().id();
+    setHandle(doc, fold, std::nullopt);
+    CHECK_FALSE(corner()->lCabinet(RowLevel::Base)->foldingDoor().handle().has_value());
+
+    // Back to a blind corner, and undone.
+    setCornerType(doc, Side::Right, CornerType::Blind);
+    CHECK(corner()->type() == CornerType::Blind);
+    doc.undo();
+    REQUIRE(corner()->type() == CornerType::LShaped);
+    CHECK(corner()->lCabinet(RowLevel::Base)->shelfCount() == 2);
 }

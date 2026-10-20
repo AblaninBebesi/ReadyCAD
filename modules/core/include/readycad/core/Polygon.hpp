@@ -25,6 +25,10 @@ namespace rc::core {
 /// outline does not cut through itself.
 [[nodiscard]] bool isSimple(const std::vector<Vec2>& polygon, Real tolerance) noexcept;
 
+/// Area of the part of the polygon inside the axis-aligned rectangle lo..hi (the polygon clipped
+/// by the rectangle, Sutherland-Hodgman: right for any simple polygon, the rectangle is convex).
+[[nodiscard]] Real areaInside(const std::vector<Vec2>& polygon, Vec2 lo, Vec2 hi);
+
 /// Smallest distance between the outlines of two polygons (0 if they cross).
 [[nodiscard]] Real outlineDistance(const std::vector<Vec2>& a, const std::vector<Vec2>& b) noexcept;
 

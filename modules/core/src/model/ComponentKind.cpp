@@ -13,6 +13,7 @@ std::string_view toString(ComponentKind kind) noexcept
     case ComponentKind::Kitchen:       return "Kitchen";
     case ComponentKind::KitchenRun:    return "KitchenRun";
     case ComponentKind::KitchenCorner: return "KitchenCorner";
+    case ComponentKind::CornerCabinet: return "CornerCabinet";
     case ComponentKind::CabinetRow:    return "CabinetRow";
     case ComponentKind::SideWall:      return "SideWall";
     case ComponentKind::TopPanel:      return "TopPanel";

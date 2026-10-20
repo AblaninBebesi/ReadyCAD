@@ -47,6 +47,12 @@ Placement Placement::within(const Placement& outer) const noexcept
     return {normalizedTurns(quarterTurns + outer.quarterTurns), outer.point(offset)};
 }
 
+Placement Placement::inverse() const noexcept
+{
+    const Placement back{normalizedTurns(4 - normalizedTurns(quarterTurns)), Vec3(0.0)};
+    return {back.quarterTurns, -back.direction(offset)};
+}
+
 bool Placement::isIdentity() const noexcept
 {
     return normalizedTurns(quarterTurns) == 0 && offset == Vec3(0.0);

@@ -32,6 +32,33 @@ Real signedArea(const std::vector<Vec2>& polygon) noexcept
     return twice / 2.0;
 }
 
+Real areaInside(const std::vector<Vec2>& polygon, Vec2 lo, Vec2 hi)
+{
+    std::vector<Vec2> clipped = polygon;
+    // One half-plane per side of the rectangle: keep what is on its inner side.
+    const auto clip = [&clipped](int axis, Real limit, bool keepAbove) {
+        std::vector<Vec2> out;
+        const auto inside = [&](Vec2 p) { return keepAbove ? p[axis] >= limit : p[axis] <= limit; };
+        for (std::size_t i = 0; i < clipped.size(); ++i) {
+            const Vec2 a = clipped[i];
+            const Vec2 b = clipped[(i + 1) % clipped.size()];
+            if (inside(a)) {
+                out.push_back(a);
+            }
+            if (inside(a) != inside(b)) {
+                const Real t = (limit - a[axis]) / (b[axis] - a[axis]);
+                out.push_back(a + (b - a) * t);
+            }
+        }
+        clipped = std::move(out);
+    };
+    clip(0, lo.x, true);
+    clip(0, hi.x, false);
+    clip(1, lo.y, true);
+    clip(1, hi.y, false);
+    return clipped.size() < 3 ? 0.0 : std::abs(signedArea(clipped));
+}
+
 bool contains(const std::vector<Vec2>& polygon, Vec2 point) noexcept
 {
     bool inside = false;

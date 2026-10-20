@@ -15,7 +15,7 @@ enum class CatalogItem {
     Bookcase,            // open shelving, 2 sections, no doors
     Kitchen,             // straight run: sink, drawers, hob, doors; wall cabinets above
     KitchenL,            // back and right wall, a blind corner; sink at the back, hob at the side
-    KitchenU,            // back wall and both side walls, two blind corners
+    KitchenU,            // back wall and both side walls, two L corner cabinets
 };
 
 /// All catalogue items, in display order.

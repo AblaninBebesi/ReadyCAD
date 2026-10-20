@@ -58,7 +58,14 @@ void PanelComponent::updatePanel(const LayoutSlot& slot)
         const auto& custom = edgeOverrides_[static_cast<std::size_t>(side)];
         panel_->setEdge(side, custom ? *custom : defaultEdge(side, slot));
     }
-    panel_->setShape(shape_, automaticOpenings(slot));
+    std::vector<ShapeFeature> features = automaticShape(slot);
+    features.insert(features.end(), shape_.begin(), shape_.end());
+    panel_->setShape(features, automaticOpenings(slot));
+}
+
+std::vector<ShapeFeature> PanelComponent::automaticShape(const LayoutSlot&) const
+{
+    return {};
 }
 
 } // namespace rc::core

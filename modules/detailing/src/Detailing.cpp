@@ -1,6 +1,7 @@
 #include "readycad/detailing/Detailing.hpp"
 
 #include "readycad/core/model/Carcass.hpp"
+#include "readycad/core/model/CornerCabinet.hpp"
 #include "readycad/core/model/Parts.hpp"
 #include "readycad/detailing/Joints.hpp"
 #include "readycad/detailing/PanelFrame.hpp"
@@ -268,11 +269,12 @@ std::vector<Real> hingeAxes(const core::Aabb& door, Real gridOrigin, const Const
     return axes;
 }
 
-void addHinges(core::Carcass& carcass, const std::vector<PanelComponent*>& walls, Real gridOrigin,
-               const ConstructionRules& r, DetailingReport& report)
+/// Cups in the door, mounting plates on the wall behind its hinge edge.
+void hangDoor(core::Door* door, const std::vector<PanelComponent*>& walls, Real gridOrigin,
+              const ConstructionRules& r, DetailingReport& report)
 {
     const auto& h = r.hinge;
-    for (core::Door* door : core::findAll<core::Door>(carcass)) {
+    {
         const core::Aabb& d = door->box();
         const bool hingeLeft = door->hinge() == core::HingeSide::Left;
         const Real hingeEdge = hingeLeft ? d.min().x : d.max().x;
@@ -289,7 +291,7 @@ void addHinges(core::Carcass& carcass, const std::vector<PanelComponent*>& walls
         }
         if (wall == nullptr) {
             report.warnings.push_back("No wall found behind the hinge edge of a door");
-            continue;
+            return;
         }
 
         const PanelFace cupFace = PanelFrame(*door).faceAt(Axis::Z, false); // inner face
@@ -305,6 +307,91 @@ void addHinges(core::Carcass& carcass, const std::vector<PanelComponent*>& walls
                         h.plateHoleDiameter, h.plateHoleDepth);
             }
         }
+    }
+}
+
+void addHinges(core::Carcass& carcass, const std::vector<PanelComponent*>& walls, Real gridOrigin,
+               const ConstructionRules& r, DetailingReport& report)
+{
+    for (core::Door* door : core::findAll<core::Door>(carcass)) {
+        hangDoor(door, walls, gridOrigin, r, report);
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// L corner cabinets
+// ---------------------------------------------------------------------------------------------
+
+/// Support rows along one axis under a shelf, as supportRows(): the front row 37 mm behind the
+/// wall's front edge (still under the shelf), the rear one whole pitches further back and at
+/// least rearRowMinOffset in front of the shelf's rear edge. `toRear`: +1 or -1, the direction
+/// from the front towards the back on that axis.
+std::vector<Real> rowsAlong(Real wallFront, Real shelfFront, Real shelfRear, Real toRear,
+                            const ConstructionRules& r)
+{
+    const Real pitch = r.system32.pitch;
+    Real front = wallFront + toRear * r.system32.frontRowOffset;
+    while ((front - shelfFront) * toRear < r.shelfSupport.diameter
+           && (shelfRear - (front + toRear * pitch)) * toRear > 0.0) {
+        front += toRear * pitch; // shelf set far back: keep the pin under it
+    }
+    std::vector<Real> rows{front};
+    const Real rearLimit = shelfRear - toRear * r.system32.rearRowMinOffset;
+    const auto steps = static_cast<int>(std::floor((rearLimit - front) * toRear / pitch));
+    if (steps >= 1) {
+        rows.push_back(front + toRear * steps * pitch);
+    }
+    return rows;
+}
+
+/// The L shelf on supports rests on the wall at the end of each leg: two pins in each, under
+/// the shelf's leg there.
+void addCornerShelfSupports(core::CornerCabinet& corner, const ConstructionRules& r)
+{
+    const auto& sr = r.shelfSupport;
+    const bool right = corner.end() == core::Side::Right;
+    const core::Aabb& wall = corner.side().box();
+    const core::Aabb& end = corner.endWall().box();
+    const Real frontZ = wall.max().z;                        // the back leg's front edge
+    const Real frontX = right ? end.min().x : end.max().x; // the side leg's front edge
+    for (core::CornerShelf* shelf : corner.shelves()) {
+        if (shelf->mount() != core::ShelfMount::Supports) {
+            continue;
+        }
+        const core::Aabb& s = shelf->box();
+        const Real holeY = s.min().y - sr.holeBelowShelf;
+        // In the wall at the end of the back leg: rows along Z, the front towards +Z.
+        const Real wallPlane = right ? wall.max().x : wall.min().x;
+        const PanelFace wallFace = PanelFrame(corner.side()).faceAt(Axis::X, right);
+        for (const Real z : rowsAlong(frontZ, frontZ - r.shelfFrontSetback, s.min().z, -1.0, r)) {
+            addHole(corner.side(), wallFace, Vec3(wallPlane, holeY, z), FastenerType::ShelfSupport,
+                    sr.diameter, sr.depth);
+        }
+        // In the end wall of the side leg: rows along X, the front towards the room.
+        const Real toRear = right ? 1.0 : -1.0;
+        const Real shelfRear = right ? s.max().x : s.min().x;
+        const PanelFace endFace = PanelFrame(corner.endWall()).faceAt(Axis::Z, false);
+        for (const Real x : rowsAlong(frontX, frontX + toRear * r.shelfFrontSetback, shelfRear, toRear, r)) {
+            addHole(corner.endWall(), endFace, Vec3(x, holeY, end.min().z), FastenerType::ShelfSupport,
+                    sr.diameter, sr.depth);
+        }
+    }
+}
+
+/// The folding door hangs on the first one: hinge cups at its folding edge, at the heights of
+/// the first door's hinges. (The plates go on the first door's inner face, screwed on by the
+/// fitter with the hinge's template.)
+void addFoldingHinges(core::CornerCabinet& corner, Real gridOrigin, const ConstructionRules& r)
+{
+    const auto& h = r.hinge;
+    core::FoldingDoor& door = corner.foldingDoor();
+    const core::Aabb& d = door.box(); // its own coordinates: an ordinary door
+    const bool foldLeft = door.hinge() == core::HingeSide::Left;
+    const Real cupX = foldLeft ? d.min().x + h.cupEdgeDistance : d.max().x - h.cupEdgeDistance;
+    const PanelFace cupFace = PanelFrame(door).faceAt(Axis::Z, false);
+    for (const Real axis : hingeAxes(d, gridOrigin, r)) {
+        addHole(door, cupFace, Vec3(cupX, axis, d.min().z), FastenerType::Hinge, h.cupDiameter,
+                h.cupDepth);
     }
 }
 
@@ -461,6 +548,19 @@ DetailingReport applyDetailing(core::Product& product)
         addShelfSupports(*carcass, walls, r, report);
         addHinges(*carcass, walls, carcass->system32OriginY(), r, report);
         addBackGrooves(*carcass, r);
+    }
+    // L corner cabinets: joints like a carcass (all their parts but the folding door share the
+    // back run's coordinates), supports in both end walls, the first door on its wall, the
+    // second on the first.
+    for (core::CornerCabinet* corner : core::findAll<core::CornerCabinet>(product)) {
+        const std::vector<Joint> joints = findJoints(*corner);
+        report.joints += static_cast<int>(joints.size());
+        for (const Joint& joint : joints) {
+            addJointFasteners(joint, r, report);
+        }
+        addCornerShelfSupports(*corner, r);
+        hangDoor(&corner->door(), {&corner->side()}, corner->system32OriginY(), r, report);
+        addFoldingHinges(*corner, corner->system32OriginY(), r);
     }
     addHandles(product, r, report);
 

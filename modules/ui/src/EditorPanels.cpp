@@ -440,17 +440,90 @@ bool cornerSizeRow(UiState& s, TextId label, const core::Carcass& cabinet, bool 
     return false;
 }
 
-/// A kitchen corner: the widths and fillers of its two blind corner cabinets.
+/// The legs of an L corner cabinet, under one label: along the back wall and along the side wall.
+bool cornerLegsRow(UiState& s, TextId label, const core::CornerCabinet& cabinet)
+{
+    ed::Document& doc = *s.document;
+    const core::ComponentId id = cabinet.id();
+    PropertyTable::row(tr(label));
+    ImGui::PushID(static_cast<int>(id.value));
+    Real legs[2] = {cabinet.legAlongBack(), cabinet.legAlongSide()};
+    bool changed = false;
+    bool released = false;
+    const float half = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) / 2.0f;
+    for (int i = 0; i < 2; ++i) {
+        if (i == 1) {
+            ImGui::SameLine();
+        }
+        ImGui::SetNextItemWidth(half);
+        ImGui::PushID(i);
+        changed |= dragMm("##leg", legs[i], 300.0, 2000.0);
+        released |= ImGui::IsItemDeactivatedAfterEdit();
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip)) {
+            ImGui::SetTooltip("%s", tr(i == 0 ? TextId::LegAlongBack : TextId::LegAlongSide));
+        }
+        ImGui::PopID();
+    }
+    ImGui::PopID();
+    if (changed) {
+        run(s, [&] { ed::setCornerLegs(doc, id, legs[0], legs[1]); });
+        return true;
+    }
+    if (released) {
+        doc.endMerge();
+    }
+    return false;
+}
+
+/// A kitchen corner: its type; the widths and fillers of its blind cabinets, or the legs of its
+/// L cabinets.
 bool drawCornerRows(UiState& s, const core::KitchenCorner& corner)
 {
+    ed::Document& doc = *s.document;
     PropertyTable table("corner");
     if (!table.isOpen()) {
         return false;
     }
-    return cornerSizeRow(s, TextId::CornerBaseWidth, corner.baseCabinet(), false)
-        || cornerSizeRow(s, TextId::CornerBaseFiller, corner.baseCabinet(), true)
-        || cornerSizeRow(s, TextId::CornerWallWidth, corner.wallCabinet(), false)
-        || cornerSizeRow(s, TextId::CornerWallFiller, corner.wallCabinet(), true);
+    PropertyTable::row(tr(TextId::CornerTypeLabel));
+    int type = corner.type() == core::CornerType::Blind ? 0 : 1;
+    const char* types[] = {tr(TextId::CornerBlind), tr(TextId::CornerLShaped)};
+    if (ImGui::Combo("##type", &type, types, 2)) {
+        const core::Side end = corner.end();
+        const core::CornerType chosen = type == 0 ? core::CornerType::Blind : core::CornerType::LShaped;
+        run(s, [&] { ed::setCornerType(doc, end, chosen); });
+        return true;
+    }
+    if (const core::CornerCabinet* base = corner.lCabinet(core::RowLevel::Base)) {
+        return cornerLegsRow(s, TextId::BaseLegs, *base)
+            || cornerLegsRow(s, TextId::WallLegs, *corner.lCabinet(core::RowLevel::Wall));
+    }
+    const core::Carcass* base = corner.blindCabinet(core::RowLevel::Base);
+    const core::Carcass* wall = corner.blindCabinet(core::RowLevel::Wall);
+    return cornerSizeRow(s, TextId::CornerBaseWidth, *base, false)
+        || cornerSizeRow(s, TextId::CornerBaseFiller, *base, true)
+        || cornerSizeRow(s, TextId::CornerWallWidth, *wall, false)
+        || cornerSizeRow(s, TextId::CornerWallFiller, *wall, true);
+}
+
+/// An L corner cabinet: its legs and its shelves.
+bool drawCornerCabinetRows(UiState& s, const core::CornerCabinet& cabinet)
+{
+    ed::Document& doc = *s.document;
+    PropertyTable table("cornerCabinet");
+    if (!table.isOpen()) {
+        return false;
+    }
+    if (cornerLegsRow(s, TextId::KindCornerCabinet, cabinet)) {
+        return true;
+    }
+    PropertyTable::row(tr(TextId::ShelfCount));
+    int shelves = cabinet.shelfCount();
+    if (ImGui::SliderInt("##shelves", &shelves, 0, core::CornerCabinet::kMaxShelves)) {
+        const core::ComponentId id = cabinet.id();
+        run(s, [&] { ed::setCornerShelves(doc, id, shelves); });
+        return true;
+    }
+    return false;
 }
 
 /// "Add a cabinet": a module of the given row level (both levels if nullopt), its width, and
@@ -1224,7 +1297,13 @@ bool drawEditor(UiState& s, core::FurnitureComponent& c)
     case ComponentKind::Shelf:
         return drawShelfEditor(s, static_cast<core::Shelf&>(c));
     case ComponentKind::Door:
+        // The doors of an L corner cabinet fold together: only their handles change.
+        if (c.parent() != nullptr && c.parent()->kind() == ComponentKind::CornerCabinet) {
+            return drawHandleRows(s, static_cast<core::FrontPanel&>(c));
+        }
         return drawDoorEditor(s, static_cast<core::Door&>(c));
+    case ComponentKind::CornerCabinet:
+        return drawCornerCabinetRows(s, static_cast<core::CornerCabinet&>(c));
     case ComponentKind::DrawerFront:
         return drawHandleRows(s, static_cast<core::FrontPanel&>(c));
     case ComponentKind::DrawerStack:

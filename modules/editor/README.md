@@ -12,4 +12,6 @@ Corner kitchens: `setSideRun`, `addCabinet` to a wall, `setBlindFiller`; corner 
 
 `setWorktopJoint`; `Document::longWorktops()`.
 
+L corners: `setCornerType`, `setCornerLegs`, `setCornerShelves`; the doors of an L cabinet keep their hinges, its parts cannot be removed.
+
 **Stages:** 5, 9, kitchen, shapes, corner kitchens

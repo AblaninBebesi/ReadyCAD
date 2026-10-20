@@ -26,6 +26,8 @@ struct Placement {
     [[nodiscard]] Axis axis(Axis a) const noexcept;
     /// First this placement, then `outer`: coordinates of a frame inside another one.
     [[nodiscard]] Placement within(const Placement& outer) const noexcept;
+    /// From the outer coordinates back into these.
+    [[nodiscard]] Placement inverse() const noexcept;
     [[nodiscard]] bool isIdentity() const noexcept;
 
     friend bool operator==(const Placement&, const Placement&) = default;

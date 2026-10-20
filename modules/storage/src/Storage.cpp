@@ -252,6 +252,53 @@ json writeCarcass(const Carcass& carcass)
     return out;
 }
 
+/// An L corner cabinet's own parts, by their key in the file.
+std::vector<std::pair<std::string, PanelComponent*>> namedParts(const CornerCabinet& cabinet)
+{
+    std::vector<std::pair<std::string, PanelComponent*>> named{
+        {"side", &cabinet.side()},       {"endWall", &cabinet.endWall()},
+        {"bottom", &cabinet.bottom()},   {"top", &cabinet.top()},
+        {"back", &cabinet.back()},       {"endBack", &cabinet.endBack()},
+        {"door", &cabinet.door()},       {"foldingDoor", &cabinet.foldingDoor()}};
+    if (cabinet.plinth() != nullptr) {
+        named.emplace_back("plinth", cabinet.plinth());
+        named.emplace_back("endPlinth", cabinet.endPlinth());
+    }
+    const std::vector<CornerShelf*> shelves = cabinet.shelves();
+    for (std::size_t i = 0; i < shelves.size(); ++i) {
+        named.emplace_back("shelf" + std::to_string(i + 1), shelves[i]);
+    }
+    return named;
+}
+
+json writeCornerCabinet(const CornerCabinet& cabinet)
+{
+    json out;
+    out["legs"] = {cabinet.legAlongBack(), cabinet.legAlongSide()};
+    out["shelves"] = cabinet.shelfCount();
+    json parts;
+    for (const auto& [key, part] : namedParts(cabinet)) {
+        json choices = json::object();
+        writePanelChoices(*part, choices);
+        if (const auto* shelf = dynamic_cast<const Shelf*>(part)) {
+            if (shelf->mount() != ShelfMount::Supports) {
+                choices["mount"] = shelf->mount();
+            }
+            if (shelf->elevation()) {
+                choices["elevation"] = *shelf->elevation();
+            }
+        }
+        if (!choices.empty()) {
+            parts[key] = choices;
+        }
+    }
+    if (!parts.empty()) {
+        out["parts"] = parts;
+    }
+    out["handle"] = writeHandle(cabinet.foldingDoor());
+    return out;
+}
+
 /// The worktop and the rows of a run, into `out`.
 void writeRun(const KitchenRun& run, json& out)
 {
@@ -294,8 +341,18 @@ json writeKitchen(const Kitchen& kitchen)
         const KitchenCorner& corner = *kitchen.backRun().corner(side);
         json sideRun;
         sideRun["length"] = run->length();
-        sideRun["corner"] = {{"base", writeCarcass(corner.baseCabinet())},
-                             {"wall", writeCarcass(corner.wallCabinet())}};
+        json cornerOut;
+        for (const auto& [levelKey, level] : {std::pair{"base", RowLevel::Base}, std::pair{"wall", RowLevel::Wall}}) {
+            if (const Carcass* blind = corner.blindCabinet(level)) {
+                cornerOut[levelKey] = writeCarcass(*blind);
+            } else {
+                cornerOut[levelKey] = writeCornerCabinet(*corner.lCabinet(level));
+            }
+        }
+        if (corner.type() == CornerType::LShaped) {
+            cornerOut["type"] = "L";
+        }
+        sideRun["corner"] = cornerOut;
         writeRun(*run, sideRun);
         out[key] = sideRun;
     }
@@ -435,6 +492,30 @@ void readCarcass(const json& in, Carcass& carcass)
     readSection(in.at("interior"), carcass.interior());
 }
 
+void readCornerCabinet(const json& in, CornerCabinet& cabinet)
+{
+    const auto legs = in.value("legs", std::vector<Real>{});
+    if (legs.size() == 2) {
+        cabinet.setLegs(legs[0], legs[1]);
+    }
+    cabinet.setShelfCount(in.value("shelves", 1));
+    if (in.contains("parts")) {
+        const json& parts = in.at("parts");
+        for (const auto& [key, part] : namedParts(cabinet)) {
+            if (!parts.contains(key)) {
+                continue;
+            }
+            const json& choices = parts.at(key);
+            readPanelChoices(choices, *part);
+            if (auto* shelf = dynamic_cast<Shelf*>(part)) {
+                shelf->setMount(choices.value("mount", ShelfMount::Supports));
+                shelf->setElevation(readOptionalReal(choices, "elevation"));
+            }
+        }
+    }
+    cabinet.foldingDoor().setHandle(readHandle(in));
+}
+
 void readRun(const json& in, KitchenRun& run)
 {
     // Always read: a worktop starts out of the cutting plan, so for it a missing "cutting" key
@@ -468,11 +549,21 @@ void readKitchen(const json& in, Kitchen& kitchen)
         const json& sideRun = in.at(key);
         auto run = std::make_shared<KitchenRun>(side == Side::Left ? KitchenWall::Left : KitchenWall::Right);
         run->setLength(sideRun.at("length").get<Real>());
-        auto base = std::make_shared<Carcass>();
-        auto wall = std::make_shared<Carcass>();
-        readCarcass(sideRun.at("corner").at("base"), *base);
-        readCarcass(sideRun.at("corner").at("wall"), *wall);
-        kitchen.setSideRun(side, run, std::make_shared<KitchenCorner>(side, base, wall));
+        const json& corner = sideRun.at("corner");
+        std::shared_ptr<FurnitureComponent> cabinets[2];
+        for (const auto level : {RowLevel::Base, RowLevel::Wall}) {
+            const json& cabinetIn = corner.at(level == RowLevel::Base ? "base" : "wall");
+            if (corner.value("type", std::string{}) == "L") {
+                auto cabinet = std::make_shared<CornerCabinet>(level, side);
+                readCornerCabinet(cabinetIn, *cabinet);
+                cabinets[level == RowLevel::Base ? 0 : 1] = cabinet;
+            } else {
+                auto carcass = std::make_shared<Carcass>();
+                readCarcass(cabinetIn, *carcass);
+                cabinets[level == RowLevel::Base ? 0 : 1] = carcass;
+            }
+        }
+        kitchen.setSideRun(side, run, std::make_shared<KitchenCorner>(side, cabinets[0], cabinets[1]));
         readRun(sideRun, *run);
     }
 }

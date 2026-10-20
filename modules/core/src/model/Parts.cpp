@@ -29,6 +29,11 @@ Real overlayAmount(JointType joint, Real thickness) noexcept
 
 SideWall::SideWall(Side side) : PanelComponent(Axis::X, Axis::Y), side_(side) {}
 
+SideWall::SideWall(Side side, Axis thicknessAxis, Axis lengthAxis)
+    : PanelComponent(thicknessAxis, lengthAxis), side_(side)
+{
+}
+
 Vec3 SideWall::updateSize(const LayoutSlot& slot)
 {
     const CarcassFrame& f = requireFrame(slot, kind());
@@ -272,14 +277,6 @@ void Shelf::setMount(ShelfMount mount)
     requestLayout();
 }
 
-namespace {
-
-struct ShelfOffsets {
-    Real side;  // per side
-    Real front; // from the front edge of the band
-    Real back;  // from the rear of the band (the back panel)
-};
-
 ShelfOffsets shelfOffsets(ShelfMount mount, const ConstructionRules& r) noexcept
 {
     switch (mount) {
@@ -290,8 +287,6 @@ ShelfOffsets shelfOffsets(ShelfMount mount, const ConstructionRules& r) noexcept
     }
     return {r.shelfSideGap, r.shelfFrontSetback, r.shelfBackGap};
 }
-
-} // namespace
 
 Vec3 Shelf::updateSize(const LayoutSlot& slot)
 {
@@ -570,6 +565,105 @@ EdgeBand Worktop::defaultEdge(EdgeSide side, const LayoutSlot& slot) const
                      || (k != nullptr && side == EdgeSide::W2 && k->endClosed);
     return closed ? EdgeBand{} : slot.r().visibleEdge;
 }
+
+// ---------------------------------------------------------------------------------------------
+// Parts of an L corner cabinet
+// ---------------------------------------------------------------------------------------------
+
+EndWall::EndWall(Side side) : SideWall(side, Axis::Z, Axis::Y) {}
+
+Vec3 EndWall::updateSize(const LayoutSlot& slot)
+{
+    return slot.box.size();
+}
+
+Vec3 EndWall::updatePosition(const LayoutSlot& slot, const Vec3&)
+{
+    return slot.box.min();
+}
+
+EdgeBand EndWall::defaultEdge(EdgeSide edge, const LayoutSlot& slot) const
+{
+    // Width axis is X: the front edge looks into the room — towards X min at a right corner
+    // (the end wall's hand is right), towards X max at a left one.
+    const EdgeSide front = side() == Side::Right ? EdgeSide::L1 : EdgeSide::L2;
+    return edge == front ? slot.r().visibleEdge : EdgeBand{};
+}
+
+std::vector<ShapeFeature> LShapedPart::notchFeature() const
+{
+    if (!notch_) {
+        return {};
+    }
+    return {*notch_};
+}
+
+CornerShelf::CornerShelf() : Shelf(std::nullopt, ShelfMount::Supports) {}
+
+Vec3 CornerShelf::updateSize(const LayoutSlot& slot)
+{
+    return slot.box.size();
+}
+
+Vec3 CornerShelf::updatePosition(const LayoutSlot& slot, const Vec3&)
+{
+    return slot.box.min();
+}
+
+std::vector<ShapeFeature> CornerShelf::automaticShape(const LayoutSlot&) const
+{
+    return notchFeature();
+}
+
+EdgeBand CornerShelf::defaultEdge(EdgeSide, const LayoutSlot&) const
+{
+    return {}; // the edges seen are the notch's
+}
+
+CornerPanel::CornerPanel(Role role, Axis thicknessAxis, Axis lengthAxis)
+    : PanelComponent(thicknessAxis, lengthAxis), role_(role)
+{
+}
+
+ComponentKind CornerPanel::kind() const noexcept
+{
+    switch (role_) {
+    case Role::Bottom: return ComponentKind::BottomPanel;
+    case Role::Top:    return ComponentKind::TopPanel;
+    case Role::Back:   return ComponentKind::BackPanel;
+    case Role::Plinth: break;
+    }
+    return ComponentKind::Plinth;
+}
+
+Vec3 CornerPanel::updateSize(const LayoutSlot& slot)
+{
+    return slot.box.size();
+}
+
+Vec3 CornerPanel::updatePosition(const LayoutSlot& slot, const Vec3&)
+{
+    return slot.box.min();
+}
+
+std::vector<ShapeFeature> CornerPanel::automaticShape(const LayoutSlot&) const
+{
+    return notchFeature();
+}
+
+const Material& CornerPanel::defaultMaterial(const ConstructionRules& r) const
+{
+    return role_ == Role::Back ? r.backMaterial : r.carcassMaterial;
+}
+
+EdgeBand CornerPanel::defaultEdge(EdgeSide side, const LayoutSlot& slot) const
+{
+    // A plinth's width axis is Y: L1 stands on the floor. The bottom and the top show only
+    // their notch, the back nothing.
+    return role_ == Role::Plinth && side == EdgeSide::L1 ? slot.r().hiddenEdge : EdgeBand{};
+}
+
+FoldingDoor::FoldingDoor(HingeSide fold) : Door(fold) {}
 
 // ---------------------------------------------------------------------------------------------
 // BlindPanel

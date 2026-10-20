@@ -71,8 +71,12 @@ std::shared_ptr<Carcass> makeCabinet(CabinetModule module, std::optional<Real> w
     return cabinet;
 }
 
-std::shared_ptr<KitchenCorner> makeCorner(Side end, Real filler)
+std::shared_ptr<KitchenCorner> makeCorner(Side end, CornerType type, Real filler)
 {
+    if (type == CornerType::LShaped) {
+        return std::make_shared<KitchenCorner>(end, std::make_shared<CornerCabinet>(RowLevel::Base, end),
+                                               std::make_shared<CornerCabinet>(RowLevel::Wall, end));
+    }
     // One door: what shows of a blind corner cabinet is about as wide as an ordinary one-door
     // cabinet. Hinged away from the corner, where its wall is.
     const HingeSide hinge = end == Side::Right ? HingeSide::Left : HingeSide::Right;
@@ -129,9 +133,10 @@ KitchenBuilder& KitchenBuilder::add(CabinetModule module, std::optional<Real> wi
     return *this;
 }
 
-KitchenBuilder& KitchenBuilder::sideWall(Side side, Real length)
+KitchenBuilder& KitchenBuilder::sideWall(Side side, Real length, CornerType corner)
 {
     sideLengths_[side == Side::Left ? 0 : 1] = length;
+    corners_[side == Side::Left ? 0 : 1] = corner;
     return *this;
 }
 
@@ -146,7 +151,7 @@ std::shared_ptr<Product> KitchenBuilder::build() const
             auto run = std::make_shared<KitchenRun>(side == Side::Left ? KitchenWall::Left
                                                                        : KitchenWall::Right);
             run->setLength(*length); // throws for <= 0
-            kitchen->setSideRun(side, std::move(run), makeCorner(side));
+            kitchen->setSideRun(side, std::move(run), makeCorner(side, corners_[side == Side::Left ? 0 : 1]));
         }
     }
     for (const Module& m : modules_) {
@@ -170,8 +175,12 @@ std::shared_ptr<Product> KitchenBuilder::build() const
                 }
             }
         } else {
-            available[0] -= depth_ + rules_.frontMaterial.thickness;
-            available[1] -= sizes_.wallDepth + rules_.frontMaterial.thickness;
+            const KitchenCorner& c = *kitchen->backRun().corner(run->wall() == KitchenWall::Left ? Side::Left
+                                                                                                : Side::Right);
+            const CornerCabinet* base = c.lCabinet(RowLevel::Base);
+            available[0] -= base != nullptr ? base->legAlongSide() : depth_ + rules_.frontMaterial.thickness;
+            available[1] -= base != nullptr ? c.lCabinet(RowLevel::Wall)->legAlongSide()
+                                            : sizes_.wallDepth + rules_.frontMaterial.thickness;
         }
         Real fixed[2] = {0.0, 0.0};
         int automatic[2] = {0, 0};

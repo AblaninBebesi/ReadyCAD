@@ -17,6 +17,7 @@ rc_add_module(core
         src/model/BackMount.cpp
         src/model/Carcass.cpp
         src/model/ComponentKind.cpp
+        src/model/CornerCabinet.cpp
         src/model/Drawer.cpp
         src/model/FurnitureComponent.cpp
         src/model/Kitchen.cpp

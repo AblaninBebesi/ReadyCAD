@@ -20,7 +20,9 @@ struct Overlap {
 };
 
 /// Pairs of panels whose volumes intersect (touching is fine), except legitimate cases such as
-/// a back panel sitting in its groove. An empty result means the assembly is collision-free.
+/// a back panel sitting in its groove. A shaped panel (a notch, an L) has material only inside
+/// its outline: a part standing in its notch does not collide with it. An empty result means
+/// the assembly is collision-free.
 [[nodiscard]] std::vector<Overlap> findOverlaps(const FurnitureComponent& root,
                                                 Real tolerance = kEpsilon);
 

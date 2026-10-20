@@ -6,6 +6,7 @@
 #include "readycad/core/builders/WardrobeBuilder.hpp"
 #include "readycad/core/Decor.hpp"
 #include "readycad/core/model/Kitchen.hpp"
+#include "readycad/core/model/CornerCabinet.hpp"
 #include "readycad/core/model/Drawer.hpp"
 #include "readycad/core/model/Queries.hpp"
 #include "readycad/storage/Storage.hpp"
@@ -347,4 +348,35 @@ TEST_CASE("Worktop joints and the pieces' own choices survive save and load",
     CHECK_FALSE(l.backRun().worktops()[0]->inCuttingPlan());
     CHECK(l.sideRun(Side::Left)->worktops().size() == 2);
     CHECK(l.baseRow().cabinets().front()->worktopJoint());
+}
+
+TEST_CASE("L corner cabinets survive save and load with their own choices",
+          "[storage][project][kitchen][lcorner]")
+{
+    const auto kitchen = createProduct(CatalogItem::KitchenU);
+    Kitchen& k = *kitchen->kitchen();
+    CornerCabinet& l = *k.backRun().corner(Side::Right)->lCabinet(RowLevel::Base);
+    l.setLegs(950.0, 920.0);
+    l.setShelfCount(2);
+    l.shelves()[1]->setMount(ShelfMount::Confirmat);
+    l.shelves()[0]->setElevation(250.0);
+    l.endWall().setName("Köşe yanı");
+    HandlePlacement handle = *l.foldingDoor().handle();
+    handle.edgeOffset = 55.0;
+    l.foldingDoor().setHandle(handle);
+
+    const std::string saved = saveProduct(*kitchen);
+    const auto loaded = loadProduct(saved);
+    CHECK(saveProduct(*loaded) == saved);
+    const KitchenCorner& corner = *loaded->kitchen()->backRun().corner(Side::Right);
+    REQUIRE(corner.type() == CornerType::LShaped);
+    const CornerCabinet& r = *corner.lCabinet(RowLevel::Base);
+    CHECK(r.legAlongBack() == 950.0);
+    CHECK(r.legAlongSide() == 920.0);
+    REQUIRE(r.shelfCount() == 2);
+    CHECK(r.shelves()[1]->mount() == ShelfMount::Confirmat);
+    CHECK(r.shelves()[0]->elevation() == 250.0);
+    CHECK(r.endWall().name() == "Köşe yanı");
+    CHECK(r.foldingDoor().handle()->edgeOffset == 55.0);
+    CHECK(loaded->kitchen()->backRun().corner(Side::Left)->type() == CornerType::LShaped);
 }

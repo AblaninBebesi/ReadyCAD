@@ -17,4 +17,6 @@ Corner kitchens: project format 5 — side runs under `"left"` / `"right"` with 
 
 `worktopJoint` of a carcass, `worktopPieces` (choices of the pieces after the first).
 
+L corners: `"type": "L"` of a corner, legs, shelves, part choices and the folding door's handle of an L cabinet.
+
 **Stages:** 5, 7, 8, 9, kitchen, shapes, corner kitchens

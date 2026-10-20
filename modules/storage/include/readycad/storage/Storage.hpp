@@ -22,7 +22,7 @@ public:
 
 /// 2: kitchens (a run of cabinets with rails, plinths and a worktop). 3: shapes of parts
 /// (notches, shaped corners, openings). 4: decors of materials. 5: corner kitchens (runs on the
-/// side walls, blind corner cabinets). Older files still load.
+/// side walls, blind and L corner cabinets). Older files still load.
 inline constexpr int kProjectFormatVersion = 5;
 /// 2: decors.
 inline constexpr int kProfileFormatVersion = 2;

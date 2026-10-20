@@ -96,13 +96,15 @@ std::shared_ptr<Product> createProduct(CatalogItem item, const ConstructionRules
             .build();
 
     case CatalogItem::KitchenU:
-        // 3.2 m between two side walls of 2 m: the sink in the middle of the back wall, the
-        // drawers at the left, the hob at the right.
+        // 3.2 m between two side walls of 2 m, L corner cabinets with folding doors in both
+        // corners: the sink in the middle of the back wall, the drawers at the left, the hob at
+        // the right (its cut-out clear of the worktop's joint at the corner).
         return KitchenBuilder()
             .rules(rules)
             .length(3200)
-            .sideWall(Side::Left, 2000)
-            .sideWall(Side::Right, 2000)
+            .sideWall(Side::Left, 2000, CornerType::LShaped)
+            .sideWall(Side::Right, 2000, CornerType::LShaped)
+            .add(CabinetModule::BaseDoors, 400)
             .add(CabinetModule::Sink, 600)
             .add(CabinetModule::BaseDoors)
             .add(CabinetModule::WallDoors)
@@ -111,7 +113,6 @@ std::shared_ptr<Product> createProduct(CatalogItem item, const ConstructionRules
             .add(CabinetModule::BaseDrawers, 600, KitchenWall::Left)
             .add(CabinetModule::WallDoors, std::nullopt, KitchenWall::Left)
             .add(CabinetModule::WallDoors, std::nullopt, KitchenWall::Left)
-            .add(CabinetModule::BaseDrawers, 400, KitchenWall::Right)
             .add(CabinetModule::Hob, 600, KitchenWall::Right)
             .add(CabinetModule::BaseDoors, std::nullopt, KitchenWall::Right)
             .add(CabinetModule::WallDoors, std::nullopt, KitchenWall::Right)

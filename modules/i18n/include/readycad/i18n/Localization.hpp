@@ -116,6 +116,9 @@ enum class TextId : std::size_t {
     RunLeft, RunRight, CornerLeft, CornerRight, BlindBaseCabinet, BlindWallCabinet,
     BackWallLength, Filler, CornerBaseWidth, CornerBaseFiller, CornerWallWidth, CornerWallFiller,
     PagePlan, ViewPlan, WorktopJoint, LongWorktopWarning, WorktopMaxLength,
+    // L corner cabinets
+    KindCornerCabinet, KindFoldingDoor, LBaseCabinet, LWallCabinet, CornerTypeLabel, CornerBlind,
+    CornerLShaped, LegAlongBack, LegAlongSide, BaseLegs, WallLegs, HwFoldingHinge,
     // Shapes: notches, shaped corners, openings of any part
     ShapeDoesNotFit, MachiningInCut, ShapeWarning, ShapeHeader, ShapeAdd, ShapeCornerNotch,
     ShapeEdgeNotch, ShapeCornerRound, ShapeChamfer, ShapeInnerCutout, ShapeRoundHole,

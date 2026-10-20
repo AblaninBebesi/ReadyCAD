@@ -57,6 +57,9 @@ protected:
     /// Openings the part gets from where it stands (a worktop: the sink and the hob of the
     /// cabinets below). Default: none.
     [[nodiscard]] virtual std::vector<PanelCutout> automaticOpenings(const LayoutSlot& slot) const;
+    /// Shape features the part has by construction, before the user's own (the notch of an
+    /// L-shaped panel of a corner cabinet). Default: none.
+    [[nodiscard]] virtual std::vector<ShapeFeature> automaticShape(const LayoutSlot& slot) const;
 
     void updatePanel(const LayoutSlot& slot) override;
 

@@ -39,10 +39,13 @@ enum class CabinetModule {
 /// the other wall's fronts — room for the handles of both when the doors open.
 inline constexpr Real kCornerFiller = 50.0;
 
-/// The corner where a side run meets the back run, at the back run's `end`: blind corner
-/// cabinets, a base one (KitchenCorner::kBaseWidth wide, a door and a shelf, like a base
-/// cabinet) and a wall one (kWallWidth), their doors hinged on the side away from the corner.
-[[nodiscard]] std::shared_ptr<KitchenCorner> makeCorner(Side end, Real filler = kCornerFiller);
+/// The corner where a side run meets the back run, at the back run's `end`:
+///  * Blind: blind corner cabinets, a base one (KitchenCorner::kBaseWidth wide, a door and a
+///    shelf, like a base cabinet) and a wall one (kWallWidth), their doors hinged on the side
+///    away from the corner, `filler` showing between the door and the side run;
+///  * LShaped: L corner cabinets, 900 x 900 below, 600 x 600 above, one shelf each.
+[[nodiscard]] std::shared_ptr<KitchenCorner> makeCorner(Side end, CornerType type = CornerType::Blind,
+                                                        Real filler = kCornerFiller);
 
 /// Builder of a straight kitchen run:
 ///
@@ -73,8 +76,8 @@ public:
     KitchenBuilder& sizes(const Kitchen::Sizes& sizes);
     KitchenBuilder& add(CabinetModule module, std::optional<Real> width = std::nullopt,
                         KitchenWall wall = KitchenWall::Back);
-    /// A run on a side wall, `length` mm along it from the back wall.
-    KitchenBuilder& sideWall(Side side, Real length);
+    /// A run on a side wall, `length` mm along it from the back wall, and its corner.
+    KitchenBuilder& sideWall(Side side, Real length, CornerType corner = CornerType::Blind);
 
     /// Throws std::invalid_argument for a run without a base cabinet (nothing to carry its
     /// worktop), modules for a wall without a run, or sizes <= 0.
@@ -94,6 +97,7 @@ private:
     Real depth_ = 560.0;
     Kitchen::Sizes sizes_;
     std::optional<Real> sideLengths_[2]; // left, right
+    CornerType corners_[2] = {CornerType::Blind, CornerType::Blind};
     std::vector<Module> modules_;
 };
 

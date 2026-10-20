@@ -16,4 +16,6 @@ Corner kitchens: `Placement` (quarter turns about Y); `FurnitureComponent::place
 
 Worktop joints: `Carcass::worktopJoint`, `KitchenRun::worktops()` (pieces split at the joints), `Kitchen::longWorktops()`, `rules.kitchen.worktopMaxLength`.
 
+L corner cabinets: `CornerCabinet` (legs, L-shaped bottom/top/shelves via an automatic `CornerNotch`, `EndWall`, `CornerPanel`, `CornerShelf`, `FoldingDoor` with its own placement), `CornerType`, `Kitchen::setCorner`; `PanelComponent::automaticShape()`; collisions follow the outline of shaped panels (`areaInside`, `Placement::inverse`).
+
 **Stages:** 1 (math), 2 (component tree), 3 (parametrics), 9 (per-part thickness, cutting plan flag), kitchen, shapes, decors, corner kitchens

@@ -218,8 +218,14 @@ TEST_CASE("Every catalogue item is collision-free, also after resizing",
     // product); a worktop may reach over the base fronts.
     for (const FurnitureComponent* part : collectPanels(*product)) {
         const FurnitureComponent* frame = part->parent();
-        while (frame->kind() != ComponentKind::KitchenRun && frame->kind() != ComponentKind::Product) {
+        while (frame->kind() != ComponentKind::KitchenRun && frame->kind() != ComponentKind::Product
+               && frame->kind() != ComponentKind::CornerCabinet) {
             frame = frame->parent();
+        }
+        if (frame->kind() == ComponentKind::CornerCabinet) {
+            // An L corner cabinet: every part of it, its doors too, inside its L's bounding box.
+            CHECK(frame->productBox().contains(part->productBox()));
+            continue;
         }
         const bool isFront = part->kind() == ComponentKind::Door
                           || part->kind() == ComponentKind::DrawerFront

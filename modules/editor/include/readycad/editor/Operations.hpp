@@ -53,6 +53,13 @@ void setCutout(Document& doc, core::ComponentId cabinet,
                std::optional<core::WorktopCutout> cutout);
 /// The filler of a blind corner cabinet (Carcass::setBlindCorner).
 void setBlindFiller(Document& doc, core::ComponentId cabinet, core::Real filler);
+/// How the corner at an end of the back run is closed: blind corner cabinets or L corner
+/// cabinets — new ones of the type, with their defaults; the side run stays.
+void setCornerType(Document& doc, core::Side end, core::CornerType type);
+/// The legs of an L corner cabinet: along the back wall and along the side wall.
+void setCornerLegs(Document& doc, core::ComponentId cabinet, core::Real alongBack, core::Real alongSide);
+/// The shelves of an L corner cabinet.
+void setCornerShelves(Document& doc, core::ComponentId cabinet, int count);
 /// A joint of the worktop at the right side of a base cabinet of a row (Carcass::worktopJoint).
 /// A joint through a sink or a hob cut-out is refused like any cut-out without worktop around it.
 void setWorktopJoint(Document& doc, core::ComponentId cabinet, bool joint);

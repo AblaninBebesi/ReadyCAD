@@ -18,4 +18,6 @@ Shapes: real outlines and blanks of shaped parts, band marks along the banded si
 
 Corner kitchens: views of any subtree (a kitchen run in its own coordinates), `ProductView::Plan` (worktops, joints, cut-outs, wall lengths); the PDF of a corner kitchen has a plan page and an assembly page per wall.
 
+L corners: views draw every part in the coordinates of the drawn run (a folding door has its own); the handle of a front seen edge-on is left out.
+
 **Stages:** 6, 7, 9, kitchen, shapes, corner kitchens

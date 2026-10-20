@@ -37,8 +37,14 @@ std::vector<HardwareItem> hardwareList(const core::Product& product)
     int dowels = 0;
     int eccentrics = 0;
     int hingeCups = 0;
+    int foldingCups = 0;
     for (const core::FurnitureComponent* part : core::collectPanels(product)) {
+        const bool folding = dynamic_cast<const core::FoldingDoor*>(part) != nullptr;
         for (const core::Drilling& d : part->panel()->drillings()) {
+            if (folding) {
+                foldingCups += d.fastener == FastenerType::Hinge ? 1 : 0;
+                continue;
+            }
             const bool edge = !d.isFaceHole();
             confirmats += edge && d.fastener == FastenerType::Confirmat ? 1 : 0;
             dowels += edge && d.fastener == FastenerType::Dowel ? 1 : 0;
@@ -69,6 +75,7 @@ std::vector<HardwareItem> hardwareList(const core::Product& product)
     add(HardwareKind::Eccentric, "Ø" + number(rules.eccentric.camDiameter), eccentrics);
     add(HardwareKind::ShelfSupport, "Ø" + number(rules.shelfSupport.diameter), supports);
     add(HardwareKind::Hinge, "Ø" + number(rules.hinge.cupDiameter), hingeCups);
+    add(HardwareKind::FoldingHinge, "Ø" + number(rules.hinge.cupDiameter), foldingCups);
 
     // Handles per model, in catalogue order.
     std::map<std::string, int> handles;
@@ -102,7 +109,19 @@ std::vector<HardwareItem> hardwareList(const core::Product& product)
             legs += 2 * (2 + static_cast<int>(std::max(0.0, width - 1.0) / 1000.0));
         }
         const auto* row = dynamic_cast<const core::CabinetRow*>(carcass->parent());
-        if (row != nullptr && row->level() == core::RowLevel::Wall) {
+        const auto* corner = dynamic_cast<const core::KitchenCorner*>(carcass->parent());
+        const bool wall = (row != nullptr && row->level() == core::RowLevel::Wall)
+                       || (corner != nullptr && corner->blindCabinet(core::RowLevel::Wall) == carcass);
+        if (wall) {
+            hangers += 2;
+        }
+    }
+    // An L corner cabinet: six legs under its two legs (both ends, the inner corner, the back
+    // corner), two hangers above.
+    for (const core::CornerCabinet* corner : core::findAll<core::CornerCabinet>(product)) {
+        if (corner->plinth() != nullptr) {
+            legs += 6;
+        } else {
             hangers += 2;
         }
     }

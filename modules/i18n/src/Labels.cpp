@@ -18,6 +18,7 @@ TextId kindText(ComponentKind kind) noexcept
     case ComponentKind::Kitchen:       return TextId::KindKitchen;
     case ComponentKind::KitchenRun:    return TextId::KindKitchenRun;
     case ComponentKind::KitchenCorner: return TextId::KindKitchenCorner;
+    case ComponentKind::CornerCabinet: return TextId::KindCornerCabinet;
     case ComponentKind::CabinetRow:    return TextId::KindCabinetRow;
     case ComponentKind::SideWall:      return TextId::KindSideWall;
     case ComponentKind::TopPanel:      return TextId::KindTopPanel;
@@ -91,6 +92,7 @@ TextId hardwareText(core::HardwareKind kind) noexcept
     case core::HardwareKind::Leg:          return TextId::HwLeg;
     case core::HardwareKind::PlinthClip:   return TextId::HwPlinthClip;
     case core::HardwareKind::Hanger:       return TextId::HwHanger;
+    case core::HardwareKind::FoldingHinge: return TextId::HwFoldingHinge;
     }
     return TextId::HwConfirmat;
 }
@@ -118,9 +120,18 @@ TextId treeText(const core::FurnitureComponent& component) noexcept
         return static_cast<const core::CabinetRow&>(component).level() == core::RowLevel::Base
                    ? TextId::BaseCabinets
                    : TextId::WallCabinets;
+    case ComponentKind::CornerCabinet:
+        return static_cast<const core::CornerCabinet&>(component).level() == core::RowLevel::Base
+                   ? TextId::LBaseCabinet
+                   : TextId::LWallCabinet;
+    case ComponentKind::Door:
+        if (dynamic_cast<const core::FoldingDoor*>(&component) != nullptr) {
+            return TextId::KindFoldingDoor;
+        }
+        break;
     case ComponentKind::Carcass:
         if (parent != nullptr && parent->kind() == ComponentKind::KitchenCorner) {
-            return &static_cast<const core::KitchenCorner*>(parent)->baseCabinet() == &component
+            return &static_cast<const core::KitchenCorner*>(parent)->cabinet(core::RowLevel::Base) == &component
                        ? TextId::BlindBaseCabinet
                        : TextId::BlindWallCabinet;
         }

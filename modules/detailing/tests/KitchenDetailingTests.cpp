@@ -7,6 +7,7 @@
 #include "readycad/detailing/Detailing.hpp"
 #include "readycad/detailing/HardwareList.hpp"
 #include "readycad/detailing/Joints.hpp"
+#include "readycad/detailing/ShapeCheck.hpp"
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -124,4 +125,53 @@ TEST_CASE("The worktop is one cut list row with its cut-outs, out of the cutting
         }
     }
     CHECK(worktops == 1);
+}
+
+TEST_CASE("An L corner cabinet is drilled: joints, supports at both ends, hinges and folding hinges",
+          "[detailing][kitchen][lcorner]")
+{
+    const auto product = KitchenBuilder()
+                             .length(3000)
+                             .sideWall(Side::Right, 2400, CornerType::LShaped)
+                             .add(CabinetModule::BaseDoors)
+                             .add(CabinetModule::WallDoors)
+                             .add(CabinetModule::BaseDoors, std::nullopt, KitchenWall::Right)
+                             .add(CabinetModule::WallDoors, std::nullopt, KitchenWall::Right)
+                             .build();
+    const DetailingReport report = applyDetailing(*product);
+    CHECK(report.warnings.empty());
+    CHECK(findShapeConflicts(*product).empty()); // nothing drilled into the notch
+
+    const CornerCabinet& l = *product->kitchen()->backRun().corner(Side::Right)->lCabinet(RowLevel::Base);
+    // Both walls are screwed to the bottom and the top (the walls stand on the bottom, the top
+    // between them).
+    CHECK(count(*l.side().panel(), FastenerType::Confirmat) >= 4);
+    CHECK(count(*l.endWall().panel(), FastenerType::Confirmat) >= 4);
+    CHECK(count(*l.bottom().panel(), FastenerType::Confirmat) >= 4);
+    CHECK(count(*l.top().panel(), FastenerType::Confirmat) >= 4);
+    // The shelf rests on two pins in each end wall.
+    CHECK(count(*l.side().panel(), FastenerType::ShelfSupport) == 2);
+    CHECK(count(*l.endWall().panel(), FastenerType::ShelfSupport) == 2);
+    // The first door on the back leg's wall: cups and plates; the second on the first: cups.
+    CHECK(count(*l.door().panel(), FastenerType::Hinge) == 2);
+    CHECK(count(*l.side().panel(), FastenerType::Hinge) == 4);
+    CHECK(count(*l.foldingDoor().panel(), FastenerType::Hinge) == 2);
+    CHECK(count(*l.foldingDoor().panel(), FastenerType::Handle) == 2);
+    CHECK(count(*l.door().panel(), FastenerType::Handle) == 0);
+    // The backs are nailed on: no grooves.
+    CHECK(l.back().panel()->grooves().empty());
+
+    const auto list = hardwareList(*product);
+    CHECK(quantityOf(list, HardwareKind::FoldingHinge) == 2 + 2); // base and wall corner
+    // The back run's cabinet 2100 wide (8 legs), the side run's 1500 (6), the L cabinet's 6.
+    CHECK(quantityOf(list, HardwareKind::Leg) == 8 + 6 + 6);
+    CHECK(quantityOf(list, HardwareKind::Hanger) == 2 + 2 + 2);
+}
+
+TEST_CASE("A blind wall corner cabinet hangs on hangers too", "[detailing][kitchen][hardware]")
+{
+    const auto product = createProduct(CatalogItem::KitchenL);
+    applyDetailing(*product);
+    // Wall cabinets: three on the back wall, two on the side wall, the blind corner one.
+    CHECK(quantityOf(hardwareList(*product), HardwareKind::Hanger) == (3 + 2 + 1) * 2);
 }

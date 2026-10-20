@@ -1,6 +1,7 @@
 #pragma once
 
 #include "readycad/core/model/Carcass.hpp"
+#include "readycad/core/model/CornerCabinet.hpp"
 #include "readycad/core/model/FurnitureComponent.hpp"
 #include "readycad/core/model/Parts.hpp"
 
@@ -8,11 +9,6 @@
 #include <vector>
 
 namespace rc::core {
-
-enum class RowLevel {
-    Base, // alt dolaplar: on the floor, under the worktop
-    Wall, // üst dolaplar: hung on the wall
-};
 
 /// Dolap dizisi: cabinets (carcasses) side by side, left to right — the columns of a kitchen
 /// run. Widths work like the columns of a Section: a cabinet with a fixed width keeps it, the
@@ -42,13 +38,20 @@ private:
 /// too in an L kitchen (Г-образная), both in a U kitchen (П-образная).
 enum class KitchenWall { Back, Left, Right };
 
+/// How a kitchen corner is closed.
+enum class CornerType {
+    Blind,   ///< kör köşe: an ordinary cabinet running on behind the side run, a blind panel
+    LShaped, ///< L köşe: an L-shaped cabinet with a folding door (CornerCabinet)
+};
+
 /// Köşe: where the back wall's run meets a side wall's run, at an end of the back run. Its
 /// cabinets belong to the back run — its coordinates — and stand at that end; the side run
 /// starts in front of them.
 ///
 /// Blind corner (kör köşe): the cabinets are ordinary ones (Carcass::setBlindCorner) as wide as
 /// their fixedWidth, whose end runs on behind the side run's cabinets; a blind panel closes
-/// that part of their fronts.
+/// that part of their fronts. L corner: CornerCabinet, its back leg in the back run, its side
+/// leg along the side wall.
 ///
 ///      back wall                     side wall (right)
 ///     ─────────────────────────────┐
@@ -59,21 +62,32 @@ enum class KitchenWall { Back, Left, Right };
 class KitchenCorner final : public FurnitureComponent {
 public:
     /// `end`: the end of the back run it stands at. The cabinets come ready made
-    /// (makeCorner() in KitchenBuilder.hpp); throws std::invalid_argument for null.
-    KitchenCorner(Side end, std::shared_ptr<Carcass> base, std::shared_ptr<Carcass> wall);
+    /// (makeCorner() in KitchenBuilder.hpp): two blind carcasses or two L-shaped cabinets of
+    /// that end. Throws std::invalid_argument for anything else.
+    KitchenCorner(Side end, std::shared_ptr<FurnitureComponent> base,
+                  std::shared_ptr<FurnitureComponent> wall);
     [[nodiscard]] ComponentKind kind() const noexcept override
     {
         return ComponentKind::KitchenCorner;
     }
     [[nodiscard]] Side end() const noexcept { return end_; }
+    [[nodiscard]] CornerType type() const noexcept { return type_; }
 
-    [[nodiscard]] Carcass& baseCabinet() const noexcept { return *base_; }
-    [[nodiscard]] Carcass& wallCabinet() const noexcept { return *wall_; }
-    /// What the corner takes of the back run, base and wall: its cabinets' widths.
-    [[nodiscard]] Real baseWidth() const noexcept;
-    [[nodiscard]] Real wallWidth() const noexcept;
+    [[nodiscard]] FurnitureComponent& cabinet(RowLevel level) const noexcept
+    {
+        return level == RowLevel::Base ? *base_ : *wall_;
+    }
+    /// The cabinet as what it is; nullptr for the other type.
+    [[nodiscard]] Carcass* blindCabinet(RowLevel level) const noexcept;
+    [[nodiscard]] CornerCabinet* lCabinet(RowLevel level) const noexcept;
 
-    static constexpr Real kBaseWidth = 1100.0; // without a fixed width
+    /// What the corner takes of the back run: a blind cabinet's width, an L cabinet's leg along
+    /// the back wall.
+    [[nodiscard]] Real width(RowLevel level) const noexcept;
+    [[nodiscard]] Real baseWidth() const noexcept { return width(RowLevel::Base); }
+    [[nodiscard]] Real wallWidth() const noexcept { return width(RowLevel::Wall); }
+
+    static constexpr Real kBaseWidth = 1100.0; // a blind cabinet without a fixed width
     static constexpr Real kWallWidth = 800.0;
 
 protected:
@@ -81,8 +95,9 @@ protected:
 
 private:
     Side end_;
-    std::shared_ptr<Carcass> base_;
-    std::shared_ptr<Carcass> wall_;
+    CornerType type_;
+    std::shared_ptr<FurnitureComponent> base_;
+    std::shared_ptr<FurnitureComponent> wall_;
     CornerFrame baseFrame_; // rebuilt on every layout
     CornerFrame wallFrame_;
 };
@@ -116,7 +131,7 @@ public:
     void updateWorktops();
     /// The corner at an end of the back run; nullptr without a side run there.
     [[nodiscard]] KitchenCorner* corner(Side end) const noexcept;
-    /// Every cabinet of the run, base and wall, the corners' included.
+    /// Every carcass of the run, base and wall, a blind corner's included.
     [[nodiscard]] std::vector<Carcass*> cabinets() const;
 
     /// A side run's length along its wall: from the room's front to the back wall. (The back
@@ -142,6 +157,8 @@ private:
 
     /// Base cabinets at whose right side the worktop has a joint.
     [[nodiscard]] std::vector<const Carcass*> jointCabinets() const;
+    /// Position of a child among the children.
+    [[nodiscard]] std::size_t indexOf(const FurnitureComponent& child) const noexcept;
 
     KitchenWall wall_;
     Real length_ = 1800.0;
@@ -198,6 +215,9 @@ public:
     /// was there), or takes both away (nullptr, nullptr). Throws std::invalid_argument for a
     /// run of another wall, a corner of the other end, or only one of the two.
     void setSideRun(Side side, std::shared_ptr<KitchenRun> run, std::shared_ptr<KitchenCorner> corner);
+    /// Replaces the corner at an end of the back run (another type), keeping the side run.
+    /// Throws std::invalid_argument without a side run there or for a corner of the other end.
+    void setCorner(Side side, std::shared_ptr<KitchenCorner> corner);
 
     /// The back run's rows and worktop (all a straight kitchen has).
     [[nodiscard]] CabinetRow& baseRow() const noexcept { return backRun_->baseRow(); }

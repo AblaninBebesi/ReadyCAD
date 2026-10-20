@@ -13,6 +13,11 @@ class BackMount;
 
 enum class Side { Left, Right };
 
+enum class RowLevel {
+    Base, // alt dolaplar: on the floor, under the worktop
+    Wall, // üst dolaplar: hung on the wall
+};
+
 /// How a horizontal carcass panel (top or bottom) meets the side walls.
 enum class JointType {
     Overlay, // накладная: lies on the sides, full carcass width
@@ -79,10 +84,14 @@ struct KitchenFrame {
     Real wallBottom = 0.0; // underside of the wall cabinets
     Real wallDepth = 320.0;
     Real worktopDepth = 600.0;
-    /// How far from the back wall the cabinets of a side run start: the part of the back run's
-    /// corner cabinets they hide (its cabinets' depth and their fronts), base and wall.
-    Real cornerBase = 0.0;
-    Real cornerWall = 0.0;
+    /// How far from the back wall the cabinets of a side run start, at the back run's left and
+    /// right end: past the corner cabinets — the part of a blind one the side run hides (its
+    /// depth and its front), or an L-shaped one's leg along the side wall. Base and wall.
+    Real cornerBase[2] = {0.0, 0.0};
+    Real cornerWall[2] = {0.0, 0.0};
+    /// How far the plinth of a side run reaches back beyond its first cabinet to meet the corner
+    /// cabinet's (a blind one's plinth runs on behind it; an L-shaped one's turns the corner).
+    Real plinthReach[2] = {0.0, 0.0};
     /// For a worktop: the openings the cabinets below need (a sink, a hob; centre in X
     /// (center.x) and Z (center.y)), and which of its ends meet a wall or another worktop.
     std::vector<PanelCutout> cutouts;

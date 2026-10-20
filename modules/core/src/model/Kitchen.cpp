@@ -66,24 +66,43 @@ void CabinetRow::layoutChildren(const LayoutSlot& slot)
 // KitchenCorner
 // ---------------------------------------------------------------------------------------------
 
-KitchenCorner::KitchenCorner(Side end, std::shared_ptr<Carcass> base, std::shared_ptr<Carcass> wall)
-    : end_(end), base_(std::move(base)), wall_(std::move(wall))
+KitchenCorner::KitchenCorner(Side end, std::shared_ptr<FurnitureComponent> base,
+                             std::shared_ptr<FurnitureComponent> wall)
+    : end_(end), type_(CornerType::Blind), base_(std::move(base)), wall_(std::move(wall))
 {
     if (!base_ || !wall_) {
         throw std::invalid_argument("KitchenCorner: the cabinets must not be null");
     }
+    const auto* lBase = dynamic_cast<const CornerCabinet*>(base_.get());
+    const auto* lWall = dynamic_cast<const CornerCabinet*>(wall_.get());
+    const bool blind = base_->kind() == ComponentKind::Carcass && wall_->kind() == ComponentKind::Carcass;
+    const bool lShaped = lBase != nullptr && lWall != nullptr && lBase->end() == end
+                      && lWall->end() == end && lBase->level() == RowLevel::Base
+                      && lWall->level() == RowLevel::Wall;
+    if (!blind && !lShaped) {
+        throw std::invalid_argument("KitchenCorner: two blind carcasses or two L cabinets of its end");
+    }
+    type_ = lShaped ? CornerType::LShaped : CornerType::Blind;
     adopt(base_);
     adopt(wall_);
 }
 
-Real KitchenCorner::baseWidth() const noexcept
+Carcass* KitchenCorner::blindCabinet(RowLevel level) const noexcept
 {
-    return base_->fixedWidth().value_or(kBaseWidth);
+    return type_ == CornerType::Blind ? static_cast<Carcass*>(&cabinet(level)) : nullptr;
 }
 
-Real KitchenCorner::wallWidth() const noexcept
+CornerCabinet* KitchenCorner::lCabinet(RowLevel level) const noexcept
 {
-    return wall_->fixedWidth().value_or(kWallWidth);
+    return type_ == CornerType::LShaped ? static_cast<CornerCabinet*>(&cabinet(level)) : nullptr;
+}
+
+Real KitchenCorner::width(RowLevel level) const noexcept
+{
+    if (const CornerCabinet* l = lCabinet(level)) {
+        return l->legAlongBack();
+    }
+    return blindCabinet(level)->fixedWidth().value_or(level == RowLevel::Base ? kBaseWidth : kWallWidth);
 }
 
 void KitchenCorner::layoutChildren(const LayoutSlot& slot)
@@ -101,17 +120,21 @@ void KitchenCorner::layoutChildren(const LayoutSlot& slot)
         return Aabb(Vec3(x0, fromY, lo.z), Vec3(x0 + width, toY, lo.z + depth));
     };
 
-    baseFrame_ = {end_, k.cornerBase};
+    const std::size_t at = right ? 1 : 0;
+    baseFrame_ = {end_, k.cornerBase[at]};
     LayoutSlot baseSlot = slot.withBox(column(baseWidth(), lo.y, k.baseTop, hi.z - lo.z));
     baseSlot.frontZ = baseSlot.box.max().z;
     baseSlot.corner = &baseFrame_;
-    // The plinth runs on to the back of the side run's plinth, which meets its face.
-    const ConstructionRules& r = slot.r();
-    const Real stop = -((hi.z - lo.z) - r.kitchen.plinthSetback - r.carcassMaterial.thickness);
-    (right ? baseSlot.plinthBeyondEnd : baseSlot.plinthBeyondStart) = stop;
+    // A blind cabinet's plinth runs on to the back of the side run's plinth, which meets its
+    // face (an L cabinet's turns the corner itself).
+    if (type_ == CornerType::Blind) {
+        const ConstructionRules& r = slot.r();
+        const Real stop = -((hi.z - lo.z) - r.kitchen.plinthSetback - r.carcassMaterial.thickness);
+        (right ? baseSlot.plinthBeyondEnd : baseSlot.plinthBeyondStart) = stop;
+    }
     base_->layout(baseSlot);
 
-    wallFrame_ = {end_, k.cornerWall};
+    wallFrame_ = {end_, k.cornerWall[at]};
     LayoutSlot wallSlot = slot.withBox(column(wallWidth(), k.wallBottom, hi.y, k.wallDepth));
     wallSlot.frontZ = wallSlot.box.max().z;
     wallSlot.corner = &wallFrame_;
@@ -131,6 +154,13 @@ KitchenRun::KitchenRun(KitchenWall wall)
     adopt(baseRow_);
     adopt(worktops_.front());
     adopt(wallRow_);
+}
+
+std::size_t KitchenRun::indexOf(const FurnitureComponent& child) const noexcept
+{
+    const auto& all = children();
+    const auto it = std::find_if(all.begin(), all.end(), [&](const Ptr& c) { return c.get() == &child; });
+    return static_cast<std::size_t>(it - all.begin());
 }
 
 std::vector<Worktop*> KitchenRun::worktops() const
@@ -187,8 +217,11 @@ std::vector<Carcass*> KitchenRun::cabinets() const
     all.insert(all.end(), wall.begin(), wall.end());
     for (const Side end : {Side::Left, Side::Right}) {
         if (const KitchenCorner* c = corner(end)) {
-            all.push_back(&c->baseCabinet());
-            all.push_back(&c->wallCabinet());
+            for (const RowLevel level : {RowLevel::Base, RowLevel::Wall}) {
+                if (Carcass* blind = c->blindCabinet(level)) {
+                    all.push_back(blind);
+                }
+            }
         }
     }
     return all;
@@ -239,23 +272,22 @@ void KitchenRun::layoutChildren(const LayoutSlot& slot)
         }
         break;
     case KitchenWall::Left:
-        baseTo -= k.cornerBase;
-        wallTo -= k.cornerWall;
+        baseTo -= k.cornerBase[0];
+        wallTo -= k.cornerWall[0];
         break;
     case KitchenWall::Right:
-        baseFrom += k.cornerBase;
-        wallFrom += k.cornerWall;
+        baseFrom += k.cornerBase[1];
+        wallFrom += k.cornerWall[1];
         break;
     }
 
     // 1. Base cabinets stand on the floor (each on its own plinth), as deep as the run. At a
     //    corner the side run's plinth reaches back to the face of the back run's.
     LayoutSlot baseSlot = slot.withBox(Aabb(Vec3(baseFrom, lo.y, lo.z), Vec3(baseTo, k.baseTop, hi.z)));
-    const Real plinthReach = k.cornerBase - ((hi.z - lo.z) - slot.r().kitchen.plinthSetback);
     if (wall_ == KitchenWall::Left) {
-        baseSlot.plinthBeyondEnd = plinthReach;
+        baseSlot.plinthBeyondEnd = k.plinthReach[0];
     } else if (wall_ == KitchenWall::Right) {
-        baseSlot.plinthBeyondStart = plinthReach;
+        baseSlot.plinthBeyondStart = k.plinthReach[1];
     }
     baseRow_->layout(baseSlot);
 
@@ -273,16 +305,18 @@ void KitchenRun::layoutChildren(const LayoutSlot& slot)
     Real from = hi.x;
     Real to = lo.x;
     const std::vector<Carcass*> row = baseRow_->cabinets();
-    std::vector<const Carcass*> base(row.begin(), row.end());
+    std::vector<const FurnitureComponent*> base(row.begin(), row.end());
     for (const Side end : {Side::Left, Side::Right}) {
         if (const KitchenCorner* c = corner(end)) {
-            base.push_back(&c->baseCabinet());
+            base.push_back(&c->cabinet(RowLevel::Base));
         }
     }
     std::vector<PanelCutout> cutouts;
-    for (const Carcass* cabinet : base) {
+    for (const FurnitureComponent* cabinet : base) {
         from = std::min(from, cabinet->box().min().x);
         to = std::max(to, cabinet->box().max().x);
+    }
+    for (const Carcass* cabinet : row) {
         if (cabinet->cutout()) {
             cutouts.push_back(planOf(*cabinet));
         }
@@ -437,6 +471,19 @@ std::vector<KitchenRun*> Kitchen::runs() const
     return all;
 }
 
+void Kitchen::setCorner(Side side, std::shared_ptr<KitchenCorner> corner)
+{
+    if (sideRun(side) == nullptr || !corner || corner->end() != side) {
+        throw std::invalid_argument("Kitchen: a corner needs its side run and its own end");
+    }
+    std::shared_ptr<KitchenCorner>& cornerSlot = backRun_->corners_[side == Side::Left ? 0 : 1];
+    const std::size_t at = backRun_->indexOf(*cornerSlot);
+    backRun_->detachChildren([&](const FurnitureComponent& c) { return &c == cornerSlot.get(); });
+    cornerSlot = std::move(corner);
+    backRun_->adoptAt(at, cornerSlot);
+    requestLayout();
+}
+
 void Kitchen::setSideRun(Side side, std::shared_ptr<KitchenRun> run, std::shared_ptr<KitchenCorner> corner)
 {
     const KitchenWall wall = side == Side::Left ? KitchenWall::Left : KitchenWall::Right;
@@ -493,8 +540,20 @@ void Kitchen::layoutChildren(const LayoutSlot& slot)
     frame_.wallBottom = hi.y - sizes_.wallHeight;
     frame_.wallDepth = sizes_.wallDepth;
     frame_.worktopDepth = sizes_.worktopDepth;
-    frame_.cornerBase = depth + front;
-    frame_.cornerWall = sizes_.wallDepth + front;
+    // Where the side runs start: past the corner cabinets of their end.
+    for (const Side side : {Side::Left, Side::Right}) {
+        const std::size_t at = side == Side::Left ? 0 : 1;
+        frame_.cornerBase[at] = depth + front; // behind a blind one
+        frame_.cornerWall[at] = sizes_.wallDepth + front;
+        frame_.plinthReach[at] = front + r.kitchen.plinthSetback;
+        if (const KitchenCorner* c = backRun_->corner(side)) {
+            if (const CornerCabinet* base = c->lCabinet(RowLevel::Base)) {
+                frame_.cornerBase[at] = base->legAlongSide();
+                frame_.cornerWall[at] = c->lCabinet(RowLevel::Wall)->legAlongSide();
+                frame_.plinthReach[at] = 0.0; // its own plinth turns the corner
+            }
+        }
+    }
     frame_.cutouts.clear();
 
     // The back run is the product box itself.

@@ -1,5 +1,7 @@
 #include "readycad/core/model/Queries.hpp"
 
+#include "readycad/core/Polygon.hpp"
+
 namespace rc::core {
 
 std::vector<const FurnitureComponent*> collectPanels(const FurnitureComponent& root)
@@ -22,6 +24,29 @@ Aabb panelBounds(const FurnitureComponent& root)
     return bounds;
 }
 
+namespace {
+
+/// False if a shaped panel has no material in the region (product coordinates) where its box
+/// meets another one's: the other part stands in its notch. Plain panels fill their box.
+bool hasMaterialIn(const FurnitureComponent& part, const Aabb& region, Real tolerance)
+{
+    const Panel& panel = *part.panel();
+    if (panel.outline().empty()) {
+        return true;
+    }
+    // The region in the panel's own coordinates, then on its face: x along its length, y along
+    // its width, both from its box minimum.
+    const Aabb local = part.placement().inverse().box(region);
+    const Aabb& box = part.box();
+    const int l = index(panel.lengthAxis());
+    const int w = index(panel.widthAxis());
+    const Vec2 lo(local.min()[l] - box.min()[l], local.min()[w] - box.min()[w]);
+    const Vec2 hi(local.max()[l] - box.min()[l], local.max()[w] - box.min()[w]);
+    return areaInside(outlinePoints(panel.outline()), lo, hi) > tolerance * tolerance;
+}
+
+} // namespace
+
 std::vector<Overlap> findOverlaps(const FurnitureComponent& root, Real tolerance)
 {
     // O(n^2) is fine: a cabinet has tens of panels, a wardrobe about a hundred, a U kitchen a
@@ -43,7 +68,11 @@ std::vector<Overlap> findOverlaps(const FurnitureComponent& root, Real tolerance
             if (a.allowsOverlapWith(b) || b.allowsOverlapWith(a)) {
                 continue;
             }
-            overlaps.push_back({&a, &b, boxes[i].intersection(boxes[j])});
+            const Aabb region = boxes[i].intersection(boxes[j]);
+            if (!hasMaterialIn(a, region, tolerance) || !hasMaterialIn(b, region, tolerance)) {
+                continue; // one stands in the other's notch
+            }
+            overlaps.push_back({&a, &b, region});
         }
     }
     return overlaps;

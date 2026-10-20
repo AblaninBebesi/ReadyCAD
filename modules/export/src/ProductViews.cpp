@@ -31,6 +31,7 @@ struct Rect {
 /// A panel as seen in a view. "Nearness" grows towards the viewer.
 struct Item {
     const FurnitureComponent* component = nullptr;
+    Aabb box; ///< in the coordinates of the drawn root
     Rect rect;
     Real nearMin = 0.0;
     Real nearMax = 0.0;
@@ -75,7 +76,7 @@ bool inWallCabinet(const FurnitureComponent& part)
             return true;
         }
         if (p->kind() == ComponentKind::KitchenCorner
-            && &static_cast<const core::KitchenCorner*>(p)->wallCabinet() == child) {
+            && &static_cast<const core::KitchenCorner*>(p)->cabinet(core::RowLevel::Wall) == child) {
             return true;
         }
     }
@@ -85,6 +86,13 @@ bool inWallCabinet(const FurnitureComponent& part)
 const core::Product* productOf(const FurnitureComponent& root)
 {
     return dynamic_cast<const core::Product*>(&root.root());
+}
+
+/// Where a part's coordinates are in those of the drawn root (a kitchen run's own, or the
+/// product's): the same, unless the part has coordinates of its own (a folding door).
+core::Placement placementIn(const FurnitureComponent& part, const FurnitureComponent& root)
+{
+    return part.placement().within(root.placement().inverse());
 }
 
 std::vector<Item> collectItems(const FurnitureComponent& root, ProductView view)
@@ -108,9 +116,10 @@ std::vector<Item> collectItems(const FurnitureComponent& root, ProductView view)
     const Real xc = view == ProductView::Section ? sectionPlaneX(root) : 0.0;
     for (const FurnitureComponent* c : core::collectPanels(root)) {
         const ComponentKind kind = c->kind();
-        const Aabb& box = c->box();
+        const Aabb box = placementIn(*c, root).box(c->box());
         Item item;
         item.component = c;
+        item.box = box;
         if (view == ProductView::Section) {
             if (box.max().x <= xc + kEps) {
                 continue; // in front of the plane: removed by the cut
@@ -138,11 +147,11 @@ std::vector<Item> collectItems(const FurnitureComponent& root, ProductView view)
         Real wallX = std::numeric_limits<Real>::max();
         for (const Item& item : items) {
             if (!item.cut && isWall(item.component->kind())) {
-                wallX = std::min(wallX, item.component->box().min().x);
+                wallX = std::min(wallX, item.box.min().x);
             }
         }
         std::erase_if(items, [&](const Item& item) {
-            return !item.cut && item.component->box().min().x > wallX + kEps;
+            return !item.cut && item.box.min().x > wallX + kEps;
         });
     }
     return items;
@@ -273,11 +282,13 @@ void handles(Drawing& drawing, const FurnitureComponent& root)
                                                 LineWeight::Thin});
     for (const core::FrontPanel* front : core::findAll<core::FrontPanel>(root)) {
         const auto geometry = front->handleGeometry(product->rules());
-        if (!geometry) {
-            continue;
+        const core::Placement place = placementIn(*front, root);
+        if (!geometry || place.quarterTurns % 4 != 0) {
+            continue; // a front seen from its edge (the folding door of a corner) shows none
         }
         const core::HandleModel& model = *geometry->model;
-        const Vec2 c(geometry->center.x, geometry->center.y);
+        const core::Vec3 at = place.point(geometry->center);
+        const Vec2 c(at.x, at.y);
         if (model.type == core::HandleType::Knob) {
             drawing.circle(layer, c, model.length / 2.0);
             continue;
