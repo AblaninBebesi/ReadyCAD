@@ -64,7 +64,9 @@ public:
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
         ImGui::AlignTextToFramePadding();
+        ImGui::PushTextWrapPos(0.0f); // long labels wrap in their column instead of being cut
         ImGui::TextUnformatted(label);
+        ImGui::PopTextWrapPos();
         ImGui::TableNextColumn();
         ImGui::SetNextItemWidth(-FLT_MIN);
     }
@@ -108,7 +110,8 @@ bool enumCombo(const char* id, E& value, const std::pair<E, TextId> (&items)[N])
 /// Length in mm, dragged or typed; clamped to [min, max].
 bool dragMm(const char* id, Real& value, Real min, Real max)
 {
-    return ImGui::DragScalar(id, ImGuiDataType_Double, &value, 1.0f, &min, &max, "%.0f mm",
+    const std::string format = "%.0f" + mmUnit();
+    return ImGui::DragScalar(id, ImGuiDataType_Double, &value, 1.0f, &min, &max, format.c_str(),
                              ImGuiSliderFlags_AlwaysClamp);
 }
 
@@ -355,7 +358,7 @@ bool drawKitchenRows(UiState& s)
         }
     }
     PropertyTable::textRow(tr(TextId::WorktopHeight),
-                           mm(kitchen->worktop().box().max().y) + " mm");
+                           mm(kitchen->worktop().box().max().y) + mmUnit());
 
     // The side walls: one makes an L kitchen, both a U kitchen.
     for (const core::Side side : {core::Side::Left, core::Side::Right}) {
@@ -1322,15 +1325,15 @@ void drawInfo(const ed::Document& doc, const core::FurnitureComponent& c)
         return;
     }
     PropertyTable::textRow(tr(TextId::Size),
-                           sizeText(info.size.width, info.size.height, info.size.depth) + " mm");
+                           sizeText(info.size.width, info.size.height, info.size.depth) + mmUnit());
     if (!info.panel) {
         return;
     }
     const ed::PanelInfo& p = *info.panel;
     PropertyTable::textRow(tr(TextId::Material), p.material.name);
-    PropertyTable::textRow(tr(TextId::Thickness), mm(p.thickness) + " mm");
-    PropertyTable::textRow(tr(TextId::FinishSize), sizeText(p.finishLength, p.finishWidth) + " mm");
-    PropertyTable::textRow(tr(TextId::CutSize), sizeText(p.cut.length, p.cut.width) + " mm");
+    PropertyTable::textRow(tr(TextId::Thickness), mm(p.thickness) + mmUnit());
+    PropertyTable::textRow(tr(TextId::FinishSize), sizeText(p.finishLength, p.finishWidth) + mmUnit());
+    PropertyTable::textRow(tr(TextId::CutSize), sizeText(p.cut.length, p.cut.width) + mmUnit());
 
     std::string edges;
     for (std::size_t i = 0; i < p.edges.size(); ++i) {
@@ -1617,6 +1620,13 @@ void saveProfile(UiState& state)
 
 namespace {
 
+/// A word for a file name in the documents' language ("kesim_listesi", "spisok_detaley").
+std::string documentWord(const UiState& state, TextId id)
+{
+    const i18n::LanguageScope inDocuments(documentLanguage(state));
+    return tr(id);
+}
+
 /// After a successful export: open the result right away or say where it is.
 void exported(UiState& state, std::string message, const std::filesystem::path& file, bool openNow)
 {
@@ -1658,11 +1668,17 @@ void writePdf(UiState& state)
 
 } // namespace
 
+i18n::Language documentLanguage(const UiState& state) noexcept
+{
+    return state.documentLanguage.value_or(i18n::currentLanguage());
+}
+
 bool writePdfFile(UiState& state, const std::filesystem::path& path)
 {
     // Only a plan that belongs to this product as it is now goes into the documents.
     const exporting::PdfFonts& fonts = pdfFonts(state);
     return run(state, [&] {
+        const i18n::LanguageScope inDocuments(documentLanguage(state));
         production::writeDocumentation(orderOf(state), freshPlan(state), state.pdfOptions, fonts,
                                        path);
     });
@@ -1676,7 +1692,10 @@ void exportPdf(UiState& state)
 void exportPartsDxf(UiState& state)
 {
     const auto path = showSaveDialog(FileKind::Dxf, production::orderName(*state.document) + ".dxf");
-    if (path && run(state, [&] { production::writePartsDxf(orderOf(state), *path); })) {
+    if (path && run(state, [&] {
+            const i18n::LanguageScope inDocuments(documentLanguage(state));
+            production::writePartsDxf(orderOf(state), *path);
+        })) {
         exported(state, tr(TextId::ExportDoneFile), *path, false);
     }
 }
@@ -1689,9 +1708,12 @@ void exportPartsDxfFolder(UiState& state)
     }
     // A folder of its own, ASCII-named like the files: CNC software and USB sticks cope with it.
     const std::filesystem::path target =
-        *folder / (safeFileName(production::orderName(*state.document)) + "_DXF");
+        *folder / (safeFileName(production::orderName(*state.document)) + "_DXF"); // DXF in any language
     std::size_t count = 0;
-    if (run(state, [&] { count = production::writePartDxfs(orderOf(state), target).size(); })) {
+    if (run(state, [&] {
+            const i18n::LanguageScope inDocuments(documentLanguage(state));
+            count = production::writePartDxfs(orderOf(state), target).size();
+        })) {
         exported(state, std::string(tr(TextId::ExportDoneFiles)) + " " + std::to_string(count),
                  target, false);
     }
@@ -1699,9 +1721,12 @@ void exportPartsDxfFolder(UiState& state)
 
 void exportCutListCsv(UiState& state)
 {
-    const auto path = showSaveDialog(
-        FileKind::Csv, production::orderName(*state.document) + "_kesim_listesi.csv");
-    if (path && run(state, [&] { production::writeCutListCsv(orderOf(state), *path); })) {
+    const auto path = showSaveDialog(FileKind::Csv, production::orderName(*state.document) + "_"
+                                                        + documentWord(state, TextId::FileCutList) + ".csv");
+    if (path && run(state, [&] {
+            const i18n::LanguageScope inDocuments(documentLanguage(state));
+            production::writeCutListCsv(orderOf(state), *path);
+        })) {
         exported(state, tr(TextId::ExportDoneFile), *path, false);
     }
 }
@@ -1733,6 +1758,7 @@ bool writePackageInto(UiState& state, const std::filesystem::path& parent)
     options.documentation = state.pdfOptions;
     std::optional<production::Package> package;
     if (!run(state, [&] {
+            const i18n::LanguageScope inDocuments(documentLanguage(state));
             const auto folder =
                 production::newPackageFolder(parent, production::orderName(*state.document));
             package = production::writePackage(orderOf(state), plan, state.cnc, options, fonts,
@@ -1740,6 +1766,7 @@ bool writePackageInto(UiState& state, const std::filesystem::path& parent)
         })) {
         return false;
     }
+    // Said in the program's language, the package written in the documents'.
     state.exportMessage = std::string(tr(TextId::PackageDone)) + "\n"
                         + production::packageMessage(orderOf(state), plan, *package);
     state.exportedFile = package->folder;
@@ -2018,7 +2045,7 @@ void drawWarningsWindow(UiState& state)
         // Worktops longer than a slab: a click selects one (its joint goes on a base cabinet).
         for (const core::Worktop* worktop : doc.longWorktops()) {
             const std::string text = std::string(tr(TextId::LongWorktopWarning)) + ": "
-                                   + displayName(*worktop) + " " + mm(worktop->box().size().x) + " mm";
+                                   + displayName(*worktop) + " " + mm(worktop->box().size().x) + mmUnit();
             ImGui::PushID(worktop);
             ImGui::Bullet();
             if (ImGui::Selectable(text.c_str())) {
@@ -2026,8 +2053,8 @@ void drawWarningsWindow(UiState& state)
             }
             ImGui::PopID();
         }
-        for (const std::string& warning : warnings) {
-            ImGui::BulletText("%s", warning.c_str());
+        for (const detailing::DetailingWarning& warning : warnings) {
+            ImGui::BulletText("%s", detailing::warningText(warning).c_str());
         }
         if (clicked) {
             doc.select(*clicked);
@@ -2069,6 +2096,25 @@ void drawPdfPopup(UiState& state)
         if (ImGui::RadioButton(tr(TextId::Portrait),
                                o.format.orientation == exporting::Orientation::Portrait)) {
             o.format.orientation = exporting::Orientation::Portrait;
+        }
+
+        ImGui::SetNextItemWidth(ImGui::GetFontSize() * 10.0f);
+        const std::string current = state.documentLanguage
+                                        ? std::string(i18n::languageName(*state.documentLanguage))
+                                        : std::string(tr(TextId::SameAsProgram));
+        if (ImGui::BeginCombo(tr(TextId::DocumentLanguage), current.c_str())) {
+            if (ImGui::Selectable(tr(TextId::SameAsProgram), !state.documentLanguage)) {
+                state.documentLanguage.reset();
+                saveSettingsFile(state);
+            }
+            for (const i18n::Language language : i18n::languages()) {
+                const std::string name(i18n::languageName(language));
+                if (ImGui::Selectable(name.c_str(), state.documentLanguage == language)) {
+                    state.documentLanguage = language;
+                    saveSettingsFile(state);
+                }
+            }
+            ImGui::EndCombo();
         }
 
         ImGui::SeparatorText(tr(TextId::ReportSections));

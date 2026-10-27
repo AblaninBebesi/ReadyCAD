@@ -280,6 +280,64 @@ TEST_CASE("The order is named after the project file, else after the product",
     CHECK(orderName(doc) == "Müşteri Yılmaz");
 }
 
+TEST_CASE("A package in Russian names its files in Latin letters", "[production][package]")
+{
+    const editor::Document doc = editor::Document::fromCatalog(core::CatalogItem::Wardrobe);
+    const Order order{doc, 1};
+    const nesting::NestingResult plan =
+        planCutting(order, nesting::StockManager{}, quick(nesting::Machine::PanelSaw));
+    const rc::test::TempFolder temp("package_ru");
+
+    const i18n::LanguageScope russian(i18n::Language::Russian);
+    CHECK(newPackageFolder(temp.path(), "Шкаф-купе").filename() == "Shkaf-kupe_PROIZVODSTVO");
+    PackageOptions options;
+    options.documentation.date = "27.10.2026";
+    const Package p = writePackage(order, &plan, cam::defaultProfile(), options, kBuiltInFonts,
+                                   temp.path() / "paket");
+
+    // Machines and old programs read these names: ASCII, in the language's words.
+    CHECK(p.summary.filename() == "SVODKA.txt");
+    CHECK(p.cutListCsv.filename() == "Bez_imeni_spetsifikatsiya.csv");
+    CHECK(std::filesystem::is_directory(p.folder / "RASKROY"));
+    CHECK(p.sheetDrawings.size() == plan.layouts.size());
+
+    // The summary itself speaks Russian, with the right forms after the numbers.
+    const std::string summary = rc::test::readFile(p.summary);
+    CHECK_THAT(summary, ContainsSubstring(txt(i18n::TextId::SummaryCutting)));
+    CHECK_THAT(summary, ContainsSubstring("RASKROY/"));
+    CHECK_THAT(summary, ContainsSubstring(i18n::countText(
+                            static_cast<long long>(plan.layouts.size()), i18n::TextId::FilesWord)));
+    CHECK_THAT(summary, !ContainsSubstring("Kesim planı"));
+}
+
+TEST_CASE("The cut list CSV opens in an English spreadsheet", "[production][csv]")
+{
+    editor::Document doc = editor::Document::fromCatalog(core::CatalogItem::Wardrobe);
+    editor::setDimensions(doc, {801, 2000, 560}); // doors 397.5 wide
+    const auto shelf = doc.product().carcass()->interior().shelves().front()->id();
+    doc.edit("Name", [&](core::Product& p) { p.find(shelf)->setName("Shelf, glass; top"); });
+    const rc::test::TempFolder temp("csv_en");
+
+    const i18n::LanguageScope english(i18n::Language::English);
+    writeCutListCsv({doc, 1}, temp.path() / "list.csv");
+    const std::string csv = rc::test::readFile(temp.path() / "list.csv");
+    CHECK(lines(csv.substr(3)).front().rfind("No,Part,Material,Thickness,", 0) == 0);
+    // Commas separate the cells; a ';' inside a name needs no quotes here.
+    CHECK_THAT(csv, ContainsSubstring(",\"Shelf, glass; top\","));
+    // Decimal points: 397.5 stays 397.5.
+    int fractions = 0;
+    for (const auto& row : doc.cutList()) {
+        for (const core::Real size : {row.cut.width, row.finishWidth}) {
+            const std::string text = i18n::mm(size);
+            if (text.find('.') != std::string::npos) {
+                ++fractions;
+                CHECK(csv.find("," + text + ",") != std::string::npos);
+            }
+        }
+    }
+    CHECK(fractions > 0);
+}
+
 TEST_CASE("The cut list CSV opens in a Turkish spreadsheet", "[production][csv]")
 {
     editor::Document doc = editor::Document::fromCatalog(core::CatalogItem::Wardrobe);

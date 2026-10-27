@@ -19,4 +19,6 @@ Corner kitchens: project format 5 — side runs under `"left"` / `"right"` with 
 
 L corners: `"type": "L"` of a corner, legs, shelves, part choices and the folding door's handle of an L cabinet.
 
-**Stages:** 5, 7, 8, 9, kitchen, shapes, corner kitchens
+Languages: `"language"` and `"documentLanguage"` in `settings.json`; an unknown code falls back to Turkish / the program's language.
+
+**Stages:** 5, 7, 8, 9, kitchen, shapes, corner kitchens, languages

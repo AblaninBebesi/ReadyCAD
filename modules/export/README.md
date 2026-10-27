@@ -20,4 +20,6 @@ Corner kitchens: views of any subtree (a kitchen run in its own coordinates), `P
 
 L corners: views draw every part in the coordinates of the drawn run (a folding door has its own); the handle of a front seen edge-on is left out.
 
-**Stages:** 6, 7, 9, kitchen, shapes, corner kitchens
+Languages: units and percentages of the language; the built-in PDF font writes Cyrillic in Latin letters instead of "?".
+
+**Stages:** 6, 7, 9, kitchen, shapes, corner kitchens, languages

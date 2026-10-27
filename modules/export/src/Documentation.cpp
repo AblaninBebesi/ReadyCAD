@@ -445,7 +445,7 @@ void summaryPage(Composer& composer, const DocumentationInput& in, const std::st
         {{txt(TextId::CarcassSize), sizeText(dims.width, dims.height, dims.depth)}},
         {{txt(TextId::TotalParts), std::to_string(parts)}},
         {{txt(TextId::DistinctParts), std::to_string(in.cutList.size())}},
-        {{txt(TextId::EdgeUsage), twoDecimals(edgeMeters) + " m"}},
+        {{txt(TextId::EdgeUsage), twoDecimals(edgeMeters) + " " + txt(TextId::UnitM)}},
         {{txt(TextId::JointCount), std::to_string(in.detailing.joints)}},
         {{txt(TextId::HoleCount), std::to_string(in.detailing.drillings)}},
         {{txt(TextId::GrooveCount), std::to_string(in.detailing.grooves)}},
@@ -483,10 +483,12 @@ void summaryPage(Composer& composer, const DocumentationInput& in, const std::st
     if (const core::Kitchen* kitchen = in.product.kitchen()) {
         for (const core::Worktop* worktop : kitchen->longWorktops(in.product.rules())) {
             warnings.push_back(txt(TextId::LongWorktopWarning) + ": " + i18n::displayName(*worktop)
-                               + " " + mm(worktop->box().size().x) + " mm");
+                               + " " + mm(worktop->box().size().x) + i18n::mmUnit());
         }
     }
-    warnings.insert(warnings.end(), in.detailing.warnings.begin(), in.detailing.warnings.end());
+    for (const detailing::DetailingWarning& warning : in.detailing.warnings) {
+        warnings.push_back(detailing::warningText(warning));
+    }
     if (warnings.empty()) {
         canvas.text(Vec2(min.x, y), canvas.fit(txt(TextId::NoWarnings), columnWidth, kTable, false),
                     kTable, false, HAlign::Left, VAlign::Top);
@@ -539,7 +541,7 @@ void hardwarePage(Composer& composer, const DocumentationInput& in)
                      {txt(TextId::ColPieces), 1.0, HAlign::Right},
                      {txt(TextId::ColLength), 1.0, HAlign::Right}};
     for (const detailing::EdgeBandUsage& u : in.edgeUsage) {
-        bands.rows.push_back({{u.band.name, mm(u.band.thickness) + " mm", std::to_string(u.pieces),
+        bands.rows.push_back({{u.band.name, mm(u.band.thickness) + i18n::mmUnit(), std::to_string(u.pieces),
                                twoDecimals(u.totalLength / 1000.0)}});
     }
     y -= drawTable(canvas, Vec2(min.x, y), width, y - min.y, bands, 0).second + kGap;
@@ -793,8 +795,8 @@ void partPages(Composer& composer, const DocumentationInput& in, std::size_t num
         {{txt(TextId::ColPart), title}, true},
         {{txt(TextId::ColQuantity), std::to_string(row.quantity)}},
         {{txt(TextId::ColMaterial), row.material.name}},
-        {{txt(TextId::FinishSize), sizeText(row.finishLength, row.finishWidth) + " mm"}},
-        {{txt(TextId::CutSize), sizeText(row.cut.length, row.cut.width) + " mm"}},
+        {{txt(TextId::FinishSize), sizeText(row.finishLength, row.finishWidth) + i18n::mmUnit()}},
+        {{txt(TextId::CutSize), sizeText(row.cut.length, row.cut.width) + i18n::mmUnit()}},
         {{txt(TextId::EdgeBanding), edgesLong}},
         {{"", edgesShort}},
         {{txt(TextId::Grain), txt(row.keepGrainDirection ? TextId::GrainKept : TextId::GrainFree)}},
@@ -860,24 +862,16 @@ std::string sourceName(nesting::SheetSource source)
     return {};
 }
 
-/// "%78": the Turkish way of writing a percentage.
-std::string percent(Real fraction)
-{
-    char buffer[16];
-    std::snprintf(buffer, sizeof buffer, "%%%.0f", fraction * 100.0);
-    return buffer;
-}
-
 /// The machine settings the layouts depend on, in one line.
 std::string machineSettings(const nesting::NestingSettings& s)
 {
     if (s.machine == nesting::Machine::PanelSaw) {
-        return txt(TextId::Kerf) + " " + mm(s.saw.kerf) + " mm · " + txt(TextId::Trim) + " "
-             + mm(s.saw.trim) + " mm · " + txt(TextId::Stages) + " "
+        return txt(TextId::Kerf) + " " + mm(s.saw.kerf) + i18n::mmUnit() + " · " + txt(TextId::Trim) + " "
+             + mm(s.saw.trim) + i18n::mmUnit() + " · " + txt(TextId::Stages) + " "
              + std::to_string(s.saw.maxStages);
     }
-    return txt(TextId::ToolDiameter) + " " + mm(s.router.toolDiameter) + " mm · "
-         + txt(TextId::SheetMargin) + " " + mm(s.router.margin) + " mm";
+    return txt(TextId::ToolDiameter) + " " + mm(s.router.toolDiameter) + i18n::mmUnit() + " · "
+         + txt(TextId::SheetMargin) + " " + mm(s.router.margin) + i18n::mmUnit();
 }
 
 /// Overview: machine, sheets per material, every layout. A long list continues on more pages.
@@ -897,7 +891,7 @@ void cuttingOverview(Composer& composer, const DocumentationInput& in, const Par
         {{txt(TextId::Machine), machineName(r.settings.machine)}, true},
         {{"", machineSettings(r.settings)}},
         {{txt(TextId::SheetsTotal), std::to_string(r.sheetCount())}},
-        {{txt(TextId::Utilization), percent(r.utilization())}},
+        {{txt(TextId::Utilization), i18n::percent(r.utilization())}},
     };
     if (!r.settings.useRemnants) {
         facts.rows.push_back({{"", txt(TextId::RemnantsNotUsed)}});
@@ -924,7 +918,7 @@ void cuttingOverview(Composer& composer, const DocumentationInput& in, const Par
         }
         materials.rows.push_back({{u.material.name, size, std::to_string(u.stock),
                                    std::to_string(u.remnants), std::to_string(u.purchase),
-                                   percent(u.utilization()), std::to_string(u.newRemnants)}});
+                                   i18n::percent(u.utilization()), std::to_string(u.newRemnants)}});
     }
     y -= drawTable(canvas, Vec2(min.x, y), width, y - min.y, materials, 0).second + kGap;
 
@@ -956,7 +950,7 @@ void cuttingOverview(Composer& composer, const DocumentationInput& in, const Par
         const nesting::SheetLayout& l = r.layouts[i];
         sheets.rows.push_back({{std::to_string(i + 1), l.sheet.material.name,
                                 sizeText(l.sheet.length, l.sheet.width), std::to_string(l.count),
-                                std::to_string(l.parts.size()), percent(l.utilization()),
+                                std::to_string(l.parts.size()), i18n::percent(l.utilization()),
                                 sourceName(l.source)}});
     }
     std::size_t next = 0;
@@ -1018,9 +1012,9 @@ void cuttingSheetPage(Composer& composer, const DocumentationInput& in, const Pa
     facts.columns = {{"", 1.0}, {"", 1.6}};
     facts.rows = {
         {{txt(TextId::ColMaterial), l.sheet.material.name}, true},
-        {{txt(TextId::ColSheetSize), sizeText(l.sheet.length, l.sheet.width) + " mm"}},
+        {{txt(TextId::ColSheetSize), sizeText(l.sheet.length, l.sheet.width) + i18n::mmUnit()}},
         {{txt(TextId::ColQuantity), std::to_string(l.count) + "  (" + sourceName(l.source) + ")"}},
-        {{txt(TextId::Utilization), percent(l.utilization())}},
+        {{txt(TextId::Utilization), i18n::percent(l.utilization())}},
         {{txt(TextId::Remnant), remnants.empty() ? "—" : remnants}},
     };
     if (r.settings.machine == nesting::Machine::PanelSaw) {

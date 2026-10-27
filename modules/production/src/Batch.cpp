@@ -41,12 +41,6 @@ int runBatch(const BatchOptions& options, std::ostream& out, std::ostream& err)
         if (options.package.empty()) {
             throw std::invalid_argument("No folder for the package");
         }
-        const editor::Document document = openDocument(options);
-        const Order order{document, options.quantity};
-        if (order.quantity < 1) {
-            throw std::invalid_argument("The quantity must be at least 1");
-        }
-
         const storage::WorkshopFiles files = storage::WorkshopFiles::in(options.dataFolder);
         const nesting::StockManager stock = storage::loadStockFile(files.stock);
         storage::AppSettings settings = storage::loadSettingsFile(files.settings);
@@ -55,6 +49,17 @@ int runBatch(const BatchOptions& options, std::ostream& out, std::ostream& err)
         }
         if (options.useRemnants) {
             settings.nesting.useRemnants = *options.useRemnants;
+        }
+        const std::string& code =
+            settings.documentLanguage.empty() ? settings.language : settings.documentLanguage;
+        const i18n::LanguageScope inDocuments(
+            options.language.value_or(i18n::languageFromCode(code).value_or(i18n::Language::Turkish)));
+
+        // A catalogue model is named in the documents' language.
+        const editor::Document document = openDocument(options);
+        const Order order{document, options.quantity};
+        if (order.quantity < 1) {
+            throw std::invalid_argument("The quantity must be at least 1");
         }
 
         out << i18n::text(i18n::TextId::SummaryCutting) << ": "

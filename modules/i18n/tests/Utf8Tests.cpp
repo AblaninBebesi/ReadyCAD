@@ -1,4 +1,4 @@
-// UTF-8 helpers: decoding, Turkish letters to ASCII for files read by machines.
+// UTF-8 helpers: decoding, Turkish and Russian letters to ASCII for files read by machines.
 
 #include "readycad/i18n/Utf8.hpp"
 
@@ -21,6 +21,14 @@ TEST_CASE("Turkish letters fold to ASCII, other symbols to underscores", "[i18n]
           "Cekmece yani, Sifonyer, Igne, Olcu, Ust");
     CHECK(asciiFold("Raf ⌀5") == "Raf _5");
     CHECK(asciiFold("") == "");
+}
+
+TEST_CASE("Russian letters are written in Latin ones", "[i18n][utf8]")
+{
+    // As in a passport: щ -> shch, ю -> iu, я -> ia; ъ and ь disappear, ё is e.
+    CHECK(asciiFold("Шкаф-купе, Ёлка, щит, подъём, Юля") == "Shkaf-kupe, Elka, shchit, podem, Iulia");
+    CHECK(asciiFold("Боковина левая") == "Bokovina levaia");
+    CHECK(safeFileName("Шкаф 1/2") == "Shkaf_1_2");
 }
 
 TEST_CASE("Names become file names that work everywhere", "[i18n][utf8]")

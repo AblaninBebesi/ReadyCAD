@@ -87,11 +87,19 @@ std::vector<HPDF_BYTE> readBinary(const std::filesystem::path& path)
 // Fonts and text encoding
 // ---------------------------------------------------------------------------------------------
 
-/// Unicode -> Windows-1254 (Turkish) for the built-in fonts; '?' if there is no such letter.
+/// Unicode -> Windows-1254 (Turkish) for the built-in fonts; Cyrillic in Latin letters, '?' for
+/// anything else it lacks.
 std::string toCp1254(std::string_view utf8)
 {
     std::string out;
     for (const char32_t c : decodeUtf8(utf8)) {
+        if (c >= 0x400 && c <= 0x4FF) {
+            // Helvetica has no Cyrillic: the letters as in a passport rather than "?".
+            const char letter[] = {static_cast<char>(0xC0 | (c >> 6)),
+                                   static_cast<char>(0x80 | (c & 0x3F))};
+            out += asciiFold(std::string_view(letter, 2));
+            continue;
+        }
         unsigned char byte = '?';
         if (c < 0x80) {
             byte = static_cast<unsigned char>(c);

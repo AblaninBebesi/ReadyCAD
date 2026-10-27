@@ -211,8 +211,7 @@ std::string featureText(const core::ShapeFeature& feature)
 {
     const std::string kind(text(featureKindText(feature)));
     const auto from = [](core::PanelCorner corner, core::Real alongL, core::Real alongW) {
-        return cornerText(corner) + std::string(text(TextId::ShapeFromCorner)) + " " + mm(alongL) + " / "
-               + mm(alongW);
+        return format(TextId::ShapeFromCorner, {cornerText(corner), mm(alongL) + " / " + mm(alongW)});
     };
     return std::visit(
         [&](const auto& f) -> std::string {
@@ -228,8 +227,7 @@ std::string featureText(const core::ShapeFeature& feature)
                 const core::EdgeSide start = longEdge ? (f.fromEnd ? core::EdgeSide::W2 : core::EdgeSide::W1)
                                                       : (f.fromEnd ? core::EdgeSide::L2 : core::EdgeSide::L1);
                 return kind + " " + std::string(text(edgeText(f.edge))) + ": "
-                     + std::string(text(edgeText(start))) + std::string(text(TextId::ShapeFromEdge)) + " "
-                     + mm(f.offset) + ", "
+                     + format(TextId::ShapeFromEdge, {text(edgeText(start)), mm(f.offset)}) + ", "
                      + mm(f.length) + " × " + mm(f.depth);
             } else if constexpr (std::is_same_v<T, core::InnerCutout>) {
                 return kind + " " + mm(f.length) + " × " + mm(f.width) + " R" + mm(f.radius) + ": "
@@ -251,6 +249,18 @@ std::string mm(core::Real value)
         std::snprintf(buffer, sizeof buffer, "%.1f", rounded);
     }
     return buffer;
+}
+
+std::string mmUnit()
+{
+    return " " + std::string(text(TextId::UnitMm));
+}
+
+std::string percent(double fraction)
+{
+    char number[16];
+    std::snprintf(number, sizeof number, "%.0f", fraction * 100.0);
+    return format(TextId::PercentValue, {number});
 }
 
 } // namespace rc::i18n

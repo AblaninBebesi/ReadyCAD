@@ -39,13 +39,6 @@ std::string sizeText(Real a, Real b)
     return mm(a) + " × " + mm(b);
 }
 
-std::string percent(Real fraction)
-{
-    char buffer[16];
-    std::snprintf(buffer, sizeof buffer, "%%%.0f", fraction * 100.0);
-    return buffer;
-}
-
 const char* machineText(nesting::Machine machine)
 {
     return tr(machine == nesting::Machine::PanelSaw ? TextId::MachinePanelSaw
@@ -63,9 +56,11 @@ const char* sourceText(nesting::SheetSource source)
 }
 
 /// Length in mm, dragged or typed; clamped to [min, max].
-bool dragMm(const char* id, Real& value, Real min, Real max, const char* format = "%.1f mm")
+bool dragMm(const char* id, Real& value, Real min, Real max, const char* number = "%.1f",
+            bool unit = true)
 {
-    return ImGui::DragScalar(id, ImGuiDataType_Double, &value, 0.5f, &min, &max, format,
+    const std::string format = unit ? number + i18n::mmUnit() : std::string(number);
+    return ImGui::DragScalar(id, ImGuiDataType_Double, &value, 0.5f, &min, &max, format.c_str(),
                              ImGuiSliderFlags_AlwaysClamp);
 }
 
@@ -120,15 +115,25 @@ void saveStockFile(UiState& state)
     run(state, [&] { storage::saveStockFile(state.stock, state.stockFile); });
 }
 
+} // namespace
+
 void saveSettingsFile(UiState& state)
 {
     if (state.settingsFile.empty()) {
         return;
     }
     run(state, [&] {
-        storage::saveSettingsFile({state.nestingSettings, state.cnc}, state.settingsFile);
+        storage::AppSettings settings;
+        settings.nesting = state.nestingSettings;
+        settings.cnc = state.cnc;
+        settings.language = std::string(i18n::languageCode(i18n::currentLanguage()));
+        settings.documentLanguage =
+            state.documentLanguage ? std::string(i18n::languageCode(*state.documentLanguage)) : "";
+        storage::saveSettingsFile(settings, state.settingsFile);
     });
 }
+
+namespace {
 
 /// Materials the stock window offers: those of the product, then those already on stock.
 std::vector<core::Material> knownMaterials(const UiState& state)
@@ -309,8 +314,8 @@ void drawSheet(UiState& state, const nesting::NestingResult& result, std::size_t
         if (part.cutListRow && *part.cutListRow < state.document->cutList().size()) {
             name += ". " + exporting::partName(state.document->cutList()[*part.cutListRow]);
         }
-        ImGui::SetTooltip("%s\n%s: %s mm\n%.0f°", name.c_str(), tr(TextId::CutSize),
-                          sizeText(blank.width(), blank.height()).c_str(),
+        ImGui::SetTooltip("%s\n%s: %s%s\n%.0f°", name.c_str(), tr(TextId::CutSize),
+                          sizeText(blank.width(), blank.height()).c_str(), mmUnit().c_str(),
                           hover->transform.degrees());
     }
 }
@@ -412,7 +417,7 @@ void drawSettingsPopup(UiState& state)
         row(tr(TextId::Stages));
         ImGui::SliderInt("##stages", &s.saw.maxStages, 2, 4);
         row(tr(TextId::StackHeight));
-        dragMm("##stack", s.saw.maxStackHeight, 1.0, 200.0, "%.0f mm");
+        dragMm("##stack", s.saw.maxStackHeight, 1.0, 200.0, "%.0f");
         row(tr(TextId::FirstCuts));
         const std::pair<nesting::CutDirection, TextId> directions[] = {
             {nesting::CutDirection::AlongLength, TextId::AlongLength},
@@ -454,7 +459,14 @@ void drawSettingsPopup(UiState& state)
         ImGui::SliderInt("##generations", &s.optimizer.generations, 0, 500);
         row(tr(TextId::MutationRate));
         float rate = static_cast<float>(s.optimizer.mutationRate * 100.0);
-        if (ImGui::SliderFloat("##mutation", &rate, 0.0f, 100.0f, "%%%.0f")) {
+        // The language's percentage with printf's "%%" and the number's "%.0f".
+        std::string rateFormat;
+        for (const char c : format(TextId::PercentValue, {"\x01"})) {
+            rateFormat += c == '%'      ? std::string("%%")
+                          : c == '\x01' ? std::string("%.0f")
+                                        : std::string(1, c);
+        }
+        if (ImGui::SliderFloat("##mutation", &rate, 0.0f, 100.0f, rateFormat.c_str())) {
             s.optimizer.mutationRate = static_cast<Real>(rate) / 100.0;
         }
         row(tr(TextId::Elites));
@@ -548,6 +560,8 @@ void loadWorkshopFiles(UiState& state, const std::filesystem::path& folder)
         const storage::AppSettings settings = storage::loadSettingsFile(files.settings);
         state.nestingSettings = settings.nesting;
         state.cnc = settings.cnc;
+        i18n::setLanguage(i18n::languageFromCode(settings.language).value_or(i18n::Language::Turkish));
+        state.documentLanguage = i18n::languageFromCode(settings.documentLanguage);
     });
     ++state.stockRevision;
 }
@@ -645,10 +659,16 @@ void exportSheetsDxf(UiState& state)
         return;
     }
     const ed::Document& doc = *state.document;
+    std::string cutting;
+    {
+        const i18n::LanguageScope inDocuments(documentLanguage(state));
+        cutting = tr(TextId::FolderCutting);
+    }
     const std::filesystem::path target =
-        *folder / (safeFileName(production::orderName(doc)) + "_KESIM");
+        *folder / (safeFileName(production::orderName(doc)) + "_" + cutting);
     std::size_t count = 0;
     if (run(state, [&] {
+            const i18n::LanguageScope inDocuments(documentLanguage(state));
             count = production::writeSheetDxfs({doc, state.productCount}, *state.nesting, target)
                         .size();
         })) {
@@ -871,12 +891,12 @@ void drawStockWindow(UiState& state)
         }
         ImGui::SameLine();
         ImGui::SetNextItemWidth(ImGui::GetFontSize() * 5.5f);
-        dragMm("##length", state.newSheet.length, 50.0, 6000.0, "%.0f");
+        dragMm("##length", state.newSheet.length, 50.0, 6000.0, "%.0f", false);
         ImGui::SameLine();
         ImGui::TextUnformatted("×");
         ImGui::SameLine();
         ImGui::SetNextItemWidth(ImGui::GetFontSize() * 5.5f);
-        dragMm("##width", state.newSheet.width, 50.0, 3000.0, "%.0f mm");
+        dragMm("##width", state.newSheet.width, 50.0, 3000.0, "%.0f");
         ImGui::SameLine();
         ImGui::SetNextItemWidth(ImGui::GetFontSize() * 5.0f);
         ImGui::InputInt("##qty", &state.newSheet.quantity, 1, 5);
@@ -899,25 +919,25 @@ void drawStockWindow(UiState& state)
     ImGui::TextUnformatted(tr(TextId::StandardSheet));
     ImGui::SameLine();
     ImGui::SetNextItemWidth(ImGui::GetFontSize() * 5.5f);
-    dragMm("##stdl", state.stock.standardLength, 100.0, 6000.0, "%.0f");
+    dragMm("##stdl", state.stock.standardLength, 100.0, 6000.0, "%.0f", false);
     changed |= ImGui::IsItemDeactivatedAfterEdit();
     ImGui::SameLine();
     ImGui::TextUnformatted("×");
     ImGui::SameLine();
     ImGui::SetNextItemWidth(ImGui::GetFontSize() * 5.5f);
-    dragMm("##stdw", state.stock.standardWidth, 100.0, 3000.0, "%.0f mm");
+    dragMm("##stdw", state.stock.standardWidth, 100.0, 3000.0, "%.0f");
     changed |= ImGui::IsItemDeactivatedAfterEdit();
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted(tr(TextId::MinRemnant));
     ImGui::SameLine();
     ImGui::SetNextItemWidth(ImGui::GetFontSize() * 5.5f);
-    dragMm("##minl", state.stock.remnantRules.minLength, 0.0, 3000.0, "%.0f");
+    dragMm("##minl", state.stock.remnantRules.minLength, 0.0, 3000.0, "%.0f", false);
     changed |= ImGui::IsItemDeactivatedAfterEdit();
     ImGui::SameLine();
     ImGui::TextUnformatted("×");
     ImGui::SameLine();
     ImGui::SetNextItemWidth(ImGui::GetFontSize() * 5.5f);
-    dragMm("##minw", state.stock.remnantRules.minWidth, 0.0, 3000.0, "%.0f mm");
+    dragMm("##minw", state.stock.remnantRules.minWidth, 0.0, 3000.0, "%.0f");
     changed |= ImGui::IsItemDeactivatedAfterEdit();
 
     if (changed) {

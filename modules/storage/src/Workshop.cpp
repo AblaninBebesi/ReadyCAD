@@ -2,6 +2,7 @@
 // and the settings of the cutting machines and the optimiser.
 
 #include "Json.hpp"
+#include "readycad/i18n/Localization.hpp"
 #include "readycad/storage/Storage.hpp"
 
 #include <cstdlib>
@@ -113,6 +114,8 @@ std::string saveSettings(const AppSettings& settings)
     doc["version"] = kSettingsFormatVersion;
     doc["nesting"] = settings.nesting;
     doc["cnc"] = settings.cnc;
+    doc["language"] = settings.language;
+    doc["documentLanguage"] = settings.documentLanguage;
     return doc.dump(2);
 }
 
@@ -124,6 +127,15 @@ AppSettings loadSettings(std::string_view text)
         AppSettings settings;
         settings.nesting = doc.value("nesting", json::object()).get<nesting::NestingSettings>();
         settings.cnc = doc.value("cnc", json::object()).get<cam::NestingCenterProfile>();
+        // A language this version does not know: the default (a file of a newer version).
+        settings.language = doc.value("language", std::string("tr"));
+        if (!i18n::languageFromCode(settings.language)) {
+            settings.language = "tr";
+        }
+        settings.documentLanguage = doc.value("documentLanguage", std::string{});
+        if (!i18n::languageFromCode(settings.documentLanguage)) {
+            settings.documentLanguage.clear();
+        }
         nesting::validate(settings.nesting);
         cam::validate(settings.cnc);
         return settings;

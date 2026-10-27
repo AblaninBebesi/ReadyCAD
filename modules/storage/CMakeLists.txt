@@ -4,6 +4,7 @@ rc_add_module(storage
         src/Workshop.cpp
     DEPENDS
         readycad::core
+        readycad::i18n
         readycad::nesting
         readycad::cam
     PRIVATE_DEPENDS

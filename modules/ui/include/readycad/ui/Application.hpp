@@ -29,6 +29,8 @@ struct ApplicationConfig {
     bool cuttingSettings = false;           // open the cutting settings at start
     /// Folder of the stock and settings files instead of the user's own (demos, tests).
     std::optional<std::filesystem::path> dataFolder;
+    /// The program's language for this run ("tr", "ru", "en"); the settings file keeps its own.
+    std::optional<std::string> language;
     /// Writes the PDF documents (default settings, with the cutting plan if one is computed)
     /// and exits — the documents without a click, e.g. for a demo or to check a layout.
     std::optional<std::filesystem::path> exportPdf;

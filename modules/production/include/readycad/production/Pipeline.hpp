@@ -97,7 +97,7 @@ struct PackageOptions {
     exporting::DocumentationOptions documentation;
     bool documents = true;     ///< <name>.pdf
     bool partDrawings = true;  ///< DXF/: one drawing per part
-    bool sheetDrawings = true; ///< KESIM/: one drawing per sheet (with a plan)
+    bool sheetDrawings = true; ///< KESIM/ (in Turkish): one drawing per sheet (with a plan)
     bool cncPrograms = true;   ///< CNC/: one program per sheet (with a nesting centre plan)
     bool cutListCsv = true;    ///< <name>_kesim_listesi.csv
     bool project = true;       ///< <name>.rcproj: the design the files were made from

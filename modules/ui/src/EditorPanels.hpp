@@ -1,5 +1,6 @@
 #pragma once
 
+#include "readycad/i18n/Localization.hpp"
 #include "readycad/cam/NestingCenter.hpp"
 #include "readycad/core/builders/KitchenBuilder.hpp"
 #include "readycad/editor/Document.hpp"
@@ -54,6 +55,8 @@ struct UiState {
 
     // Export (stage 6)
     exporting::DocumentationOptions pdfOptions;
+    /// The language of the documents and files the program writes; nullopt: the program's.
+    std::optional<i18n::Language> documentLanguage;
     bool openAfterExport = true;
     bool openPdfPopup = false;
     std::optional<exporting::PdfFonts> pdfFonts; // looked up once
@@ -121,6 +124,12 @@ struct UiState {
     core::Real newCabinetWidth = 600.0;
     core::KitchenWall newCabinetWall = core::KitchenWall::Back;
 };
+
+/// Writes the cutting and CNC settings and the languages into the settings file.
+void saveSettingsFile(UiState& state);
+
+/// The language the documents are written in now (UiState::documentLanguage or the program's).
+[[nodiscard]] i18n::Language documentLanguage(const UiState& state) noexcept;
 
 /// Runs a model operation; on an exception shows the error popup. Returns true if it succeeded.
 /// After calling it, a panel must not use references into the model taken before: a failed

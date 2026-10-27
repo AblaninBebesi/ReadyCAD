@@ -94,6 +94,20 @@ TEST_CASE("PDF text: Turkish letters with the built-in font", "[export][pdf]")
     CHECK(pdf.find("/Encoding /WinAnsiEncoding") == std::string::npos);
 }
 
+TEST_CASE("PDF text: Russian letters with the built-in font come out in Latin ones",
+          "[export][pdf]")
+{
+    PageSet set = samplePages();
+    Page& page = set.pages.front();
+    const std::size_t layer =
+        page.drawing.addLayer({"RU", 7, {0, 0, 0}, LineType::Continuous, LineWeight::Thin});
+    page.drawing.text(layer, {Vec2(20.0, 50.0), "Карта раскроя", 3.0, 0.0, HAlign::Left,
+                              VAlign::Baseline, false});
+    const std::string pdf = toPdf(set, PdfFonts{});
+    CHECK(occurrences(pdf, "(Karta raskroia) Tj") == 1); // Helvetica has no Cyrillic
+    CHECK(pdf.find("?????") == std::string::npos);
+}
+
 TEST_CASE("PDF bookmarks for the pages that have one", "[export][pdf]")
 {
     const std::string pdf = toPdf(samplePages(), PdfFonts{});

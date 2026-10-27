@@ -59,6 +59,8 @@ inline constexpr int kSettingsFormatVersion = 1;
 struct AppSettings {
     nesting::NestingSettings nesting;
     cam::NestingCenterProfile cnc;
+    std::string language = "tr";  ///< of the program: "tr", "ru", "en" (i18n::languageCode)
+    std::string documentLanguage; ///< of the documents; empty: the program's
 };
 
 [[nodiscard]] std::string saveSettings(const AppSettings& settings);

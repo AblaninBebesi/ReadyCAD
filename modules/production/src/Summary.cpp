@@ -61,13 +61,6 @@ std::string heading(const std::string& title)
     return "\n" + title + "\n" + std::string(widthOf(title), '-') + "\n";
 }
 
-std::string percent(double fraction)
-{
-    char buffer[16];
-    std::snprintf(buffer, sizeof buffer, "%%%.0f", fraction * 100.0);
-    return buffer;
-}
-
 std::string sizeText(core::Real a, core::Real b)
 {
     return i18n::mm(a) + " × " + i18n::mm(b);
@@ -104,7 +97,7 @@ std::string leftoverText(const std::vector<cam::SheetProgram>& programs)
     std::string text;
     const auto add = [&](int n, TextId what) {
         if (n > 0) {
-            text += (text.empty() ? "" : "\n") + std::to_string(n) + " " + txt(what);
+            text += (text.empty() ? "" : "\n") + i18n::countText(n, what);
         }
     };
     add(sum.edgeHoles, TextId::LeftoverEdge);
@@ -135,13 +128,13 @@ std::vector<std::string> attentionLines(const editor::Document& document)
     }
     for (const core::Worktop* worktop : document.longWorktops()) {
         lines.push_back(txt(TextId::LongWorktopWarning) + ": " + i18n::displayName(*worktop) + " "
-                        + i18n::mm(worktop->box().size().x) + " mm");
+                        + i18n::mm(worktop->box().size().x) + i18n::mmUnit());
     }
     for (const detailing::ShapeConflict& c : document.shapeConflicts()) {
         lines.push_back(txt(TextId::ShapeWarning) + ": " + i18n::displayName(*c.part));
     }
-    for (const std::string& warning : document.detailingReport().warnings) {
-        lines.push_back(warning);
+    for (const detailing::DetailingWarning& warning : document.detailingReport().warnings) {
+        lines.push_back(detailing::warningText(warning));
     }
     return lines;
 }
@@ -175,7 +168,7 @@ std::string summaryText(const Order& order, const nesting::NestingResult* plan,
     out += textTable({{txt(TextId::SummaryOrder), ":", orderText},
                       {txt(TextId::SummaryDate), ":", package.date},
                       {txt(TextId::SummarySize), ":",
-                       sizeText(size.x, size.y) + " × " + i18n::mm(size.z) + " mm"},
+                       sizeText(size.x, size.y) + " × " + i18n::mm(size.z) + i18n::mmUnit()},
                       {txt(TextId::SummaryParts), ":", partsText}},
                      {});
 
@@ -202,7 +195,7 @@ std::string summaryText(const Order& order, const nesting::NestingResult* plan,
         for (const nesting::MaterialUsage& u : plan->usage()) {
             rows.push_back({u.material.name, std::to_string(u.sheets()), std::to_string(u.stock),
                             std::to_string(u.remnants), std::to_string(u.purchase),
-                            percent(u.utilization()), std::to_string(u.newRemnants)});
+                            i18n::percent(u.utilization()), std::to_string(u.newRemnants)});
         }
         out += textTable(rows, {false, true, true, true, true, true, true});
         if (!plan->settings.useRemnants) {
@@ -285,14 +278,14 @@ std::string summaryText(const Order& order, const nesting::NestingResult* plan,
         }
     }
     std::vector<std::vector<std::string>> folders;
-    const auto folder = [&](const std::vector<std::filesystem::path>& list, const char* name) {
+    const auto folder = [&](const std::vector<std::filesystem::path>& list, const std::string& name) {
         if (!list.empty()) {
-            folders.push_back({std::string(name) + "/",
-                               std::to_string(list.size()) + " " + txt(TextId::FilesWord)});
+            folders.push_back({name + "/",
+                               i18n::countText(static_cast<long long>(list.size()), TextId::FilesWord)});
         }
     };
     folder(package.partDrawings, "DXF");
-    folder(package.sheetDrawings, "KESIM");
+    folder(package.sheetDrawings, txt(TextId::FolderCutting));
     folder(package.programs, "CNC");
     out += textTable(folders, {false, true});
     return out;
@@ -305,17 +298,17 @@ std::string packageMessage(const Order& order, const nesting::NestingResult* pla
     if (!package.documents.empty()) {
         parts.push_back("1 PDF");
     }
+    const auto count = [](const std::vector<std::filesystem::path>& list, TextId word) {
+        return i18n::countText(static_cast<long long>(list.size()), word);
+    };
     if (!package.partDrawings.empty()) {
-        parts.push_back(std::to_string(package.partDrawings.size()) + " "
-                        + txt(TextId::PartDrawingsWord));
+        parts.push_back(count(package.partDrawings, TextId::PartDrawingsWord));
     }
     if (!package.sheetDrawings.empty()) {
-        parts.push_back(std::to_string(package.sheetDrawings.size()) + " "
-                        + txt(TextId::SheetDrawingsWord));
+        parts.push_back(count(package.sheetDrawings, TextId::SheetDrawingsWord));
     }
     if (!package.programs.empty()) {
-        parts.push_back(std::to_string(package.programs.size()) + " "
-                        + txt(TextId::ProgramsWord));
+        parts.push_back(count(package.programs, TextId::ProgramsWord));
     }
     if (!package.cutListCsv.empty()) {
         parts.push_back(txt(TextId::CutListCsvWord));
@@ -327,11 +320,11 @@ std::string packageMessage(const Order& order, const nesting::NestingResult* pla
     if (plan == nullptr) {
         message += "\n" + txt(TextId::NoCuttingPlan);
     } else if (!plan->unplaced.empty()) {
-        int count = 0;
+        int pieces = 0;
         for (const auto& u : plan->unplaced) {
-            count += u.quantity;
+            pieces += u.quantity;
         }
-        message += "\n" + txt(TextId::Unplaced) + ": " + std::to_string(count);
+        message += "\n" + txt(TextId::Unplaced) + ": " + std::to_string(pieces);
     }
     if (const std::string left = leftoverText(package.cnc); !left.empty()) {
         message += "\n\n" + txt(TextId::LeftoverTitle) + ":\n" + left;

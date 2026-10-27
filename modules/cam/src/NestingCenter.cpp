@@ -451,7 +451,7 @@ SheetProgram planSheet(const SheetJob& job, const NestingCenterProfile& profile)
 
     Builder b(program, profile);
     b.comment(job.material + " " + i18n::mm(job.length) + "x" + i18n::mm(job.width) + "x"
-              + i18n::mm(job.thickness) + (job.count > 1 ? " - " + std::to_string(job.count) + " " + txt(TextId::SheetLabel) : ""));
+              + i18n::mm(job.thickness) + (job.count > 1 ? " - " + i18n::countText(job.count, TextId::SheetsCount) : ""));
 
     // --- 1. Drilling head, drill by drill --------------------------------------------------------
     for (const Tool& tool : profile.tools) {

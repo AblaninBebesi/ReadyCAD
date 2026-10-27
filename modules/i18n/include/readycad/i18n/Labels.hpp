@@ -41,4 +41,10 @@ namespace rc::i18n {
 /// 1982 -> "1982", 559.5 -> "559.5" (lengths in mm).
 [[nodiscard]] std::string mm(core::Real value);
 
+/// The unit after a length: " mm" (" мм" in Russian).
+[[nodiscard]] std::string mmUnit();
+
+/// 0.78 -> "%78" in Turkish, "78%" in English and Russian.
+[[nodiscard]] std::string percent(double fraction);
+
 } // namespace rc::i18n

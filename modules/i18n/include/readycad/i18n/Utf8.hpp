@@ -12,8 +12,9 @@ namespace rc::i18n {
 /// Code points of a UTF-8 string; invalid bytes become U+FFFD.
 [[nodiscard]] std::u32string decodeUtf8(std::string_view text);
 
-/// Turkish letters to their ASCII base letter ("Çekmece yanı" -> "Cekmece yani"), every other
-/// non-ASCII character to '_': for file names, DXF layer names and CNC program comments.
+/// Turkish letters to their ASCII base letter ("Çekmece yanı" -> "Cekmece yani"), Russian ones
+/// transliterated as in passports ("Шкаф-купе" -> "Shkaf-kupe"), every other non-ASCII character
+/// to '_': for file names, DXF layer names and CNC program comments.
 [[nodiscard]] std::string asciiFold(std::string_view text);
 
 /// A name that works as a file or folder name everywhere (CNC controllers, USB sticks): asciiFold,

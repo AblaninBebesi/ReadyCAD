@@ -4,6 +4,7 @@
 #include "readycad/core/model/Kitchen.hpp"
 #include "readycad/core/model/Parts.hpp"
 #include "readycad/core/model/Queries.hpp"
+#include "readycad/i18n/Labels.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -96,7 +97,7 @@ std::vector<HardwareItem> hardwareList(const core::Product& product)
         ++slides[drawer->slideLength()];
     }
     for (const auto& [length, pairs] : slides) {
-        add(HardwareKind::DrawerSlide, number(length) + " mm", pairs);
+        add(HardwareKind::DrawerSlide, number(length) + i18n::mmUnit(), pairs);
     }
 
     // Kitchens: legs under every cabinet with a plinth (two more for each further metre of
@@ -125,7 +126,7 @@ std::vector<HardwareItem> hardwareList(const core::Product& product)
             hangers += 2;
         }
     }
-    add(HardwareKind::Leg, number(rules.kitchen.plinthHeight) + " mm", legs);
+    add(HardwareKind::Leg, number(rules.kitchen.plinthHeight) + i18n::mmUnit(), legs);
     add(HardwareKind::PlinthClip, "", legs / 2);
     add(HardwareKind::Hanger, "", hangers);
     return list;

@@ -1,7 +1,9 @@
 rc_add_module(i18n
     SOURCES
+        src/English.cpp
         src/Labels.cpp
         src/Localization.cpp
+        src/Russian.cpp
         src/Utf8.cpp
     DEPENDS
         readycad::core

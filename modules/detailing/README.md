@@ -12,4 +12,6 @@ Shapes: `FlatPart::contour` and `blank` of shaped parts; `findShapeConflicts` â€
 
 L corner cabinets: joints, shelf supports in both end walls, the first door on its wall, folding hinge cups in the second; folding hinges, legs and hangers in the hardware list (and the hangers of a blind wall corner cabinet).
 
-**Stages:** 4, 6, 9, kitchen, shapes, corner kitchens
+Languages: warnings are kept as what happened (`DetailingWarning`) and put into words by `warningText()` in the language of the moment; the hardware list writes its lengths with the language's unit.
+
+**Stages:** 4, 6, 9, kitchen, shapes, corner kitchens, languages

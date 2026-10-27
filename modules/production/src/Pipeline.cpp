@@ -34,10 +34,18 @@ void requireMatching(const Order& order, const nesting::NestingResult& plan)
 
 // --- CSV ------------------------------------------------------------------------------------
 
+/// A Turkish or Russian spreadsheet reads a decimal comma and cells separated by ';', an English
+/// one a decimal point and ','.
+bool commaDecimals()
+{
+    return i18n::currentLanguage() != i18n::Language::English;
+}
+
 /// A cell as Excel reads it: quoted if it contains the separator, a quote or a line break.
 std::string csvCell(const std::string& value)
 {
-    if (value.find_first_of(";\"\r\n") == std::string::npos) {
+    const char* special = commaDecimals() ? ";\"\r\n" : ",\"\r\n";
+    if (value.find_first_of(special) == std::string::npos) {
         return value;
     }
     std::string quoted = "\"";
@@ -47,11 +55,13 @@ std::string csvCell(const std::string& value)
     return quoted + "\"";
 }
 
-/// 558.5 -> "558,5": the decimal comma of a Turkish spreadsheet.
+/// 558.5 -> "558,5" in a Turkish or Russian spreadsheet.
 std::string csvNumber(core::Real value)
 {
     std::string text = i18n::mm(value);
-    std::replace(text.begin(), text.end(), '.', ',');
+    if (commaDecimals()) {
+        std::replace(text.begin(), text.end(), '.', ',');
+    }
     return text;
 }
 
@@ -59,7 +69,7 @@ std::string csvLine(const std::vector<std::string>& cells)
 {
     std::string line;
     for (std::size_t i = 0; i < cells.size(); ++i) {
-        line += (i > 0 ? ";" : "") + csvCell(cells[i]);
+        line += (i > 0 ? (commaDecimals() ? ";" : ",") : "") + csvCell(cells[i]);
     }
     return line + "\r\n";
 }
@@ -249,7 +259,7 @@ Package writePackage(const Order& order, const nesting::NestingResult* plan,
             writeDocumentation(order, plan, options.documentation, fonts, package.documents);
         }
         if (options.cutListCsv) {
-            package.cutListCsv = folder / (name + "_kesim_listesi.csv");
+            package.cutListCsv = folder / (name + "_" + txt(TextId::FileCutList) + ".csv");
             writeCutListCsv(order, package.cutListCsv);
         }
         if (options.project) {
@@ -261,9 +271,9 @@ Package writePackage(const Order& order, const nesting::NestingResult* plan,
             package.partDrawings = writePartDxfs(order, folder / "DXF");
         }
         if (options.sheetDrawings && plan != nullptr && !plan->layouts.empty()) {
-            package.sheetDrawings = writeSheetDxfs(order, *plan, folder / "KESIM");
+            package.sheetDrawings = writeSheetDxfs(order, *plan, folder / txt(TextId::FolderCutting));
         }
-        package.summary = folder / "OZET.txt";
+        package.summary = folder / (txt(TextId::FileSummary) + ".txt");
         package.summaryText = summaryText(order, plan, package);
         storage::writeTextFile(package.summary, forNotepad(package.summaryText));
     } catch (...) {
@@ -283,7 +293,7 @@ Package writePackage(const Order& order, const nesting::NestingResult* plan,
 
 std::filesystem::path newPackageFolder(const std::filesystem::path& parent, const std::string& name)
 {
-    const std::string base = i18n::safeFileName(name) + "_URETIM";
+    const std::string base = i18n::safeFileName(name) + "_" + txt(TextId::FolderProduction);
     std::filesystem::path candidate = parent / base;
     std::error_code ec;
     for (int n = 2; std::filesystem::exists(candidate, ec); ++n) {

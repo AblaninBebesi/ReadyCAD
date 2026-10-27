@@ -107,6 +107,26 @@ TEST_CASE("Cutting settings survive save and load", "[storage][settings]")
                     StorageError);
 }
 
+TEST_CASE("The languages survive save and load", "[storage][settings]")
+{
+    AppSettings settings;
+    CHECK(settings.language == "tr");
+    CHECK(settings.documentLanguage.empty()); // the documents follow the program
+    settings.language = "ru";
+    settings.documentLanguage = "en";
+    const AppSettings loaded = loadSettings(saveSettings(settings));
+    CHECK(loaded.language == "ru");
+    CHECK(loaded.documentLanguage == "en");
+
+    // A language this program does not know falls back instead of failing the whole file.
+    const AppSettings unknown = loadSettings(R"({"format": "readycad-settings", "version": 1,
+                                               "language": "de", "documentLanguage": "fr"})");
+    CHECK(unknown.language == "tr");
+    CHECK(unknown.documentLanguage.empty());
+    const AppSettings older = loadSettings(R"({"format": "readycad-settings", "version": 1})");
+    CHECK(older.language == "tr");
+}
+
 TEST_CASE("The CNC nesting centre survives save and load", "[storage][settings]")
 {
     AppSettings settings;

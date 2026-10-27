@@ -46,10 +46,28 @@ std::u32string decodeUtf8(std::string_view text)
     return out;
 }
 
+namespace {
+
+/// А..я (U+0410..U+044F) in Latin letters; ё apart.
+constexpr const char* kCyrillic[32] = {"a", "b", "v", "g", "d", "e", "zh", "z", "i", "i", "k",
+                                       "l", "m", "n", "o", "p", "r", "s", "t", "u", "f", "kh",
+                                       "ts", "ch", "sh", "shch", "", "y", "", "e", "iu", "ia"};
+
+} // namespace
+
 std::string asciiFold(std::string_view text)
 {
     std::string out;
     for (const char32_t c : decodeUtf8(text)) {
+        if ((c >= 0x410 && c <= 0x44F) || c == 0x401 || c == 0x451) {
+            const bool upper = c < 0x430 || c == 0x401;
+            std::string latin = c == 0x401 || c == 0x451 ? "e" : kCyrillic[(c - 0x410) % 32];
+            if (upper && !latin.empty()) {
+                latin[0] = static_cast<char>(latin[0] - 'a' + 'A');
+            }
+            out += latin;
+            continue;
+        }
         switch (c) {
         case U'ç': out += 'c'; break;
         case U'Ç': out += 'C'; break;

@@ -10,6 +10,7 @@
 #include "readycad/core/builders/Catalog.hpp"
 #include "readycad/core/builders/WardrobeBuilder.hpp"
 #include "readycad/detailing/Detailing.hpp"
+#include "readycad/i18n/Localization.hpp"
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -369,8 +370,19 @@ TEST_CASE("Handle holes", "[detailing][drilling][handle]")
         doors[1]->setHandle(HandlePlacement{"bar-320", HandleOrientation::Horizontal,
                                             HandleAnchor::Center, 300.0});
         const DetailingReport report = applyDetailing(*wardrobe);
-        CHECK(report.warnings.size() == 2);
+        REQUIRE(report.warnings.size() == 2);
         CHECK(holes(*doors[0], FastenerType::Handle).empty());
         CHECK(holes(*doors[1], FastenerType::Handle).empty());
+
+        // The report keeps what happened; the words come in the language of the moment.
+        const DetailingWarning& unknown = report.warnings[0];
+        CHECK(unknown.kind == DetailingWarning::Kind::UnknownHandle);
+        CHECK(unknown.part == ComponentKind::Door);
+        CHECK(unknown.detail == "discontinued-handle");
+        CHECK(report.warnings[1].kind == DetailingWarning::Kind::HandleDoesNotFit);
+        rc::i18n::setLanguage(rc::i18n::Language::English);
+        CHECK(warningText(unknown) == "Handle not in the catalogue: Door (discontinued-handle)");
+        rc::i18n::setLanguage(rc::i18n::Language::Turkish);
+        CHECK(warningText(unknown) == "Katalogda olmayan kulp: Kapak (discontinued-handle)");
     }
 }

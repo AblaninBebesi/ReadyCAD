@@ -1,6 +1,9 @@
 #include "readycad/i18n/Localization.hpp"
 
+#include "Texts.hpp"
+
 #include <array>
+#include <atomic>
 #include <utility>
 
 namespace rc::i18n {
@@ -463,6 +466,28 @@ constexpr std::pair<TextId, std::string_view> kTurkish[] = {
     {T::BaseLegs, "Alt dolap kolları"},
     {T::WallLegs, "Üst dolap kolları"},
     {T::HwFoldingHinge, "Katlanır kapak menteşesi"},
+
+    {T::MenuLanguage, "Dil"},
+    {T::DocumentLanguage, "Belge dili"},
+    {T::SameAsProgram, "Program dili"},
+    {T::FilterProject, "ReadyCAD projesi"},
+    {T::FilterProfile, "Atölye profili"},
+    {T::FilterPdf, "PDF belgesi"},
+    {T::FilterDxf, "DXF çizimi"},
+    {T::FilterCsv, "CSV tablosu"},
+    {T::FolderProduction, "URETIM"},
+    {T::FolderCutting, "KESIM"},
+    {T::FileSummary, "OZET"},
+    {T::FileCutList, "kesim_listesi"},
+    {T::SheetsCount, "levha"},
+    {T::WarnNoConnectorPlace, "Bağlantı elemanı için yer yok"},
+    {T::WarnNoShelfWall, "Rafın pimleri için yan panel bulunamadı"},
+    {T::WarnNoHingeWall, "Menteşe kenarının arkasında yan panel yok"},
+    {T::WarnUnknownHandle, "Katalogda olmayan kulp"},
+    {T::WarnHandleDoesNotFit, "Kulp parçaya sığmıyor"},
+    {T::UnitMm, "mm"},
+    {T::UnitM, "m"},
+    {T::PercentValue, "%{}"},
     {T::BaseCabinets, "Alt dolaplar"},
     {T::WallCabinets, "Üst dolaplar"},
     {T::BaseCabinet, "Alt dolap"},
@@ -543,8 +568,8 @@ constexpr std::pair<TextId, std::string_view> kTurkish[] = {
     {T::DecorLabel, "Desen"},
     {T::DecorDefault, "Varsayılan"},
     {T::DecorNone, "Desensiz"},
-    {T::ShapeFromCorner, " köşesinden"},
-    {T::ShapeFromEdge, "'den"},
+    {T::ShapeFromCorner, "{} köşesinden {}"},
+    {T::ShapeFromEdge, "{}'den {}"},
     {T::AfterSawTitle, "Testereden sonra yapılacak kesimler"},
     {T::AfterSawNote, "Bu parçaların köşe ve kenar kesimleri ile iç kesimleri testereden sonra CNC'de veya elle yapılır."},
 };
@@ -558,19 +583,82 @@ Table buildTable(const auto& entries) noexcept
     return table;
 }
 
-Language gLanguage = Language::Turkish;
+std::atomic<Language> gLanguage{Language::Turkish};
 
 const Table& tableFor(Language language) noexcept
 {
     static const Table turkish = buildTable(kTurkish);
+    static const Table russian = buildTable(detail::russianTexts());
+    static const Table english = buildTable(detail::englishTexts());
     switch (language) {
     case Language::Turkish:
         return turkish;
+    case Language::Russian:
+        return russian;
+    case Language::English:
+        return english;
     }
     return turkish;
 }
 
+/// Which of a word's forms goes with the count, by the language's rule.
+std::size_t pluralForm(Language language, long long count) noexcept
+{
+    const long long n = count < 0 ? -count : count;
+    switch (language) {
+    case Language::Russian:
+        if (n % 10 == 1 && n % 100 != 11) {
+            return 0; // 1, 21, 101: лист
+        }
+        if (n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14)) {
+            return 1; // 2-4, 22-24: листа
+        }
+        return 2; // 0, 5-20, 25: листов
+    case Language::English:
+        return n == 1 ? 0 : 1;
+    case Language::Turkish:
+        break;
+    }
+    return 0; // Turkish: the noun after a number stays singular
+}
+
 } // namespace
+
+std::span<const Language> languages() noexcept
+{
+    static constexpr std::array kLanguages{Language::Turkish, Language::Russian, Language::English};
+    return kLanguages;
+}
+
+std::string_view languageCode(Language language) noexcept
+{
+    switch (language) {
+    case Language::Russian: return "ru";
+    case Language::English: return "en";
+    case Language::Turkish: break;
+    }
+    return "tr";
+}
+
+std::optional<Language> languageFromCode(std::string_view code) noexcept
+{
+    for (const Language language : languages()) {
+        if (languageCode(language) == code) {
+            return language;
+        }
+    }
+    return std::nullopt;
+}
+
+std::string_view languageName(Language language) noexcept
+{
+    switch (language) {
+    case Language::Russian: return "Русский";
+    case Language::English: return "English";
+    case Language::Turkish: break;
+    }
+    return "Türkçe";
+}
 
 void setLanguage(Language language) noexcept
 {
@@ -590,6 +678,54 @@ std::string_view text(TextId id) noexcept
     }
     const std::string_view value = tableFor(gLanguage)[index];
     return value.empty() ? std::string_view("???") : value;
+}
+
+std::string format(TextId id, std::initializer_list<std::string_view> values)
+{
+    const std::string_view pattern = text(id);
+    std::string out;
+    std::size_t next = 0;
+    for (std::size_t i = 0; i < pattern.size(); ++i) {
+        const bool open = pattern[i] == '{' && i + 1 < pattern.size();
+        if (open && pattern[i + 1] == '}') {
+            if (next < values.size()) {
+                out += values.begin()[next];
+            }
+            ++next;
+            ++i;
+        } else if (open && i + 2 < pattern.size() && pattern[i + 1] >= '1' && pattern[i + 1] <= '9'
+                   && pattern[i + 2] == '}') {
+            const auto at = static_cast<std::size_t>(pattern[i + 1] - '1');
+            if (at < values.size()) {
+                out += values.begin()[at];
+            }
+            i += 2;
+        } else {
+            out += pattern[i];
+        }
+    }
+    return out;
+}
+
+std::string_view plural(TextId id, long long count) noexcept
+{
+    std::string_view forms = text(id);
+    std::size_t form = pluralForm(gLanguage, count);
+    // The form-th piece between the '|'s; the last one if the text has fewer.
+    while (form > 0) {
+        const std::size_t bar = forms.find('|');
+        if (bar == std::string_view::npos) {
+            break;
+        }
+        forms.remove_prefix(bar + 1);
+        --form;
+    }
+    return forms.substr(0, forms.find('|'));
+}
+
+std::string countText(long long count, TextId id)
+{
+    return std::to_string(count) + " " + std::string(plural(id, count));
 }
 
 } // namespace rc::i18n

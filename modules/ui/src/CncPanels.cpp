@@ -29,9 +29,11 @@ bool cncResultReady(const UiState& state)
         && state.nesting->settings.machine == nesting::Machine::NestingCenter;
 }
 
-bool dragMm(const char* id, Real& value, Real min, Real max, const char* format = "%.1f mm")
+bool dragMm(const char* id, Real& value, Real min, Real max, const char* number = "%.1f",
+            bool unit = true)
 {
-    return ImGui::DragScalar(id, ImGuiDataType_Double, &value, 0.1f, &min, &max, format,
+    const std::string format = unit ? number + i18n::mmUnit() : std::string(number);
+    return ImGui::DragScalar(id, ImGuiDataType_Double, &value, 0.1f, &min, &max, format.c_str(),
                              ImGuiSliderFlags_AlwaysClamp);
 }
 
@@ -85,22 +87,22 @@ void drawToolTable(std::vector<cam::Tool>& tools)
             ImGui::EndCombo();
         }
         cell();
-        dragMm("##d", t.diameter, 0.5, 60.0, "%.1f");
+        dragMm("##d", t.diameter, 0.5, 60.0, "%.1f", false);
         cell();
-        dragMm("##l", t.cuttingLength, 1.0, 120.0, "%.0f");
+        dragMm("##l", t.cuttingLength, 1.0, 120.0, "%.0f", false);
         cell();
         ImGui::DragInt("##rpm", &t.rpm, 100.0f, 500, 30000);
         cell();
         if (t.kind == cam::ToolKind::Router) {
-            dragMm("##f", t.feed, 100.0, 60000.0, "%.0f");
+            dragMm("##f", t.feed, 100.0, 60000.0, "%.0f", false);
         } else {
             ImGui::TextDisabled("—");
         }
         cell();
-        dragMm("##p", t.plungeFeed, 100.0, 30000.0, "%.0f");
+        dragMm("##p", t.plungeFeed, 100.0, 30000.0, "%.0f", false);
         cell();
         if (t.kind == cam::ToolKind::Router) {
-            dragMm("##s", t.stepDown, 0.5, 60.0, "%.1f");
+            dragMm("##s", t.stepDown, 0.5, 60.0, "%.1f", false);
         } else {
             ImGui::TextDisabled("—");
         }
@@ -198,7 +200,7 @@ void drawSettingsPopup(UiState& state)
         row(tr(TextId::ClearanceLabel));
         dragMm("##clear", p.clearance, 0.5, 50.0);
         row(tr(TextId::SpoilboardCut));
-        dragMm("##spoil", p.spoilboardCut, 0.0, 3.0, "%.2f mm");
+        dragMm("##spoil", p.spoilboardCut, 0.0, 3.0, "%.2f");
         row(tr(TextId::ClimbMilling));
         ImGui::Checkbox("##climb", &p.climbMilling);
         ImGui::EndTable();
@@ -211,11 +213,7 @@ void drawSettingsPopup(UiState& state)
     if (ImGui::Button(tr(TextId::Save))) {
         if (run(state, [&] { cam::validate(p); })) {
             state.cnc = p;
-            run(state, [&] {
-                std::filesystem::create_directories(state.settingsFile.parent_path());
-                storage::writeTextFile(state.settingsFile,
-                                       storage::saveSettings({state.nestingSettings, state.cnc}));
-            });
+            saveSettingsFile(state); // with the languages, which this window does not show
             ImGui::CloseCurrentPopup();
         }
     }
@@ -242,6 +240,7 @@ bool writeCncPrograms(UiState& state, const std::filesystem::path& folder)
     std::vector<cam::SheetProgram> programs;
     std::size_t count = 0;
     if (!run(state, [&] {
+            const i18n::LanguageScope inDocuments(documentLanguage(state)); // the comments
             count = production::writeCncPrograms({*state.document, state.productCount},
                                                  *state.nesting, state.cnc, folder, &programs)
                         .size();

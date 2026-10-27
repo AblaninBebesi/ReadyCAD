@@ -1,3 +1,4 @@
+#include "readycad/i18n/Localization.hpp"
 #include "readycad/production/Batch.hpp"
 #include "readycad/ui/Application.hpp"
 
@@ -31,6 +32,7 @@ void printUsage()
               "  --nesting <saw|router>    compute the cutting plan for this machine\n"
               "  --count <n>               copies of the product in the cutting plan\n"
               "  --no-remnants             cut full sheets only, leave the remnants on stock\n"
+              "  --lang <tr|ru|en>         the language of the program (and of a package) for this run\n"
               "  --stock                   show the stock of sheets\n"
               "  --cut-list                show the cut list\n"
               "  --export-pdf <file.pdf>   write the PDF documents and exit\n"
@@ -104,6 +106,8 @@ int main(int argc, char** argv)
             config.productCount = std::atoi(argv[++i]);
         } else if (arg == "--no-remnants") {
             config.noRemnants = true;
+        } else if (arg == "--lang" && hasValue && rc::i18n::languageFromCode(argv[i + 1])) {
+            config.language = argv[++i];
         } else if (arg == "--stock") {
             config.stockWindow = true;
         } else if (arg == "--cut-list") {
@@ -143,6 +147,9 @@ int main(int argc, char** argv)
         }
         if (config.noRemnants) {
             batch.useRemnants = false;
+        }
+        if (config.language) {
+            batch.language = rc::i18n::languageFromCode(*config.language);
         }
         batch.dataFolder = config.dataFolder.value_or(std::filesystem::path{});
         batch.package = package;

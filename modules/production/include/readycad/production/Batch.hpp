@@ -1,5 +1,6 @@
 #pragma once
 
+#include "readycad/i18n/Localization.hpp"
 #include "readycad/nesting/Nesting.hpp"
 
 #include <filesystem>
@@ -19,6 +20,9 @@ struct BatchOptions {
     std::optional<nesting::Machine> machine;
     /// Whether the cutting plan may take remnants from stock; nullopt: as in the settings file.
     std::optional<bool> useRemnants;
+    /// The language of the messages and of the package; nullopt: the settings file's (its
+    /// documents' language, else the program's).
+    std::optional<i18n::Language> language;
     /// Folder of the stock and settings files; empty: the user's own (storage::userDataFolder).
     std::filesystem::path dataFolder;
     std::filesystem::path package; ///< where the package goes: must not exist or be empty

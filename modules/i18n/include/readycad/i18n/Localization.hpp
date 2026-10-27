@@ -1,14 +1,26 @@
 #pragma once
 
 #include <cstddef>
+#include <initializer_list>
+#include <optional>
+#include <span>
+#include <string>
 #include <string_view>
 
 namespace rc::i18n {
 
-/// Every user-visible string has an id. Code is written in English, the UI speaks Turkish.
+/// Every user-visible string has an id. Code is written in English; the program speaks Turkish,
+/// Russian or English.
 ///
 /// Why an enum instead of string keys ("menu.file"): a typo becomes a compile error, and a test
-/// checks that every id has a translation. Adding a language = adding one more table.
+/// checks that every id has a translation in every language. Adding a language = adding one more
+/// table.
+///
+/// Two kinds of texts need more than a lookup:
+///  * a phrase with values in it is a template with "{}" places (format()): each language puts
+///    them where its grammar wants them ("G1'den 300", "300 от Ш1", "300 from W1");
+///  * a word after a number lists its forms separated by '|' (plural()): Turkish keeps one form
+///    ("levha"), English two ("sheet|sheets"), Russian three ("лист|листа|листов").
 enum class TextId : std::size_t {
     // Application, menus
     AppTitle, Untitled,
@@ -116,6 +128,11 @@ enum class TextId : std::size_t {
     RunLeft, RunRight, CornerLeft, CornerRight, BlindBaseCabinet, BlindWallCabinet,
     BackWallLength, Filler, CornerBaseWidth, CornerBaseFiller, CornerWallWidth, CornerWallFiller,
     PagePlan, ViewPlan, WorktopJoint, LongWorktopWarning, WorktopMaxLength,
+    // Languages, file dialogs, package names (ASCII), counted words, drilling warnings
+    MenuLanguage, DocumentLanguage, SameAsProgram, FilterProject, FilterProfile, FilterPdf,
+    FilterDxf, FilterCsv, FolderProduction, FolderCutting, FileSummary, FileCutList, SheetsCount,
+    WarnNoConnectorPlace, WarnNoShelfWall, WarnNoHingeWall, WarnUnknownHandle,
+    WarnHandleDoesNotFit, UnitMm, UnitM, PercentValue,
     // L corner cabinets
     KindCornerCabinet, KindFoldingDoor, LBaseCabinet, LWallCabinet, CornerTypeLabel, CornerBlind,
     CornerLShaped, LegAlongBack, LegAlongSide, BaseLegs, WallLegs, HwFoldingHinge,
@@ -132,15 +149,50 @@ enum class TextId : std::size_t {
     Count // keep last
 };
 
-enum class Language { Turkish };
+/// The languages of the program: of its interface and of its documents.
+enum class Language { Turkish, Russian, English };
+
+/// Every language, in the order the menu offers them.
+[[nodiscard]] std::span<const Language> languages() noexcept;
+/// "tr", "ru", "en": how the settings file and the command line name it.
+[[nodiscard]] std::string_view languageCode(Language language) noexcept;
+[[nodiscard]] std::optional<Language> languageFromCode(std::string_view code) noexcept;
+/// The language's own name, whatever the current language: "Türkçe", "Русский", "English".
+[[nodiscard]] std::string_view languageName(Language language) noexcept;
 
 void setLanguage(Language language) noexcept;
 [[nodiscard]] Language currentLanguage() noexcept;
+
+/// Another language for a while, then back: the documents of a package in a language of their
+/// own while the program keeps its. For one thread at a time (the documents are written on the
+/// thread that draws the window).
+class LanguageScope {
+public:
+    explicit LanguageScope(Language language) noexcept : previous_(currentLanguage())
+    {
+        setLanguage(language);
+    }
+    ~LanguageScope() { setLanguage(previous_); }
+    LanguageScope(const LanguageScope&) = delete;
+    LanguageScope& operator=(const LanguageScope&) = delete;
+
+private:
+    Language previous_;
+};
 
 /// UTF-8 text for the id in the current language. Never returns an empty view for a valid id.
 [[nodiscard]] std::string_view text(TextId id) noexcept;
 
 /// Short alias for UI code: ImGui::Button(tr(TextId::Close))
 [[nodiscard]] inline const char* tr(TextId id) noexcept { return text(id).data(); }
+
+/// The template of `id` with its places filled: "{}" takes the next value, "{1}".."{9}" the
+/// value at that place (a language may put them in another order).
+[[nodiscard]] std::string format(TextId id, std::initializer_list<std::string_view> values);
+
+/// The form of a counted word (its forms separated by '|') that goes with `count`.
+[[nodiscard]] std::string_view plural(TextId id, long long count) noexcept;
+/// The count and its word: "3 листа", "1 sheet", "2 levha".
+[[nodiscard]] std::string countText(long long count, TextId id);
 
 } // namespace rc::i18n

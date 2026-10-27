@@ -1,6 +1,7 @@
 #include "readycad/detailing/Detailing.hpp"
 
 #include "readycad/core/model/Carcass.hpp"
+#include "readycad/i18n/Labels.hpp"
 #include "readycad/core/model/CornerCabinet.hpp"
 #include "readycad/core/model/Parts.hpp"
 #include "readycad/detailing/Joints.hpp"
@@ -145,8 +146,7 @@ void addJointFasteners(const Joint& j, const ConstructionRules& r, DetailingRepo
             }
         }
         if (!placed) {
-            report.warnings.push_back("No free place for a connector of a "
-                                      + std::string(toString(j.edge->kind())) + " joint");
+            report.warnings.push_back({DetailingWarning::Kind::NoConnectorPlace, j.edge->kind(), {}});
             continue;
         }
         const Vec3& p = *placed;
@@ -213,7 +213,7 @@ void addShelfSupports(core::Carcass& carcass, const std::vector<PanelComponent*>
                 }
             }
             if (wall == nullptr) {
-                report.warnings.push_back("No wall found for the supports of a shelf");
+                report.warnings.push_back({DetailingWarning::Kind::NoShelfWall, shelf->kind(), {}});
                 continue;
             }
 
@@ -290,7 +290,7 @@ void hangDoor(core::Door* door, const std::vector<PanelComponent*>& walls, Real 
             }
         }
         if (wall == nullptr) {
-            report.warnings.push_back("No wall found behind the hinge edge of a door");
+            report.warnings.push_back({DetailingWarning::Kind::NoHingeWall, door->kind(), {}});
             return;
         }
 
@@ -408,13 +408,12 @@ void addHandles(core::Product& product, const ConstructionRules& r, DetailingRep
         const auto handle = front->handleGeometry(r);
         if (!handle) {
             const std::string& id = front->handle()->modelId;
-            report.warnings.push_back("Unknown handle model '" + (id.empty() ? "<default>" : id)
-                                      + "' on a " + std::string(toString(front->kind())));
+            report.warnings.push_back({DetailingWarning::Kind::UnknownHandle, front->kind(), id});
             continue;
         }
         if (!handle->fits) {
-            report.warnings.push_back("Handle '" + handle->model->name + "' does not fit on a "
-                                      + std::string(toString(front->kind())));
+            report.warnings.push_back(
+                {DetailingWarning::Kind::HandleDoesNotFit, front->kind(), handle->model->name});
             continue;
         }
         if (!r.handles.drillOnMachine) {
@@ -520,6 +519,24 @@ void resolveHoleConflicts(core::Panel& panel, const ConstructionRules& r)
 }
 
 } // namespace
+
+std::string warningText(const DetailingWarning& warning)
+{
+    using i18n::TextId;
+    TextId what = TextId::WarnNoConnectorPlace;
+    switch (warning.kind) {
+    case DetailingWarning::Kind::NoConnectorPlace: what = TextId::WarnNoConnectorPlace; break;
+    case DetailingWarning::Kind::NoShelfWall:      what = TextId::WarnNoShelfWall; break;
+    case DetailingWarning::Kind::NoHingeWall:      what = TextId::WarnNoHingeWall; break;
+    case DetailingWarning::Kind::UnknownHandle:    what = TextId::WarnUnknownHandle; break;
+    case DetailingWarning::Kind::HandleDoesNotFit: what = TextId::WarnHandleDoesNotFit; break;
+    }
+    std::string out = std::string(i18n::text(what)) + ": " + std::string(i18n::text(i18n::kindText(warning.part)));
+    if (!warning.detail.empty()) {
+        out += " (" + warning.detail + ")";
+    }
+    return out;
+}
 
 DetailingReport applyDetailing(core::Product& product)
 {

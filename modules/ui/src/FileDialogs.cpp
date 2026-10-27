@@ -1,5 +1,7 @@
 #include "FileDialogs.hpp"
 
+#include "readycad/i18n/Localization.hpp"
+
 #include <nfd.h>
 
 #ifdef _WIN32
@@ -15,14 +17,16 @@ namespace {
 
 nfdu8filteritem_t filterFor(FileKind kind)
 {
+    using i18n::TextId;
+    using i18n::tr;
     switch (kind) {
-    case FileKind::Project: return {"ReadyCAD projesi", "rcproj"};
-    case FileKind::Profile: return {"Atölye profili", "rcprofile"};
-    case FileKind::Pdf:     return {"PDF belgesi", "pdf"};
-    case FileKind::Dxf:     return {"DXF çizimi", "dxf"};
-    case FileKind::Csv:     return {"CSV tablosu", "csv"};
+    case FileKind::Project: return {tr(TextId::FilterProject), "rcproj"};
+    case FileKind::Profile: return {tr(TextId::FilterProfile), "rcprofile"};
+    case FileKind::Pdf:     return {tr(TextId::FilterPdf), "pdf"};
+    case FileKind::Dxf:     return {tr(TextId::FilterDxf), "dxf"};
+    case FileKind::Csv:     return {tr(TextId::FilterCsv), "csv"};
     }
-    return {"ReadyCAD projesi", "rcproj"};
+    return {tr(TextId::FilterProject), "rcproj"};
 }
 
 const char* extensionFor(FileKind kind)

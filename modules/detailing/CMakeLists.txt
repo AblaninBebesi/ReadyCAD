@@ -9,6 +9,7 @@ rc_add_module(detailing
         src/ShapeCheck.cpp
     DEPENDS
         readycad::core
+        readycad::i18n
     TESTS
         tests/CutListTests.cpp
         tests/JointTests.cpp

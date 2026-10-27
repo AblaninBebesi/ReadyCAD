@@ -220,6 +220,11 @@ struct Application::Impl {
         renderer.setTextureFolder(assetsFolder() / "textures");
         // Stock of sheets and cutting settings of this user (or of a demo folder).
         loadWorkshopFiles(state, config.dataFolder.value_or(std::filesystem::path{}));
+        if (config.language) {
+            if (const auto language = i18n::languageFromCode(*config.language)) {
+                i18n::setLanguage(*language);
+            }
+        }
         const auto items = core::catalogItems();
         const auto index = static_cast<std::size_t>(
             std::clamp(config.catalogItem, 0, static_cast<int>(items.size()) - 1));
@@ -483,6 +488,17 @@ void Application::Impl::drawMainMenu()
             state.fitRequested = true;
         }
         ImGui::Separator();
+        // Each language in its own name: found whatever the language now is.
+        if (ImGui::BeginMenu(tr(TextId::MenuLanguage))) {
+            for (const i18n::Language language : i18n::languages()) {
+                const std::string name(i18n::languageName(language));
+                if (ImGui::MenuItem(name.c_str(), nullptr, i18n::currentLanguage() == language)) {
+                    i18n::setLanguage(language);
+                    saveSettingsFile(state);
+                }
+            }
+            ImGui::EndMenu();
+        }
         if (ImGui::MenuItem(tr(TextId::MenuResetLayout))) {
             resetLayout = true;
         }

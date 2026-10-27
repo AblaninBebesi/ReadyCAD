@@ -31,9 +31,9 @@ Oklar sadeleştirilmiştir: her modülün tam bağımlılıkları tabloda listel
 | Modül       | Sorumluluk | Aşama | Bağımlılıklar |
 |-------------|------------|-------|---------------|
 | `core`      | Matematik (mm, double), `Aabb`, mobilya bileşen ağacı (Composite), `Panel`, parametrik yeniden hesaplama; mutfak: modül dizileri, kuşaklar, baza, kesimli tezgah; parçalarda kesimler | 1–3, mutfak, şekiller | glm |
-| `i18n`      | Metinler (`TextId` + Türkçe tablo), model öğelerinin adları (parça türleri, kenarlar, delikler, bağlantı elemanları), UTF-8, ASCII'ye çevirme, dosya adları | 1, 6, 8, 9 | core |
-| `storage`   | JSON dosyaları: proje (`*.rcproj`), atölye profili (`*.rcprofile`), levha stoku (`stock.rcstock`), kesim ve CNC makinesi ayarları; atölye dosyaları tek klasörde | 5, 7, 8, 9 | core, nesting, cam |
-| `detailing` | Kesim ve net ölçüler, kenar bantları, «Sistem 32» delme, bağlantı elemanları, düzlemdeki parça (`FlatPart`, kesimleriyle), bağlantı elemanları listesi | 4, 6, mutfak | core |
+| `i18n`      | Metinler (`TextId` + tablolar: Türkçe, Rusça, İngilizce), programın ve belgelerin dili, şablonlar ve sayılardan sonraki kelime biçimleri, model öğelerinin adları (parça türleri, kenarlar, delikler, bağlantı elemanları), UTF-8, ASCII'ye çevirme (Kiril de), dosya adları | 1, 6, 8, 9, diller | core |
+| `storage`   | JSON dosyaları: proje (`*.rcproj`), atölye profili (`*.rcprofile`), levha stoku (`stock.rcstock`), kesim, CNC makinesi ve dil ayarları; atölye dosyaları tek klasörde | 5, 7, 8, 9, diller | core, nesting, cam, i18n |
+| `detailing` | Kesim ve net ölçüler, kenar bantları, «Sistem 32» delme, bağlantı elemanları, düzlemdeki parça (`FlatPart`, kesimleriyle), bağlantı elemanları listesi, uyarılar | 4, 6, mutfak, diller | core, i18n |
 | `nesting`   | Levha ve artık stoku (`StockManager`), panel ebatlamada kesim planı (giyotin), CNC'de nesting (No-Fit Polygon), genetik algoritma, arka planda hesap | 7 | core, detailing; Clipper2 (modülün içinde gizli) |
 | `export`    | 2D çizimler (`Drawing`), DXF R12, PDF: listeler, kesim planı, montaj çizimi, parça çizimleri | 6, 7 | core, detailing, nesting, i18n; libHaru (modülün içinde gizli) |
 | `cam`       | İşleme operasyonları (makineden bağımsız), CNC nesting planlaması (takımlar, sıra, rotalar, içeriden kesimler), lehçesi ayarlanabilen G-code son işlemcisi | 8, mutfak | core, detailing, nesting, i18n; Clipper2 (modülün içinde gizli) |
@@ -75,7 +75,9 @@ ReadyCAD/
 * **Ad alanları:** `rc::<module>` (`rc::core`, `rc::detailing`, ...). İstisna: `export` modülü
   `rc::exporting` ad alanındadır, çünkü `export` C++'ta bir anahtar kelimedir.
 * **Metinler:** hem pencerelerde hem PDF'te yalnızca `rc::i18n::tr(TextId::...)` üzerinden.
-  Kod ve yorumlar İngilizce, arayüz ve belgeler Türkçe yazılır.
+  Kod ve yorumlar İngilizce, arayüz ve belgeler Türkçe, Rusça veya İngilizce yazılır («Rusça ve
+  İngilizce» bölümü). Sayı ve ad içeren cümle metin yapıştırarak değil, `format()` şablonu ve
+  `countText()` ile kurulur.
 * **Kaynaklar:** yalnızca RAII. Elle `new`/`delete` yazılmaz; OpenGL nesneleri yıkıcısı olan
   sınıflara sarılır.
 * **Tolerans:** `rc::core::kEpsilon = 1e-6` mm. Uzunluklar `nearlyEqual()` ile karşılaştırılır,
@@ -1685,3 +1687,116 @@ panelinin kendi seçimleri de (`"parts": {"blindPanel": …}`).
 
 Uzun çalıştırma: 80 oturum × 80 düzenleme (20'si köşe mutfaklarında), 6400 düzenlemeden 4977'si
 kabul edildi, tek bir ihlal yok.
+
+## Rusça ve İngilizce (köşe mutfaklarından sonra)
+
+Arayüz, belgeler ve atölye paketi artık üç dilde konuşuyor: Türkçe, Rusça ve İngilizce. Dil
+«Görünüm → Dil» menüsünden seçilir ve ayarlarda saklanır. Belgelerin kendi dili vardır,
+varsayılanı «Program dili»: Türkiye'deki bir atölye Rusça arayüzle çalışıp müşteriye Türkçe PDF
+verebilir.
+
+![Rusça arayüz](images/localization-ru.png)
+
+### Tablolar ve dil
+
+| Ne | Nerede |
+|-----|-------|
+| `Language { Turkish, Russian, English }`, «tr», «ru», «en» kodları, kendi dillerindeki adlar («Türkçe», «Русский», «English») | `i18n/Localization.hpp` |
+| Türkçe tablo (eskisi gibi), Rusça ve İngilizce — her tablo kendi dosyasında | `i18n/src/Localization.cpp`, `Russian.cpp`, `English.cpp` |
+| `setLanguage()` / `currentLanguage()`: programın dili, atomik değişken | aynı yer |
+| `LanguageScope`: belgeler yazılırken dil, sonra eskisi | aynı yer |
+
+* Üç tablo da her `TextId`'yi listeler (525 tane). Boş bir metin «???» gösterirdi; test bunu
+  yakalar.
+* ImGui pencereleri yerini ve boyutunu kimliğe göre hatırlar. Bu yüzden pencere başlıklarının
+  `###id` kuyruğu her dilde aynıdır: «Kesim planı###nesting», «Карта раскроя###nesting». Dil
+  değişince pencereler yerinde kalır.
+* Malzeme, desen, bant, kulp ve takım adları programın metinleri değil, atölyenin verisidir;
+  çevrilmezler. Yoksa stok dillere göre bölünürdü: «Suntalam 18» ile «ЛДСП 18» ayrı malzemeler
+  olurdu.
+
+### Kelime sırası ve sayılar
+
+Türkçe, Rusça ve İngilizce kelimeleri farklı sıralar ve sayıyla farklı uyuşturur. Bu yüzden
+metinleri Türkçe dilbilgisiyle birleştirmek artık olmaz.
+
+* **Şablonlar.** `format(id, {…})`: `{}` sıradaki değeri, `{1}`…`{9}` numaralı değeri alır.
+  Türkçe «G1'den 100», Rusça «100 от Ш1», İngilizce «100 from W1» — tek çağrıdan; şablon her
+  tabloda kendine göredir («{}'den {}», «{2} от {1}», «{2} from {1}»).
+* **Sayıdan sonraki biçim.** Sayılan kelime biçimlerini `|` ile ayırarak saklar. Türkçede tek
+  biçim vardır («7 levha»), İngilizcede iki («1 sheet | 2 sheets»), Rusçada üç: 1, 21 — «лист»;
+  2–4, 22–24 — «листа»; 0, 5–20, 25 — «листов». `countText(n, id)` biçimi dilin kuralıyla seçer
+  (`pluralForm`). Özetteki dosyalar, CNC programı yorumundaki levhalar ve CNC'nin yapmadığı
+  işler böyle yazılır.
+* **Birimler ve yüzdeler.** Rusçada «мм» ve «м» (`mmUnit()`, `TextId::UnitM`); yüzde de
+  şablondur: Türkçe «%78», Rusça ve İngilizce «78%» (`percent()`).
+
+### Delme uyarıları
+
+Eskiden delme, uyarıları hazır Türkçe cümleler olarak yazıyordu. Artık
+`DetailingReport::warnings` *ne olduğunu* saklar (`DetailingWarning`: tür, parça, ayrıntı —
+örneğin kulp kimliği), `warningText()` ise bunu gösterildiği andaki dilde cümleye çevirir.
+Böylece aynı uyarı pencerede programın dilinde, PDF'te belgelerin dilinde görünür. Bunun için
+`detailing` artık `i18n`'e bağlıdır; modül sırası (core → i18n → detailing) buna zaten izin
+veriyordu.
+
+### Makineler ve programlar için dosyalar
+
+* Paketin dosya ve klasör adları eskisi gibi (Aşama 9) yalnızca ASCII'dir, ama belgelerin
+  dilindedir:
+
+  | | tr | ru | en |
+  |---|---|---|---|
+  | paket klasörü | `_URETIM` | `_PROIZVODSTVO` | `_PRODUCTION` |
+  | levha çizimleri | `KESIM/` | `RASKROY/` | `CUTTING/` |
+  | özet | `OZET.txt` | `SVODKA.txt` | `SUMMARY.txt` |
+  | kesim listesi | `_kesim_listesi.csv` | `_spetsifikatsiya.csv` | `_cut_list.csv` |
+
+* `asciiFold()` Kiril harflerini pasaport kurallarıyla Latin harflerine çevirir (щ → shch,
+  ю → iu, я → ia; ъ ve ь düşer). Dosya adları, DXF katmanları ve CNC programı yorumları için
+  gerekir: makine kontrol üniteleri Kiril okumaz.
+* Testere için CSV: Türkçe ve Rusça Excel'de ayırıcı `;` ve ondalık virgül, İngilizcede `,` ve
+  nokta. Yalnızca kendi dilinin ayırıcısını içeren hücre tırnağa alınır.
+* PDF: programın Aşama 6'dan beri aradığı Arial, Segoe UI ve DejaVu Sans Kiril harflerini
+  içerir; metin Unicode olarak gömülür. Hiç yazı tipi yoksa yerleşik Helvetica Kiril harflerini
+  «?» yerine Latin harfleriyle basar (`toCp1254`).
+
+### Dil nerede seçilir
+
+* «Görünüm → Dil» menüsü: dil hemen, aynı karede değişir ve `settings.json`'a yazılır
+  (`"language"`). Menüde her dil kendi adıyla yazılıdır; arayüz bilinmeyen bir dilde olsa da
+  bulunur.
+* PDF penceresinde «Belge dili»: «Program dili» ya da üç dilden biri (`"documentLanguage"`).
+  PDF, DXF, CSV, CNC programları ve paket bu dilde yazılır.
+* Komut satırı: `--lang <tr|ru|en>` — yalnızca bu çalıştırma için programın ve paketin dili,
+  ayarlar değişmez. `--lang` yoksa paket ayarlardaki belge dilinde, o da yoksa programın dilinde
+  yazılır.
+* Ayar dosyasındaki bilinmeyen kod (örneğin gelecekteki bir sürümden) dosyanın okunmasını
+  bozmaz: programın dili Türkçe, belgelerin dili «Program dili» olur.
+
+### Bu arada
+
+* «Parametreler»deki ve parça özelliklerindeki uzun etiketler kesilmek yerine ikinci satıra
+  geçer: Rusça etiketler Türkçelerden uzundur. Bu, Aşama 10'un cilalama maddelerinden biridir.
+* Proje dosyası olmayan paket, katalog modelinin belgelerin dilindeki adını alır («Wardrobe»,
+  «Шкаф»), her zaman Türkçesini değil.
+
+### Testler
+
+| Ne | Dosya |
+|-----|------|
+| Her dil her `TextId`'yi çevirir; aynı `###id`, şablonlarda aynı sayıda yer; kelime biçimleri: Türkçede 1, İngilizcede 2, Rusçada 3 | `i18n/tests/LocalizationTests.cpp` |
+| Dil kodları, dil değişimi, `LanguageScope` eski dile döner | aynı dosya |
+| Şablonlar dilin sırasıyla; eksik ve fazla değerlerde çökme yok | aynı dosya |
+| Kelime biçimleri: 1, 2, 4, 5, 11, 12, 21, 22, 111 levha; İngilizcede 0, 1, 21; Türkçede biçim yok | aynı dosya |
+| Paket adları her dilde ASCII | aynı dosya |
+| Kiril harfleri Latin harfleriyle, dosya adları | `i18n/tests/Utf8Tests.cpp` |
+| «мм» ve yüzdeler; üç dilde kesim açıklaması | `i18n/tests/LabelsTests.cpp` |
+| Delme uyarısı türü, parçayı ve ayrıntıyı saklar; İngilizce ve Türkçe cümle | `detailing/tests/DrillingTests.cpp` |
+| Diller ayarlarda saklanır; bilinmeyen kod ve eski dosya Türkçe verir | `storage/tests/WorkshopFilesTests.cpp` |
+| Yerleşik yazı tipi Kiril harflerini Latin harfleriyle basar | `export/tests/PdfTests.cpp` |
+| Rusça paket: SVODKA, RASKROY, spetsifikatsiya, özette kelime biçimleri; İngilizce Excel için CSV | `production/tests/PipelineTests.cpp` |
+| Komut satırında `--lang en` ve ayarlardaki belge dili | `production/tests/BatchTests.cpp` |
+
+Elle denendi: Rusça ve İngilizce pencereler, Rusça PDF (atölye verisi dışındaki bütün metin
+Kiril harfleriyle, Arial gömülü), `--lang ru` paketi.

@@ -96,6 +96,36 @@ TEST_CASE("The command line can leave the remnants on stock", "[production][batc
     CHECK(storage::loadSettingsFile(files.settings).nesting.useRemnants);
 }
 
+TEST_CASE("The command line writes the package in the chosen language", "[production][batch]")
+{
+    const rc::test::TempFolder temp("batch_lang");
+    const storage::WorkshopFiles files = workshop(temp.path() / "atolye", nesting::Machine::PanelSaw);
+
+    BatchOptions options;
+    options.dataFolder = temp.path() / "atolye";
+    options.package = temp.path() / "package";
+    options.language = i18n::Language::English; // --lang en
+    std::ostringstream out;
+    std::ostringstream err;
+    REQUIRE(runBatch(options, out, err) == 0);
+    CHECK(std::filesystem::exists(options.package / "SUMMARY.txt"));
+    CHECK(std::filesystem::is_directory(options.package / "CUTTING"));
+    CHECK(std::filesystem::exists(options.package / "Wardrobe_cut_list.csv")); // the model's name
+    CHECK_THAT(out.str(), ContainsSubstring("ReadyCAD — Production package"));
+    // Only for this run: the program's language is the same as before.
+    CHECK(i18n::currentLanguage() == i18n::Language::Turkish);
+
+    // Without --lang, the settings file decides: its documents' language first.
+    storage::AppSettings settings = storage::loadSettingsFile(files.settings);
+    settings.language = "en";
+    settings.documentLanguage = "ru";
+    storage::saveSettingsFile(settings, files.settings);
+    options.language.reset();
+    options.package = temp.path() / "paket_ru";
+    REQUIRE(runBatch(options, out, err) == 0);
+    CHECK(std::filesystem::exists(options.package / "SVODKA.txt"));
+}
+
 TEST_CASE("A saved project goes through the command line", "[production][batch]")
 {
     const rc::test::TempFolder temp("batch_project");
